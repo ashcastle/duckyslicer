@@ -26,7 +26,7 @@ class NozzleVolumeSettingsTest {
         assertEquals(143f, restoredPrinter.nozzleVolume)
 
         val project = SliceOptions().selectPrinter(printer).toProjectJson()
-        assertEquals(97, project.getInt("formatVersion"))
+        assertEquals(98, project.getInt("formatVersion"))
         val restored = requireNotNull(project.toProjectSliceOptionsOrNull())
         assertEquals(143f, restored.printerProfile.nozzleVolume)
         assertEquals(143f, restored.toNativeConfig().nozzleVolume)

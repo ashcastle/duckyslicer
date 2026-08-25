@@ -226,6 +226,10 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "R.string.filament_parking_position",
         "R.string.extra_loading_distance",
         "R.string.enable_filament_ramming",
+        "R.string.wipe_tower_ramming",
+        "R.string.ramming_line_width_ratio",
+        "R.string.change_pressure_when_wiping",
+        "R.string.ramming_pressure_advance",
         "R.string.purge_in_prime_tower",
         "R.string.high_current_on_filament_swap",
         "coolingTubeRetraction =",
@@ -233,6 +237,9 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "parkingPosRetraction =",
         "extraLoadingMove =",
         "enableFilamentRamming =",
+        "rammingLineWidthRatio =",
+        "changePressureWhenWiping =",
+        "rammingPressureAdvance =",
         "purgeInPrimeTower =",
         "highCurrentOnFilamentSwap =",
         "R.string.printer_environment_capabilities",
@@ -485,6 +492,16 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
             if resource not in strings:
                 raise VerificationError(
                     f"localized prime-tower brim setting is missing from {source_name}: {resource}"
+                )
+        for resource in (
+            'name="wipe_tower_ramming"',
+            'name="ramming_line_width_ratio"',
+            'name="change_pressure_when_wiping"',
+            'name="ramming_pressure_advance"',
+        ):
+            if resource not in strings:
+                raise VerificationError(
+                    f"localized wipe-tower ramming setting is missing from {source_name}: {resource}"
                 )
         for resource in ('name="revert_changes"', 'name="apply_changes"'):
             if resource not in strings:

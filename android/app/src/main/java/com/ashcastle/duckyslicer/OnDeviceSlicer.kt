@@ -297,6 +297,9 @@ data class PrinterProfile(
     val parkingPosRetraction: Float = 92f,
     val extraLoadingMove: Float = -2f,
     val enableFilamentRamming: Boolean = true,
+    val rammingLineWidthRatio: Float = 2f,
+    val changePressureWhenWiping: Boolean = true,
+    val rammingPressureAdvance: Float = 0f,
     val purgeInPrimeTower: Boolean = true,
     val highCurrentOnFilamentSwap: Boolean = false,
     val extruderCount: Int = 1,
@@ -2629,6 +2632,9 @@ data class SliceOptions(
             native.parkingPosRetraction = printerProfile.parkingPosRetraction
             native.extraLoadingMove = printerProfile.extraLoadingMove
             native.enableFilamentRamming = printerProfile.enableFilamentRamming
+            native.rammingLineWidthRatio = printerProfile.rammingLineWidthRatio
+            native.changePressureWhenWiping = printerProfile.changePressureWhenWiping
+            native.rammingPressureAdvance = printerProfile.rammingPressureAdvance
             native.highCurrentOnFilamentSwap = printerProfile.highCurrentOnFilamentSwap
             native.purgeInPrimeTower = printerProfile.singleExtruderMultiMaterial &&
                 printerProfile.purgeInPrimeTower &&

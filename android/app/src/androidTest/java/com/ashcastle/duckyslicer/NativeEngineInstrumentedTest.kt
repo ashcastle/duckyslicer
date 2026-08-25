@@ -2214,6 +2214,9 @@ class NativeEngineInstrumentedTest {
                     parkingPosRetraction = 80f,
                     extraLoadingMove = -3.5f,
                     enableFilamentRamming = false,
+                    rammingLineWidthRatio = 3.25f,
+                    changePressureWhenWiping = false,
+                    rammingPressureAdvance = 0.17f,
                     purgeInPrimeTower = false,
                     highCurrentOnFilamentSwap = true,
                     fanSpeedupTime = 0.7f,
@@ -2529,6 +2532,9 @@ class NativeEngineInstrumentedTest {
         assertEquals(80f, restored.printers.last().parkingPosRetraction)
         assertEquals(-3.5f, restored.printers.last().extraLoadingMove)
         assertFalse(restored.printers.last().enableFilamentRamming)
+        assertEquals(3.25f, restored.printers.last().rammingLineWidthRatio)
+        assertFalse(restored.printers.last().changePressureWhenWiping)
+        assertEquals(0.17f, restored.printers.last().rammingPressureAdvance)
         assertFalse(restored.printers.last().purgeInPrimeTower)
         assertTrue(restored.printers.last().highCurrentOnFilamentSwap)
         assertEquals(0.7f, restored.printers.last().fanSpeedupTime)
@@ -2570,7 +2576,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(99, catalog.schemaVersion)
+        assertEquals(102, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2603,6 +2609,9 @@ class NativeEngineInstrumentedTest {
         assertEquals(0.32f, generatedU1.maxLayerHeight)
         assertEquals(listOf(10f, 10f, 10f, 10f), generatedU1.toolChangeRetractLengths)
         assertEquals(listOf(0f, 0f, 0f, 0f), generatedU1.toolChangeRetractRestartExtras)
+        assertEquals(2f, generatedU1.rammingLineWidthRatio)
+        assertTrue(generatedU1.changePressureWhenWiping)
+        assertEquals(0.02f, generatedU1.rammingPressureAdvance)
         assertEquals(5f, generatedU1.machineToolChangeTime)
         assertFalse(generatedU1.toolChangeTemperatureWait)
         assertEquals("M600", generatedU1.machinePauseGcode)
@@ -4245,7 +4254,7 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
-    fun independentToolchangerRammingChangesRealWipeTowerToolpaths() {
+    fun independentToolchangerRammingControlsChangeRealWipeTowerToolpaths() {
         val left = inspectModel(interlockingVolumeModel("toolchanger-left", -20f, 0f).absolutePath)
         val right = inspectModel(interlockingVolumeModel("toolchanger-right", 0f, 20f).absolutePath)
         val projectObject = ProjectObject(
@@ -4271,6 +4280,9 @@ class NativeEngineInstrumentedTest {
             machineStartGcode = "",
             machineEndGcode = "",
             changeFilamentGcode = "T[next_extruder]",
+            rammingLineWidthRatio = 3.25f,
+            changePressureWhenWiping = true,
+            rammingPressureAdvance = 0.17f,
         )
         val enabledOptions = SliceOptions()
             .selectPrinter(printer)
@@ -4283,28 +4295,39 @@ class NativeEngineInstrumentedTest {
                     purgeVolumes = listOf(0f, 140f, 140f, 0f),
                 ),
             )
-        val disabledOptions = enabledOptions.copy(
-            filamentProfile = rammingFilament.copy(multitoolRamming = false),
-            filamentSlots = listOf(
-                rammingFilament.copy(multitoolRamming = false),
-                passiveFilament,
+        val baselineOptions = enabledOptions.copy(
+            printerProfile = printer.copy(
+                rammingLineWidthRatio = 1f,
+                changePressureWhenWiping = false,
+                rammingPressureAdvance = 0f,
             ),
         )
 
         val enabled = OnDeviceSlicer.slice(listOf(projectObject), enabledOptions)
-        val disabled = OnDeviceSlicer.slice(listOf(projectObject), disabledOptions)
+        val baseline = OnDeviceSlicer.slice(listOf(projectObject), baselineOptions)
         val enabledGcode = enabled.output.readText()
+        val baselineGcode = baseline.output.readText()
         val enabledPreview = loadGcodePreview(enabled.output.absolutePath, 0, Int.MAX_VALUE)
-        val disabledPreview = loadGcodePreview(disabled.output.absolutePath, 0, Int.MAX_VALUE)
+        val baselinePreview = loadGcodePreview(baseline.output.absolutePath, 0, Int.MAX_VALUE)
 
         assertTrue(enabledGcode.contains("; single_extruder_multi_material = 0"))
         assertTrue(enabledGcode.contains("; filament_multitool_ramming = 1,0"))
         assertTrue(enabledGcode.contains("; filament_multitool_ramming_volume = 6,7"))
         assertTrue(enabledGcode.contains("; filament_multitool_ramming_flow = 16,17"))
+        assertTrue(enabledGcode.contains("; ramming_line_width_ratio = 3.25"))
+        assertTrue(enabledGcode.contains("; enable_change_pressure_when_wiping = 1"))
+        assertTrue(enabledGcode.contains("; ramming_pressure_advance_value = 0.17"))
+        assertTrue(
+            "Independent toolchanger ramming must emit the configured pressure advance",
+            enabledGcode.contains("M900 K0.170000"),
+        )
+        assertTrue(baselineGcode.contains("; ramming_line_width_ratio = 1"))
+        assertTrue(baselineGcode.contains("; enable_change_pressure_when_wiping = 0"))
+        assertFalse(baselineGcode.contains("M900 K0.170000"))
         assertTrue("Independent toolchanger must execute a real tool transition", enabledGcode.lineSequence().any { it == "T1" })
         assertFalse(
-            "Independent-tool ramming must change rendered wipe-tower extrusion geometry",
-            enabledPreview.segments.contentEquals(disabledPreview.segments),
+            "Ramming line width must change rendered wipe-tower extrusion geometry",
+            enabledPreview.segments.contentEquals(baselinePreview.segments),
         )
     }
 

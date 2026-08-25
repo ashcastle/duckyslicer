@@ -1179,6 +1179,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "parking_pos_retraction": "80",
                 "extra_loading_move": "-3.5",
                 "enable_filament_ramming": "0",
+                "ramming_line_width_ratio": "3.25",
+                "enable_change_pressure_when_wiping": "0",
+                "ramming_pressure_advance_value": "0.17",
                 "purge_in_prime_tower": "0",
                 "high_current_on_filament_swap": "1",
                 "support_chamber_temp_control": "1",
@@ -1294,6 +1297,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(80.0, printer["parkingPosRetraction"])
         self.assertEqual(-3.5, printer["extraLoadingMove"])
         self.assertFalse(printer["enableFilamentRamming"])
+        self.assertEqual(3.25, printer["rammingLineWidthRatio"])
+        self.assertFalse(printer["changePressureWhenWiping"])
+        self.assertEqual(0.17, printer["rammingPressureAdvance"])
         self.assertFalse(printer["purgeInPrimeTower"])
         self.assertTrue(printer["highCurrentOnFilamentSwap"])
         self.assertTrue(printer["supportsChamberTemperatureControl"])

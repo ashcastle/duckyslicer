@@ -304,6 +304,9 @@ data class SliceConfig(
     @JvmField var parkingPosRetraction: Float = 92f
     @JvmField var extraLoadingMove: Float = -2f
     @JvmField var enableFilamentRamming: Boolean = true
+    @JvmField var rammingLineWidthRatio: Float = 2f
+    @JvmField var changePressureWhenWiping: Boolean = true
+    @JvmField var rammingPressureAdvance: Float = 0f
     @JvmField var highCurrentOnFilamentSwap: Boolean = false
     @JvmField var auxiliaryFan: Boolean = false
     @JvmField var fanSpeedupTime: Float = 0f

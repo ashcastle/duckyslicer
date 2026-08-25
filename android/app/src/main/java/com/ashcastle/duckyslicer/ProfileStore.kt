@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 101
+internal const val USER_PROFILE_SCHEMA_VERSION = 102
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -130,6 +130,9 @@ class ProfileStore private constructor(
             parkingPosRetraction = options.printerProfile.parkingPosRetraction,
             extraLoadingMove = options.printerProfile.extraLoadingMove,
             enableFilamentRamming = options.printerProfile.enableFilamentRamming,
+            rammingLineWidthRatio = options.printerProfile.rammingLineWidthRatio,
+            changePressureWhenWiping = options.printerProfile.changePressureWhenWiping,
+            rammingPressureAdvance = options.printerProfile.rammingPressureAdvance,
             purgeInPrimeTower = options.printerProfile.purgeInPrimeTower,
             highCurrentOnFilamentSwap = options.printerProfile.highCurrentOnFilamentSwap,
             extruderCount = options.printerProfile.extruderCount,
@@ -701,6 +704,9 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("parkingPosRetraction", parkingPosRetraction)
     .put("extraLoadingMove", extraLoadingMove)
     .put("enableFilamentRamming", enableFilamentRamming)
+    .put("rammingLineWidthRatio", rammingLineWidthRatio)
+    .put("changePressureWhenWiping", changePressureWhenWiping)
+    .put("rammingPressureAdvance", rammingPressureAdvance)
     .put("purgeInPrimeTower", purgeInPrimeTower)
     .put("highCurrentOnFilamentSwap", highCurrentOnFilamentSwap)
     .put("extruderCount", extruderCount)
@@ -1259,6 +1265,9 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         parkingPosRetraction = optDouble("parkingPosRetraction", 92.0).toFloat(),
         extraLoadingMove = optDouble("extraLoadingMove", -2.0).toFloat(),
         enableFilamentRamming = optBoolean("enableFilamentRamming", true),
+        rammingLineWidthRatio = optDouble("rammingLineWidthRatio", 2.0).toFloat(),
+        changePressureWhenWiping = optBoolean("changePressureWhenWiping", true),
+        rammingPressureAdvance = optDouble("rammingPressureAdvance", 0.0).toFloat(),
         purgeInPrimeTower = optBoolean("purgeInPrimeTower", true),
         highCurrentOnFilamentSwap = optBoolean("highCurrentOnFilamentSwap"),
         extruderCount = extruderCount,

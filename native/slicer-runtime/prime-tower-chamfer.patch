@@ -2,8 +2,11 @@ diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 index 2d3b9c51..b815558c 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -416,6 +416,8 @@ struct SliceConfig {
+@@ -419,9 +419,11 @@ struct SliceConfig {
      bool enable_filament_ramming = true;
+     float ramming_line_width_ratio = 2.0f;
+     bool change_pressure_when_wiping = true;
+     float ramming_pressure_advance = 0.0f;
      bool high_current_on_filament_swap = false;
      float prime_tower_brim_width = 3.0f;
 +    bool prime_tower_brim_chamfer = true;
@@ -15,8 +18,11 @@ diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_
 index 36a1d822..bbc80b8c 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -449,6 +449,8 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -452,9 +452,11 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.enable_filament_ramming = getBool("enableFilamentRamming");
+     config.ramming_line_width_ratio = getFloat("rammingLineWidthRatio");
+     config.change_pressure_when_wiping = getBool("changePressureWhenWiping");
+     config.ramming_pressure_advance = getFloat("rammingPressureAdvance");
      config.high_current_on_filament_swap = getBool("highCurrentOnFilamentSwap");
      config.prime_tower_brim_width = getFloat("primeTowerBrimWidth");
 +    config.prime_tower_brim_chamfer = getBool("primeTowerBrimChamfer");
@@ -24,8 +30,11 @@ index 36a1d822..bbc80b8c 100644
      config.wipe_tower_no_sparse_layers = getBool("wipeTowerNoSparseLayers");
      config.wipe_tower_rotation_angle = getFloat("wipeTowerRotationAngle");
      config.wipe_tower_bridging = getFloat("wipeTowerBridging");
-@@ -1071,6 +1073,8 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -1074,9 +1076,11 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("enableFilamentRamming", config.enable_filament_ramming);
+     setFloat("rammingLineWidthRatio", config.ramming_line_width_ratio);
+     setBool("changePressureWhenWiping", config.change_pressure_when_wiping);
+     setFloat("rammingPressureAdvance", config.ramming_pressure_advance);
      setBool("highCurrentOnFilamentSwap", config.high_current_on_filament_swap);
      setFloat("primeTowerBrimWidth", config.prime_tower_brim_width);
 +    setBool("primeTowerBrimChamfer", config.prime_tower_brim_chamfer);
@@ -37,7 +46,7 @@ diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_p
 index 144b02f5..b6633a07 100644
 --- a/app/src/main/cpp/src/sapil_print.cpp
 +++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -1879,6 +1879,8 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -1893,6 +1893,8 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // wipe_tower_x/y are coFloats (arrays) in OrcaSlicer, one value per extruder
      dpc.set_key_value("prime_volume", new Slic3r::ConfigOptionFloat(config.prime_volume));
      dpc.set_key_value("prime_tower_brim_width", new Slic3r::ConfigOptionFloat(config.prime_tower_brim_width));

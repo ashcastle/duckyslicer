@@ -90,6 +90,8 @@ internal object ProfileValidation {
             profile.coolingTubeLength in 0f..1_000f &&
             profile.parkingPosRetraction in 0f..1_000f &&
             profile.extraLoadingMove in -1_000f..1_000f &&
+            profile.rammingLineWidthRatio in 0.1f..20f &&
+            profile.rammingPressureAdvance in 0f..2f &&
             profile.machineStartGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
             profile.machineEndGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
             profile.machinePauseGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&

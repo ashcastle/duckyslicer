@@ -109,9 +109,12 @@ def valid_sources() -> dict[str, str]:
             " R.string.cooling_tube_position R.string.cooling_tube_length"
             " R.string.filament_parking_position R.string.extra_loading_distance"
             " R.string.enable_filament_ramming R.string.purge_in_prime_tower"
+            " R.string.wipe_tower_ramming R.string.ramming_line_width_ratio"
+            " R.string.change_pressure_when_wiping R.string.ramming_pressure_advance"
             " R.string.high_current_on_filament_swap"
             " coolingTubeRetraction = coolingTubeLength = parkingPosRetraction ="
             " extraLoadingMove = enableFilamentRamming = purgeInPrimeTower ="
+            " rammingLineWidthRatio = changePressureWhenWiping = rammingPressureAdvance ="
             " highCurrentOnFilamentSwap ="
             " R.string.printer_environment_capabilities"
             " R.string.supports_chamber_temperature_control R.string.supports_air_filtration"
@@ -282,6 +285,8 @@ def valid_sources() -> dict[str, str]:
             ' name="prime_tower_position" name="prime_tower_position_x"'
             ' name="prime_tower_position_y"'
             ' name="prime_tower_brim_chamfer" name="prime_tower_brim_chamfer_max_width"'
+            ' name="wipe_tower_ramming" name="ramming_line_width_ratio"'
+            ' name="change_pressure_when_wiping" name="ramming_pressure_advance"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
             ' name="printing_by_object_gcode" name="use_relative_e_distances"'
@@ -352,6 +357,8 @@ def valid_sources() -> dict[str, str]:
             ' name="prime_tower_position" name="prime_tower_position_x"'
             ' name="prime_tower_position_y"'
             ' name="prime_tower_brim_chamfer" name="prime_tower_brim_chamfer_max_width"'
+            ' name="wipe_tower_ramming" name="ramming_line_width_ratio"'
+            ' name="change_pressure_when_wiping" name="ramming_pressure_advance"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
             ' name="minimum_layer_height" name="maximum_layer_height"'

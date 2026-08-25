@@ -870,6 +870,10 @@
     <string name="extra_loading_distance">Extra loading distance</string>
     <string name="enable_filament_ramming">Enable filament ramming</string>
     <string name="purge_in_prime_tower">Purge in prime tower</string>
+    <string name="wipe_tower_ramming">Wipe tower ramming</string>
+    <string name="ramming_line_width_ratio">Ramming line width</string>
+    <string name="change_pressure_when_wiping">Change pressure advance while wiping</string>
+    <string name="ramming_pressure_advance">Ramming pressure advance</string>
     <string name="high_current_on_filament_swap">High extruder current on filament swap</string>
     <string name="disable_m73">Disable remaining-time commands</string>
     <string name="filament_gcode">Filament G-code</string>

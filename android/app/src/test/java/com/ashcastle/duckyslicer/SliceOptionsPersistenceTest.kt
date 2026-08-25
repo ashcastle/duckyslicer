@@ -144,6 +144,9 @@ class SliceOptionsPersistenceTest {
                     parkingPosRetraction = 80f,
                     extraLoadingMove = -3.5f,
                     enableFilamentRamming = false,
+                    rammingLineWidthRatio = 3.25f,
+                    changePressureWhenWiping = false,
+                    rammingPressureAdvance = 0.17f,
                     purgeInPrimeTower = false,
                     highCurrentOnFilamentSwap = true,
                     supportsChamberTemperatureControl = true,
@@ -275,6 +278,9 @@ class SliceOptionsPersistenceTest {
         assertEquals(80f, native.parkingPosRetraction)
         assertEquals(-3.5f, native.extraLoadingMove)
         assertFalse(native.enableFilamentRamming)
+        assertEquals(3.25f, native.rammingLineWidthRatio)
+        assertFalse(native.changePressureWhenWiping)
+        assertEquals(0.17f, native.rammingPressureAdvance)
         assertFalse(native.purgeInPrimeTower)
         assertTrue(native.highCurrentOnFilamentSwap)
         assertTrue(native.supportsChamberTemperatureControl)

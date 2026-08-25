@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 101) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 102) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -80,6 +80,9 @@ class OrcaProfileCatalog(private val context: Context) {
         parkingPosRetraction = input.readFloat(),
         extraLoadingMove = input.readFloat(),
         enableFilamentRamming = input.readCatalogBoolean(),
+        rammingLineWidthRatio = input.readFloat(),
+        changePressureWhenWiping = input.readCatalogBoolean(),
+        rammingPressureAdvance = input.readFloat(),
         purgeInPrimeTower = input.readCatalogBoolean(),
         highCurrentOnFilamentSwap = input.readCatalogBoolean(),
         extruderCount = input.readInt(),
@@ -357,6 +360,9 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("parkingPosRetraction", BINARY_FLOAT),
     BinaryField("extraLoadingMove", BINARY_FLOAT),
     BinaryField("enableFilamentRamming", BINARY_BOOL),
+    BinaryField("rammingLineWidthRatio", BINARY_FLOAT),
+    BinaryField("changePressureWhenWiping", BINARY_BOOL),
+    BinaryField("rammingPressureAdvance", BINARY_FLOAT),
     BinaryField("purgeInPrimeTower", BINARY_BOOL),
     BinaryField("highCurrentOnFilamentSwap", BINARY_BOOL),
     BinaryField("extruderCount", BINARY_INT),

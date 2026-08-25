@@ -870,6 +870,10 @@
     <string name="extra_loading_distance">추가 로딩 거리</string>
     <string name="enable_filament_ramming">필라멘트 램밍 사용</string>
     <string name="purge_in_prime_tower">프라임 타워에서 퍼지</string>
+    <string name="wipe_tower_ramming">와이프 타워 래밍</string>
+    <string name="ramming_line_width_ratio">래밍 라인 폭</string>
+    <string name="change_pressure_when_wiping">와이핑 중 Pressure advance 변경</string>
+    <string name="ramming_pressure_advance">래밍 Pressure advance</string>
     <string name="high_current_on_filament_swap">필라멘트 교체 시 압출기 고전류</string>
     <string name="disable_m73">남은 시간 명령 비활성화</string>
     <string name="filament_gcode">필라멘트 G-code</string>

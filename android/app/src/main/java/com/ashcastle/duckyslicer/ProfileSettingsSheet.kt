@@ -718,6 +718,53 @@ private fun PrinterSettingsSheet(
             },
         )
     }
+    if (
+        options.printerProfile.extruderCount > 1 ||
+        options.printerProfile.singleExtruderMultiMaterial ||
+        settingsQuery.isNotBlank()
+    ) {
+        SettingsGroupTitle(stringResource(R.string.wipe_tower_ramming))
+        DecimalSettingField(
+            label = stringResource(R.string.ramming_line_width_ratio),
+            value = options.printerProfile.rammingLineWidthRatio,
+            minimum = 0.1f,
+            maximum = 20f,
+            suffix = "×",
+            onValueChange = {
+                onOptionsChanged(
+                    options.copy(
+                        printerProfile = options.printerProfile.copy(rammingLineWidthRatio = it),
+                    ),
+                )
+            },
+        )
+        SettingsSwitch(
+            label = stringResource(R.string.change_pressure_when_wiping),
+            checked = options.printerProfile.changePressureWhenWiping,
+            onCheckedChange = {
+                onOptionsChanged(
+                    options.copy(
+                        printerProfile = options.printerProfile.copy(changePressureWhenWiping = it),
+                    ),
+                )
+            },
+        )
+        if (options.printerProfile.changePressureWhenWiping || settingsQuery.isNotBlank()) {
+            DecimalSettingField(
+                label = stringResource(R.string.ramming_pressure_advance),
+                value = options.printerProfile.rammingPressureAdvance,
+                maximum = 2f,
+                suffix = "",
+                onValueChange = {
+                    onOptionsChanged(
+                        options.copy(
+                            printerProfile = options.printerProfile.copy(rammingPressureAdvance = it),
+                        ),
+                    )
+                },
+            )
+        }
+    }
     SettingsSwitch(
         label = stringResource(R.string.auxiliary_part_cooling_fan),
         checked = options.printerProfile.auxiliaryFan,
@@ -7457,6 +7504,7 @@ private fun PurgeMultiplierSettings(
 private fun DecimalSettingField(
     label: String,
     value: Float,
+    minimum: Float = 0f,
     maximum: Float,
     suffix: String,
     onValueChange: (Float) -> Unit,
@@ -7476,7 +7524,7 @@ private fun DecimalSettingField(
             if (candidate.length <= 12 && candidate.matches(DECIMAL_INPUT)) {
                 input = candidate
                 candidate.replace(',', '.').toFloatOrNull()
-                    ?.takeIf { it.isFinite() && it in 0f..maximum }
+                    ?.takeIf { it.isFinite() && it in minimum..maximum }
                     ?.let { parsed ->
                         lastApplied = parsed
                         onValueChange(parsed)
@@ -7486,7 +7534,7 @@ private fun DecimalSettingField(
         label = { Text(label) },
         suffix = { Text(suffix) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        isError = input.replace(',', '.').toFloatOrNull()?.let { it !in 0f..maximum } ?: true,
+        isError = input.replace(',', '.').toFloatOrNull()?.let { it !in minimum..maximum } ?: true,
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )

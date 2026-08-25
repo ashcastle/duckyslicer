@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 101
+SCHEMA_VERSION = 102
 MAX_FILAMENT_SLOTS = 16
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
@@ -543,6 +543,11 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "parkingPosRetraction": number(raw.get("parking_pos_retraction"), 92),
         "extraLoadingMove": number(raw.get("extra_loading_move"), -2),
         "enableFilamentRamming": boolean(raw.get("enable_filament_ramming"), True),
+        "rammingLineWidthRatio": number(raw.get("ramming_line_width_ratio"), 2),
+        "changePressureWhenWiping": boolean(
+            raw.get("enable_change_pressure_when_wiping"), True
+        ),
+        "rammingPressureAdvance": number(raw.get("ramming_pressure_advance_value"), 0),
         "purgeInPrimeTower": boolean(raw.get("purge_in_prime_tower"), True),
         "highCurrentOnFilamentSwap": boolean(raw.get("high_current_on_filament_swap")),
         "extruderCount": extruder_count,
@@ -685,6 +690,8 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         ])
         and 0 <= profile["fanSpeedupTime"] <= 60
         and 0 <= profile["fanKickstart"] <= 60
+        and 0.1 <= profile["rammingLineWidthRatio"] <= 20
+        and 0 <= profile["rammingPressureAdvance"] <= 2
         and all(-100_000 <= profile[key] <= 100_000 for key in [
             "bedMeshMinX", "bedMeshMinY", "bedMeshMaxX", "bedMeshMaxY"
         ])
