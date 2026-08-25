@@ -18,6 +18,16 @@ PROFILE_COMPATIBLE_MIME_TYPES = {
     "application/json",
     "application/octet-stream",
 }
+MODEL_MIME_TYPES = {
+    "model/stl",
+    "application/sla",
+    "application/vnd.ms-pki.stl",
+    "model/3mf",
+    "application/vnd.ms-package.3dmanufacturing-3dmodel+xml",
+    "application/vnd.ms-3mfdocument",
+    "model/obj",
+    "application/x-tgif",
+}
 REQUIRED_STRINGS = {
     "cancel_project_import",
     "canceling_project_import",
@@ -75,6 +85,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "OrcaFacetAnnotations.kt",
         "ProjectVolumeSemantics.kt",
         "ProjectStore.kt",
+        "ModelOpenRequest.kt",
         "ProjectOpenRequest.kt",
         "OrcaPrimitive.kt",
         "ProjectState.kt",
@@ -89,6 +100,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "ProjectVolumeSemanticsTest.kt",
         "ProjectTransferStateTest.kt",
         "ProjectArchiveIntentInstrumentedTest.kt",
+        "ModelOpenIntentInstrumentedTest.kt",
         "CreatedDocumentLifecycleInstrumentedTest.kt",
         "ProjectImportLifecycleInstrumentedTest.kt",
         "BlockingExportProvider.java",
@@ -363,6 +375,21 @@ def verify_project_archive(sources: dict[str, str]) -> None:
     )
 
     _require_markers(
+        "ModelOpenRequest.kt",
+        sources["ModelOpenRequest.kt"],
+        (
+            "Intent.ACTION_VIEW",
+            "Intent.ACTION_SEND",
+            "ContentResolver.SCHEME_CONTENT",
+            "MODEL_DOCUMENT_MIME_TYPES",
+            "MODEL_DOCUMENT_COMPATIBLE_MIME_TYPES",
+            "clipData.itemCount != 1",
+            "SavedStateHandle",
+            "startedOperationId",
+        ),
+    )
+
+    _require_markers(
         "CreatedDocument.kt",
         sources["CreatedDocument.kt"],
         (
@@ -461,15 +488,84 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         {"*"},
         {r".*\.duckyprofiles"},
     )
+    model_custom_filter = (
+        expected_category,
+        {"content"},
+        MODEL_MIME_TYPES,
+        set(),
+        set(),
+    )
+    model_compatible_filter = (
+        expected_category,
+        {"content"},
+        {"application/octet-stream"},
+        {"*"},
+        {r".*\.stl", r".*\.STL", r".*\.3mf", r".*\.3MF", r".*\.obj", r".*\.OBJ"},
+    )
+    model_archive_filter = (
+        expected_category,
+        {"content"},
+        {"application/zip", "application/x-zip-compressed"},
+        {"*"},
+        {r".*\.3mf", r".*\.3MF"},
+    )
     if (
-        len(view_filters) != 4
+        len(view_filters) != 7
         or custom_filter not in view_filters
         or compatible_filter not in view_filters
         or profile_custom_filter not in view_filters
         or profile_compatible_filter not in view_filters
+        or model_custom_filter not in view_filters
+        or model_compatible_filter not in view_filters
+        or model_archive_filter not in view_filters
     ):
         raise VerificationError(
-            "AndroidManifest.xml must expose only content project/profile MIME and extension VIEW filters"
+            "AndroidManifest.xml must expose only content project/profile/model MIME and extension VIEW filters"
+        )
+
+    send_filters: list[tuple[set[str], set[str], set[str], set[str], set[str]]] = []
+    for intent_filter in main_activity.findall("intent-filter"):
+        actions = {
+            value
+            for action in intent_filter.findall("action")
+            if (value := action.attrib.get(f"{ANDROID_NAMESPACE}name"))
+        }
+        if "android.intent.action.SEND" not in actions:
+            continue
+        categories = {
+            value
+            for category in intent_filter.findall("category")
+            if (value := category.attrib.get(f"{ANDROID_NAMESPACE}name"))
+        }
+        data = intent_filter.findall("data")
+        send_filters.append(
+            (
+                categories,
+                {
+                    value
+                    for item in data
+                    if (value := item.attrib.get(f"{ANDROID_NAMESPACE}scheme"))
+                },
+                {
+                    value
+                    for item in data
+                    if (value := item.attrib.get(f"{ANDROID_NAMESPACE}mimeType"))
+                },
+                {
+                    value
+                    for item in data
+                    if (value := item.attrib.get(f"{ANDROID_NAMESPACE}host"))
+                },
+                {
+                    value
+                    for item in data
+                    if (value := item.attrib.get(f"{ANDROID_NAMESPACE}pathPattern"))
+                },
+            )
+        )
+    if send_filters != [(expected_category, set(), MODEL_MIME_TYPES, set(), set())]:
+        raise VerificationError(
+            "AndroidManifest.xml must expose only the explicit model MIME SEND filter"
         )
 
     main = sources["MainActivity.kt"]
@@ -677,6 +773,15 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         ),
     )
     _require_markers(
+        "ModelOpenIntentInstrumentedTest.kt",
+        sources["ModelOpenIntentInstrumentedTest.kt"],
+        (
+            "modelIntentsAcceptSupportedDocumentsAndRejectUnsafeOrUnrelatedUris",
+            "externalModelRequestBindsOneOperationAndRestoresAsRetryableAfterProcessLoss",
+            "modelViewIntentSurvivesRecreationAndImportsExactlyOnce",
+        ),
+    )
+    _require_markers(
         "ProjectImportLifecycleInstrumentedTest.kt",
         sources["ProjectImportLifecycleInstrumentedTest.kt"],
         (
@@ -812,6 +917,7 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "ProjectStore.kt": (package / "ProjectStore.kt").read_text(encoding="utf-8"),
+        "ModelOpenRequest.kt": (package / "ModelOpenRequest.kt").read_text(encoding="utf-8"),
         "ProjectOpenRequest.kt": (package / "ProjectOpenRequest.kt").read_text(encoding="utf-8"),
         "OrcaPrimitive.kt": (package / "OrcaPrimitive.kt").read_text(encoding="utf-8"),
         "ProjectState.kt": (package / "ProjectState.kt").read_text(encoding="utf-8"),
@@ -838,6 +944,9 @@ def read_sources() -> dict[str, str]:
         "ProjectArchiveIntentInstrumentedTest.kt": (
             tests
             / "androidTest/java/com/ashcastle/duckyslicer/ProjectArchiveIntentInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "ModelOpenIntentInstrumentedTest.kt": (
+            tests / "androidTest/java/com/ashcastle/duckyslicer/ModelOpenIntentInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "CreatedDocumentLifecycleInstrumentedTest.kt": (
             tests

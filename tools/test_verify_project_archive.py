@@ -85,6 +85,11 @@ def valid_sources() -> dict[str, str]:
                 'put("role", role.name) put("config", config.toJson())',
             )
         ),
+        "ModelOpenRequest.kt": (
+            "Intent.ACTION_VIEW Intent.ACTION_SEND ContentResolver.SCHEME_CONTENT "
+            "MODEL_DOCUMENT_MIME_TYPES MODEL_DOCUMENT_COMPATIBLE_MIME_TYPES "
+            "clipData.itemCount != 1 SavedStateHandle startedOperationId"
+        ),
         "OrcaFacetAnnotations.kt": (
             "data class OrcaFacetAnnotation MAX_ANNOTATED_TRIANGLES = 100_000 "
             "MAX_TRIANGLE_VALUE_BYTES = 4_096 MAX_SIDECAR_BYTES = 8 * 1_024 * 1_024 "
@@ -244,6 +249,11 @@ def valid_sources() -> dict[str, str]:
             "Intent.ACTION_VIEW Intent.FLAG_GRANT_READ_URI_PERMISSION "
             "scenario.recreate() OnDeviceSlicer.slice("
         ),
+        "ModelOpenIntentInstrumentedTest.kt": (
+            "modelIntentsAcceptSupportedDocumentsAndRejectUnsafeOrUnrelatedUris "
+            "externalModelRequestBindsOneOperationAndRestoresAsRetryableAfterProcessLoss "
+            "modelViewIntentSurvivesRecreationAndImportsExactlyOnce"
+        ),
         "CreatedDocumentLifecycleInstrumentedTest.kt": (
             "failedProjectArchiveExportDeletesTheNewDocument "
             "BlockingExportProvider.METHOD_PREPARE_FAILURE model.exportProject( "
@@ -330,6 +340,42 @@ def valid_sources() -> dict[str, str]:
             '<data android:host="*" />'
             '<data android:pathPattern=".*\\.duckyprofiles" />'
             '<data android:scheme="content" /></intent-filter>'
+            '<intent-filter><action android:name="android.intent.action.VIEW" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="model/stl" />'
+            '<data android:mimeType="application/sla" />'
+            '<data android:mimeType="application/vnd.ms-pki.stl" />'
+            '<data android:mimeType="model/3mf" />'
+            '<data android:mimeType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />'
+            '<data android:mimeType="application/vnd.ms-3mfdocument" />'
+            '<data android:mimeType="model/obj" />'
+            '<data android:mimeType="application/x-tgif" />'
+            '<data android:scheme="content" /></intent-filter>'
+            '<intent-filter><action android:name="android.intent.action.VIEW" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="application/octet-stream" />'
+            '<data android:host="*" />'
+            '<data android:pathPattern=".*\\.stl" /><data android:pathPattern=".*\\.STL" />'
+            '<data android:pathPattern=".*\\.3mf" /><data android:pathPattern=".*\\.3MF" />'
+            '<data android:pathPattern=".*\\.obj" /><data android:pathPattern=".*\\.OBJ" />'
+            '<data android:scheme="content" /></intent-filter>'
+            '<intent-filter><action android:name="android.intent.action.VIEW" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="application/zip" />'
+            '<data android:mimeType="application/x-zip-compressed" />'
+            '<data android:host="*" />'
+            '<data android:pathPattern=".*\\.3mf" /><data android:pathPattern=".*\\.3MF" />'
+            '<data android:scheme="content" /></intent-filter>'
+            '<intent-filter><action android:name="android.intent.action.SEND" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="model/stl" />'
+            '<data android:mimeType="application/sla" />'
+            '<data android:mimeType="application/vnd.ms-pki.stl" />'
+            '<data android:mimeType="model/3mf" />'
+            '<data android:mimeType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />'
+            '<data android:mimeType="application/vnd.ms-3mfdocument" />'
+            '<data android:mimeType="model/obj" />'
+            '<data android:mimeType="application/x-tgif" /></intent-filter>'
             "</activity></application></manifest>"
         ),
         "AndroidTestManifest.xml": (
@@ -430,6 +476,27 @@ class VerifyProjectArchiveTest(unittest.TestCase):
             '<data android:scheme="https" /></intent-filter></activity>',
         )
         with self.assertRaisesRegex(VerificationError, "content project"):
+            verify_project_archive(sources)
+
+    def test_rejects_broad_model_view_filter(self) -> None:
+        sources = valid_sources()
+        sources["AndroidManifest.xml"] = sources["AndroidManifest.xml"].replace(
+            '<data android:mimeType="model/stl" />',
+            '<data android:mimeType="*/*" />',
+            1,
+        )
+        with self.assertRaisesRegex(VerificationError, "project/profile/model"):
+            verify_project_archive(sources)
+
+    def test_rejects_an_additional_broad_send_filter(self) -> None:
+        sources = valid_sources()
+        sources["AndroidManifest.xml"] = sources["AndroidManifest.xml"].replace(
+            "</activity>",
+            '<intent-filter><action android:name="android.intent.action.SEND" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="*/*" /></intent-filter></activity>',
+        )
+        with self.assertRaisesRegex(VerificationError, "explicit model MIME SEND"):
             verify_project_archive(sources)
 
     def test_rejects_missing_single_top_delivery(self) -> None:
