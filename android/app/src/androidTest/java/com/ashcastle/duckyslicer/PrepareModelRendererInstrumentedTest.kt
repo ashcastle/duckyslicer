@@ -455,7 +455,7 @@ class PrepareModelRendererInstrumentedTest {
     }
 
     @Test
-    fun densePrepareLazilyUploadsPreviewThenDetailAndGestureTopology() =
+    fun densePrepareProgressivelyUploadsPreviewThenDetailAndGestureTopology() =
         withGles3Pbuffer(256, 256) {
             val preview = denseGridTriangles(100, 60, 400f, 360f)
             val coarse = denseGridTriangles(40, 25, 400f, 360f)
@@ -477,7 +477,7 @@ class PrepareModelRendererInstrumentedTest {
                 440f,
                 440f,
                 rectangularBedPolygon(440f, 440f),
-            ).withPrecomputedPrepareNormals()
+            ).withPrecomputedPrepareInteractionNormals()
             val objectStates = mapOf(
                 projectObject.id to PrepareObjectDrawState(
                     projectObject.id,
@@ -500,7 +500,7 @@ class PrepareModelRendererInstrumentedTest {
             renderer.onDrawFrame(null)
             GLES30.glFinish()
             assertEquals(preview.size / 3, renderer.lastMeshVertexCountForTest())
-            assertEquals(2, geometry.normalUploadCache.pendingTopologyCountForTest())
+            assertEquals(1, geometry.normalUploadCache.pendingTopologyCountForTest())
             assertEquals(0, geometry.normalUploadCache.fallbackGenerationCountForTest())
             assertEquals(
                 "The first useful frame retains four bed buffers and one position/normal pair",
@@ -509,6 +509,10 @@ class PrepareModelRendererInstrumentedTest {
             )
             assertEquals(1, renderer.geometryUploadCountForTest())
 
+            val distinctDetail = uniquePrepareDetailVertexArrays(geometry.meshes)
+            assertEquals(1, distinctDetail.size)
+            geometry.normalUploadCache.addPrecomputed(distinctDetail)
+            assertEquals(2, geometry.normalUploadCache.pendingTopologyCountForTest())
             renderer.submit(
                 geometry,
                 objectStates,

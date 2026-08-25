@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -254,6 +255,36 @@ class PrepareModelSceneBuilderTest {
                 refinementReady = false,
             ),
         )
+    }
+
+    @Test
+    fun detailNormalWorkYieldsToInteractionAndMemoryPressure() {
+        assertTrue(
+            prepareDetailNormalsAllowed(
+                sceneComplete = true,
+                detailNormalsReady = false,
+                interactionActive = false,
+                memoryPressureActive = false,
+            ),
+        )
+        assertFalse(
+            prepareDetailNormalsAllowed(
+                sceneComplete = true,
+                detailNormalsReady = false,
+                interactionActive = true,
+                memoryPressureActive = false,
+            ),
+        )
+        assertFalse(
+            prepareDetailNormalsAllowed(
+                sceneComplete = true,
+                detailNormalsReady = false,
+                interactionActive = false,
+                memoryPressureActive = true,
+            ),
+        )
+        assertFalse(prepareDetailNormalsAllowed(false, false, false, false))
+        assertFalse(prepareDetailNormalsAllowed(true, true, false, false))
     }
 
     @Test

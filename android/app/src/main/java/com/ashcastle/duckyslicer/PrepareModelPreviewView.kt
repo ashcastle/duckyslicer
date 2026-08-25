@@ -83,6 +83,7 @@ internal fun DepthTestedPrepareModelScene(
                     bedExcludeArea,
                 ),
                 complete = projectObjects.isEmpty(),
+                detailNormalsReady = projectObjects.isEmpty(),
             ),
         )
     }
@@ -96,15 +97,55 @@ internal fun DepthTestedPrepareModelScene(
                     bedPolygon,
                     bedExcludeArea,
                 )
-                positions.withPrecomputedPrepareNormals { ensureActive() }
+                positions.withPrecomputedPrepareInteractionNormals { ensureActive() }
             }
-            sceneLoad = PrepareModelSceneLoad(geometry, complete = true)
+            sceneLoad = PrepareModelSceneLoad(
+                geometry = geometry,
+                complete = true,
+                detailNormalsReady = uniquePrepareDetailVertexArrays(geometry.meshes).isEmpty(),
+            )
+        }
+    }
+    LaunchedEffect(
+        topology,
+        sceneLoad.geometry,
+        sceneLoad.complete,
+        sceneLoad.detailNormalsReady,
+        interactionActive,
+        memoryPressureActive,
+    ) {
+        val detailWorkAllowed = prepareDetailNormalsAllowed(
+            sceneComplete = sceneLoad.complete,
+            detailNormalsReady = sceneLoad.detailNormalsReady,
+            interactionActive = interactionActive,
+            memoryPressureActive = memoryPressureActive,
+        )
+        if (!detailWorkAllowed) return@LaunchedEffect
+        val geometry = sceneLoad.geometry
+        withModelPreparationContext {
+            geometry.normalUploadCache.addPrecomputed(
+                uniquePrepareDetailVertexArrays(geometry.meshes),
+            ) { ensureActive() }
+        }
+        if (sceneLoad.geometry === geometry) {
+            sceneLoad = sceneLoad.copy(detailNormalsReady = true)
         }
     }
     var detailRefinementReady by remember(topology) { mutableStateOf(false) }
-    LaunchedEffect(topology, sceneLoad.complete, interactionActive, memoryPressureActive) {
+    LaunchedEffect(
+        topology,
+        sceneLoad.complete,
+        sceneLoad.detailNormalsReady,
+        interactionActive,
+        memoryPressureActive,
+    ) {
         detailRefinementReady = false
-        if (!sceneLoad.complete || interactionActive || memoryPressureActive) return@LaunchedEffect
+        if (
+            !sceneLoad.complete || !sceneLoad.detailNormalsReady || interactionActive ||
+            memoryPressureActive
+        ) {
+            return@LaunchedEffect
+        }
         delay(PREPARE_DETAIL_REFINEMENT_DELAY_MS)
         detailRefinementReady = true
     }
@@ -162,6 +203,7 @@ private data class PrepareModelTopologyKey(
 private data class PrepareModelSceneLoad(
     val geometry: PrepareModelSceneGeometry,
     val complete: Boolean,
+    val detailNormalsReady: Boolean,
 )
 
 internal data class PrepareModelCamera(
@@ -202,11 +244,34 @@ internal data class PrepareModelSceneGeometry(
         .toIntArray()
 }
 
-internal fun uniquePrepareVertexArrays(meshes: List<PrepareModelMeshData>): List<FloatArray> {
+internal fun uniquePrepareVertexArrays(meshes: List<PrepareModelMeshData>): List<FloatArray> =
+    uniquePrepareVertexArrays(meshes) { mesh ->
+        listOf(mesh.coarseVertices, mesh.vertices, mesh.detailVertices)
+    }
+
+internal fun uniquePrepareInteractionVertexArrays(
+    meshes: List<PrepareModelMeshData>,
+): List<FloatArray> = uniquePrepareVertexArrays(meshes) { mesh ->
+    listOf(mesh.coarseVertices, mesh.vertices)
+}
+
+internal fun uniquePrepareDetailVertexArrays(
+    meshes: List<PrepareModelMeshData>,
+): List<FloatArray> {
+    val interaction = IdentityHashMap<FloatArray, Unit>()
+    uniquePrepareInteractionVertexArrays(meshes).forEach { interaction[it] = Unit }
+    return uniquePrepareVertexArrays(meshes) { mesh -> listOf(mesh.detailVertices) }
+        .filterNot(interaction::containsKey)
+}
+
+private fun uniquePrepareVertexArrays(
+    meshes: List<PrepareModelMeshData>,
+    arrays: (PrepareModelMeshData) -> List<FloatArray>,
+): List<FloatArray> {
     val seen = IdentityHashMap<FloatArray, Unit>()
     val unique = ArrayList<FloatArray>()
     meshes.forEach { mesh ->
-        listOf(mesh.coarseVertices, mesh.vertices, mesh.detailVertices).forEach { vertices ->
+        arrays(mesh).forEach { vertices ->
             if (seen.put(vertices, Unit) == null) unique += vertices
         }
     }
@@ -220,6 +285,15 @@ internal fun PrepareModelSceneGeometry.withPrecomputedPrepareNormals(
     checkCancellation: () -> Unit = {},
 ): PrepareModelSceneGeometry = copy(
     normalUploadCache = PrepareModelNormalUploadCache.precompute(meshes, checkCancellation),
+)
+
+internal fun PrepareModelSceneGeometry.withPrecomputedPrepareInteractionNormals(
+    checkCancellation: () -> Unit = {},
+): PrepareModelSceneGeometry = copy(
+    normalUploadCache = PrepareModelNormalUploadCache.precomputeVertexArrays(
+        uniquePrepareInteractionVertexArrays(meshes),
+        checkCancellation,
+    ),
 )
 
 internal class PrepareModelNormalUploadCache private constructor(
@@ -240,6 +314,25 @@ internal class PrepareModelNormalUploadCache private constructor(
     @Synchronized
     internal fun fallbackGenerationCountForTest(): Int = fallbackGenerationCount
 
+    fun addPrecomputed(
+        vertexArrays: List<FloatArray>,
+        checkCancellation: () -> Unit = {},
+    ) {
+        vertexArrays.forEach { vertices ->
+            checkCancellation()
+            val alreadyPending = synchronized(this) { pending.containsKey(vertices) }
+            if (!alreadyPending) {
+                val packed = buildPackedPrepareSmoothNormals(
+                    vertices,
+                    checkCancellation = checkCancellation,
+                )
+                synchronized(this) {
+                    if (!pending.containsKey(vertices)) pending[vertices] = packed
+                }
+            }
+        }
+    }
+
     companion object {
         fun empty(): PrepareModelNormalUploadCache =
             PrepareModelNormalUploadCache(IdentityHashMap())
@@ -247,9 +340,17 @@ internal class PrepareModelNormalUploadCache private constructor(
         fun precompute(
             meshes: List<PrepareModelMeshData>,
             checkCancellation: () -> Unit = {},
+        ): PrepareModelNormalUploadCache = precomputeVertexArrays(
+            uniquePrepareVertexArrays(meshes),
+            checkCancellation,
+        )
+
+        fun precomputeVertexArrays(
+            vertexArrays: List<FloatArray>,
+            checkCancellation: () -> Unit = {},
         ): PrepareModelNormalUploadCache {
             val pending = IdentityHashMap<FloatArray, ByteArray>()
-            uniquePrepareVertexArrays(meshes).forEach { vertices ->
+            vertexArrays.forEach { vertices ->
                 checkCancellation()
                 pending[vertices] = buildPackedPrepareSmoothNormals(
                     vertices,
@@ -886,6 +987,13 @@ internal data class PrepareObjectDrawState(
 }
 
 internal enum class PrepareModelRenderTier { COARSE, PREVIEW, DETAIL }
+
+internal fun prepareDetailNormalsAllowed(
+    sceneComplete: Boolean,
+    detailNormalsReady: Boolean,
+    interactionActive: Boolean,
+    memoryPressureActive: Boolean,
+): Boolean = sceneComplete && !detailNormalsReady && !interactionActive && !memoryPressureActive
 
 internal fun prepareModelRenderTier(
     interactionActive: Boolean,

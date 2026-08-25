@@ -133,6 +133,55 @@ class PrepareSmoothNormalTest {
         assertTrue(checks >= 3)
     }
 
+    @Test
+    fun progressiveCacheMakesInteractionReadyBeforeDistinctDetail() {
+        val coarse = triangleAt(0f)
+        val preview = triangleAt(1f)
+        val detail = triangleAt(2f)
+        val mesh = PrepareModelMeshData(
+            objectId = "object",
+            volumeId = "volume",
+            filamentSlot = 0,
+            role = ProjectVolumeRole.MODEL_PART,
+            sourceCenter = FloatArray(3),
+            vertices = preview,
+            coarseVertices = coarse,
+            detailVertices = detail,
+        )
+        val geometry = PrepareModelSceneGeometry(
+            bedSizeX = 100f,
+            bedSizeY = 100f,
+            bedFill = FloatArray(0),
+            bedGrid = FloatArray(0),
+            bedOutline = FloatArray(0),
+            bedExcludeOutline = FloatArray(0),
+            meshes = listOf(mesh),
+        ).withPrecomputedPrepareInteractionNormals()
+
+        assertEquals(2, geometry.normalUploadCache.pendingTopologyCountForTest())
+        assertEquals(
+            (coarse.size + preview.size).toLong(),
+            geometry.normalUploadCache.pendingBytesForTest(),
+        )
+        val detailArrays = uniquePrepareDetailVertexArrays(geometry.meshes)
+        assertEquals(1, detailArrays.size)
+        assertTrue(detailArrays.single() === detail)
+
+        geometry.normalUploadCache.addPrecomputed(detailArrays)
+        assertEquals(3, geometry.normalUploadCache.pendingTopologyCountForTest())
+        assertEquals(
+            (coarse.size + preview.size + detail.size).toLong(),
+            geometry.normalUploadCache.pendingBytesForTest(),
+        )
+        assertEquals(0, geometry.normalUploadCache.fallbackGenerationCountForTest())
+    }
+
+    private fun triangleAt(offset: Float): FloatArray = floatArrayOf(
+        offset, 0f, 0f,
+        offset + 1f, 0f, 0f,
+        offset, 1f, 0f,
+    )
+
     private fun ByteArray.normalAt(vertexIndex: Int): FloatArray {
         val offset = vertexIndex * 3
         val normal = FloatArray(3) { component -> this[offset + component] / 127f }
