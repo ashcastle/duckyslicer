@@ -155,10 +155,11 @@ const MAX_PREVIEW_SEGMENTS: usize = 120_000;
 const PREVIEW_COMPACTION_THRESHOLD: usize = MAX_PREVIEW_SEGMENTS * 2;
 const MAX_PREVIEW_LAYERS: usize = 1_000_000;
 const PREVIEW_PAYLOAD_MAGIC: f32 = 17_491.0;
-const PREVIEW_PAYLOAD_VERSION: f32 = 2.0;
+const PREVIEW_PAYLOAD_VERSION: f32 = 3.0;
 const PREVIEW_HEADER_FLOATS: usize = 9 + ToolpathRole::COUNT;
 const PREVIEW_PATH_FLOATS: usize = 1;
-const TOOLPATH_SEGMENT_FLOATS: usize = 6;
+const TOOLPATH_SEGMENT_FLOATS: usize = 7;
+const TOOLPATH_TOOL_COUNT: usize = 16;
 const PREVIEW_MAX_PAYLOAD_FLOATS: usize =
     PREVIEW_HEADER_FLOATS + MAX_PREVIEW_SEGMENTS * (TOOLPATH_SEGMENT_FLOATS + PREVIEW_PATH_FLOATS);
 const PACKED_TOOLPATH_FLOATS: usize = 8;
@@ -204,6 +205,8 @@ struct ToolpathPackingRequest<'a> {
     max_z_mm: f32,
     opacity: f32,
     depth_contrast: f32,
+    filament_colors: &'a [i32],
+    color_by_filament: bool,
     reverse_for_early_z: bool,
     render_as_lines: bool,
 }
@@ -285,8 +288,13 @@ fn pack_toolpath_geometry(request: ToolpathPackingRequest<'_>) -> Result<Vec<f32
     let z_span = (request.max_z_mm - request.min_z_mm).max(0.001);
     let mut color_z_bits: Option<u32> = None;
     let mut height_shade_multiplier = 1.0f32;
-    let mut packed_role_colors = [0.0f32; TOOLPATH_ROLE_COUNT];
-    let mut packed_role_color_valid = [false; TOOLPATH_ROLE_COUNT];
+    if request.color_by_filament && request.filament_colors.len() != TOOLPATH_TOOL_COUNT {
+        return Err(EngineError::Parse(
+            "Toolpath filament palette is invalid".to_owned(),
+        ));
+    }
+    let mut packed_colors = [0.0f32; TOOLPATH_TOOL_COUNT];
+    let mut packed_color_valid = [false; TOOLPATH_TOOL_COUNT];
 
     let mut pack_segment = |segment_index: usize| -> Result<(), EngineError> {
         let offset = segment_index * TOOLPATH_SEGMENT_FLOATS;
@@ -311,6 +319,18 @@ fn pack_toolpath_geometry(request: ToolpathPackingRequest<'_>) -> Result<Vec<f32
                 "Toolpath packing role is invalid".to_owned(),
             ));
         }
+        let tool_value = source[6];
+        if !tool_value.is_finite() || tool_value.fract() != 0.0 {
+            return Err(EngineError::Parse(
+                "Toolpath packing tool is invalid".to_owned(),
+            ));
+        }
+        let tool = tool_value as usize;
+        if tool >= TOOLPATH_TOOL_COUNT {
+            return Err(EngineError::Parse(
+                "Toolpath packing tool is invalid".to_owned(),
+            ));
+        }
         let x1 = source[0] - request.bed_origin_x;
         let y1 = source[1] - request.bed_origin_y;
         let x2 = source[2] - request.bed_origin_x;
@@ -323,22 +343,36 @@ fn pack_toolpath_geometry(request: ToolpathPackingRequest<'_>) -> Result<Vec<f32
         }
         if color_z_bits != Some(z.to_bits()) {
             color_z_bits = Some(z.to_bits());
-            packed_role_color_valid.fill(false);
+            packed_color_valid.fill(false);
             let normalized_height = ((z - request.min_z_mm) / z_span).clamp(0.0, 1.0);
             let shade = request.depth_contrast * (1.0 - normalized_height) * 0.56;
             height_shade_multiplier = 1.0 - shade;
         }
-        if !packed_role_color_valid[role] {
-            let base = TOOLPATH_ROLE_COLORS[role];
-            packed_role_colors[role] = packed_toolpath_color(
+        let color_index = if request.color_by_filament {
+            tool
+        } else {
+            role
+        };
+        if !packed_color_valid[color_index] {
+            let base = if request.color_by_filament {
+                let rgb = request.filament_colors[tool] as u32;
+                [
+                    ((rgb >> 16) & 0xff) as f32 / 255.0,
+                    ((rgb >> 8) & 0xff) as f32 / 255.0,
+                    (rgb & 0xff) as f32 / 255.0,
+                ]
+            } else {
+                TOOLPATH_ROLE_COLORS[role]
+            };
+            packed_colors[color_index] = packed_toolpath_color(
                 base[0] * height_shade_multiplier,
                 base[1] * height_shade_multiplier,
                 base[2] * height_shade_multiplier,
                 request.opacity,
             );
-            packed_role_color_valid[role] = true;
+            packed_color_valid[color_index] = true;
         }
-        let color = packed_role_colors[role];
+        let color = packed_colors[color_index];
         let render_z = z + TOOLPATH_Z_OFFSET_MM;
         if request.render_as_lines {
             output.extend_from_slice(&[x1, y1, render_z, color, x2, y2, render_z, color]);
@@ -481,7 +515,7 @@ struct GcodeLayerPreview {
     layer_count: usize,
     min_z_mm: f32,
     max_z_mm: f32,
-    segments: Vec<[f32; 6]>,
+    segments: Vec<[f32; 7]>,
     paths: Vec<PreviewPathRange>,
 }
 
@@ -492,7 +526,7 @@ struct PreviewPathRange {
 }
 
 struct FlattenedPreviewPaths {
-    segments: Vec<[f32; 6]>,
+    segments: Vec<[f32; 7]>,
     paths: Vec<PreviewPathRange>,
 }
 
@@ -501,7 +535,8 @@ struct PreviewPath {
     order: usize,
     layer: usize,
     role: ToolpathRole,
-    segments: Vec<[f32; 6]>,
+    tool: usize,
+    segments: Vec<[f32; 7]>,
 }
 
 #[derive(Default)]
@@ -513,17 +548,18 @@ struct PreviewPathAccumulator {
 }
 
 impl PreviewPathAccumulator {
-    fn push(&mut self, layer: usize, role: ToolpathRole, segment: [f32; 6]) {
+    fn push(&mut self, layer: usize, role: ToolpathRole, tool: usize, segment: [f32; 7]) {
         let continues_current = self
             .current
             .as_ref()
-            .is_some_and(|path| path.layer == layer && path.role == role);
+            .is_some_and(|path| path.layer == layer && path.role == role && path.tool == tool);
         if !continues_current {
             self.finish_current();
             self.current = Some(PreviewPath {
                 order: self.next_order,
                 layer,
                 role,
+                tool,
                 segments: Vec::new(),
             });
             self.next_order = self.next_order.saturating_add(1);
@@ -635,7 +671,7 @@ impl ToolpathRole {
     }
 }
 
-fn simplify_continuous_path(segments: Vec<[f32; 6]>, limit: usize) -> Vec<[f32; 6]> {
+fn simplify_continuous_path(segments: Vec<[f32; 7]>, limit: usize) -> Vec<[f32; 7]> {
     if segments.len() <= limit {
         return segments;
     }
@@ -704,7 +740,15 @@ fn simplify_continuous_path(segments: Vec<[f32; 6]>, limit: usize) -> Vec<[f32; 
         let start = path_vertex(&segments, pair[0]);
         let end = path_vertex(&segments, pair[1]);
         let metadata = segments[pair[1] - 1];
-        simplified.push([start[0], start[1], end[0], end[1], metadata[4], metadata[5]]);
+        simplified.push([
+            start[0],
+            start[1],
+            end[0],
+            end[1],
+            metadata[4],
+            metadata[5],
+            metadata[6],
+        ]);
     }
     simplified
 }
@@ -742,7 +786,7 @@ impl Ord for PathVertexCandidate {
     }
 }
 
-fn path_vertex(segments: &[[f32; 6]], index: usize) -> [f32; 2] {
+fn path_vertex(segments: &[[f32; 7]], index: usize) -> [f32; 2] {
     if index == 0 {
         [segments[0][0], segments[0][1]]
     } else {
@@ -750,7 +794,7 @@ fn path_vertex(segments: &[[f32; 6]], index: usize) -> [f32; 2] {
     }
 }
 
-fn path_vertex_area(segments: &[[f32; 6]], left: usize, center: usize, right: usize) -> f64 {
+fn path_vertex_area(segments: &[[f32; 7]], left: usize, center: usize, right: usize) -> f64 {
     let left = path_vertex(segments, left);
     let center = path_vertex(segments, center);
     let right = path_vertex(segments, right);
@@ -2076,6 +2120,17 @@ fn parse_gcode_axes<'a>(tokens: impl Iterator<Item = &'a str>) -> GcodeAxes {
     axes
 }
 
+fn parse_preview_tool(opcode: &str) -> Option<usize> {
+    let value = opcode.strip_prefix('T')?;
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    value
+        .parse::<usize>()
+        .ok()
+        .filter(|tool| *tool < TOOLPATH_TOOL_COUNT)
+}
+
 fn positioned_axis(
     parsed: Option<f32>,
     current: f32,
@@ -2108,6 +2163,7 @@ fn push_arc_preview(
     preview_paths: &mut PreviewPathAccumulator,
     layer: usize,
     role: ToolpathRole,
+    tool: usize,
     arc: ArcPreview,
 ) -> bool {
     let ArcPreview {
@@ -2151,7 +2207,16 @@ fn push_arc_preview(
         preview_paths.push(
             layer,
             role,
-            [previous[0], previous[1], next[0], next[1], z, role.code()],
+            tool,
+            [
+                previous[0],
+                previous[1],
+                next[0],
+                next[1],
+                z,
+                role.code(),
+                tool as f32,
+            ],
         );
         previous = next;
     }
@@ -2180,6 +2245,7 @@ fn preview_gcode(
     let mut relative_extrusion = false;
     let mut unit_scale = 1.0f32;
     let mut toolpath_role = ToolpathRole::Other;
+    let mut active_tool = 0usize;
     let mut preview_paths = PreviewPathAccumulator::default();
     let mut line_buffer = Vec::with_capacity(256);
 
@@ -2242,6 +2308,13 @@ fn preview_gcode(
             .trim_ascii();
         let mut tokens = command.split_ascii_whitespace();
         let opcode = tokens.next().unwrap_or("");
+        if let Some(next_tool) = parse_preview_tool(opcode) {
+            if next_tool != active_tool {
+                preview_paths.break_path();
+                active_tool = next_tool;
+            }
+            continue;
+        }
         if opcode == "G20" {
             unit_scale = 25.4;
             continue;
@@ -2321,6 +2394,7 @@ fn preview_gcode(
                         &mut preview_paths,
                         layer,
                         toolpath_role,
+                        active_tool,
                         ArcPreview {
                             start: [x, y],
                             end: [next_x, next_y],
@@ -2334,7 +2408,16 @@ fn preview_gcode(
                     preview_paths.push(
                         layer,
                         toolpath_role,
-                        [x, y, next_x, next_y, layer_z, toolpath_role.code()],
+                        active_tool,
+                        [
+                            x,
+                            y,
+                            next_x,
+                            next_y,
+                            layer_z,
+                            toolpath_role.code(),
+                            active_tool as f32,
+                        ],
                     );
                 }
             } else {
@@ -2403,11 +2486,21 @@ fn write_preview_payload(
                 "G-code preview has invalid path ranges".to_owned(),
             ));
         }
+        let path_tool = preview.segments[path.start][6];
+        if !path_tool.is_finite()
+            || path_tool.fract() != 0.0
+            || !(0.0..TOOLPATH_TOOL_COUNT as f32).contains(&path_tool)
+        {
+            return Err(EngineError::Parse(
+                "G-code preview has invalid tool metadata".to_owned(),
+            ));
+        }
         for segment in &preview.segments[path.start..path.end_exclusive] {
             if segment[..5]
                 .iter()
                 .any(|value| !value.is_finite() || value.abs() > MAX_GCODE_COORDINATE_ABS_MM)
                 || segment[5] != path.role.code()
+                || segment[6] != path_tool
             {
                 return Err(EngineError::Parse(
                     "G-code preview has invalid path geometry".to_owned(),
@@ -2425,7 +2518,7 @@ fn write_preview_payload(
     let payload_floats = preview
         .segments
         .len()
-        .checked_mul(6)
+        .checked_mul(TOOLPATH_SEGMENT_FLOATS)
         .and_then(|count| {
             preview
                 .paths
@@ -2692,6 +2785,8 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_packToolpathG
     max_z_mm: jfloat,
     opacity: jfloat,
     depth_contrast: jfloat,
+    filament_colors: JIntArray<'_>,
+    color_by_filament: jboolean,
     reverse_for_early_z: jboolean,
     render_as_lines: jboolean,
     output: JByteBuffer<'_>,
@@ -2703,9 +2798,12 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_packToolpathG
             .map_err(|_| EngineError::Parse("Toolpath path array is invalid".to_owned()))?;
         let path_end_count = usize::try_from(env.get_array_length(&path_ends_exclusive)?)
             .map_err(|_| EngineError::Parse("Toolpath path array is invalid".to_owned()))?;
+        let filament_color_count = usize::try_from(env.get_array_length(&filament_colors)?)
+            .map_err(|_| EngineError::Parse("Toolpath filament palette is invalid".to_owned()))?;
         if segment_float_count > MAX_PREVIEW_SEGMENTS * TOOLPATH_SEGMENT_FLOATS
             || path_count > MAX_PREVIEW_SEGMENTS
             || path_end_count != path_count
+            || filament_color_count != TOOLPATH_TOOL_COUNT
         {
             return Err(EngineError::Parse(
                 "Toolpath JNI payload exceeds its bound".to_owned(),
@@ -2714,9 +2812,11 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_packToolpathG
         let mut segment_values = vec![0.0f32; segment_float_count];
         let mut path_start_values = vec![0i32; path_count];
         let mut path_end_values = vec![0i32; path_count];
+        let mut filament_color_values = vec![0i32; filament_color_count];
         env.get_float_array_region(&segments, 0, &mut segment_values)?;
         env.get_int_array_region(&path_starts, 0, &mut path_start_values)?;
         env.get_int_array_region(&path_ends_exclusive, 0, &mut path_end_values)?;
+        env.get_int_array_region(&filament_colors, 0, &mut filament_color_values)?;
         let payload = pack_toolpath_geometry(ToolpathPackingRequest {
             segments: &segment_values,
             path_starts: &path_start_values,
@@ -2727,6 +2827,8 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_packToolpathG
             max_z_mm,
             opacity,
             depth_contrast,
+            filament_colors: &filament_color_values,
+            color_by_filament: color_by_filament != 0,
             reverse_for_early_z: reverse_for_early_z != 0,
             render_as_lines: render_as_lines != 0,
         })?;
@@ -2764,6 +2866,11 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_packToolpathG
 mod tests {
     use super::*;
     use std::io::Write;
+
+    const TEST_FILAMENT_COLORS: [i32; TOOLPATH_TOOL_COUNT] = [
+        0xF6C945, 0x44D7FF, 0xFF62D0, 0x5EE6A8, 0xFF6B6B, 0xA78BFA, 0xFF9F43, 0xE7E7E2, 0x78D6C6,
+        0xE99873, 0x8FB8FF, 0xD6A6E8, 0xA8D477, 0xFFB86B, 0xB8B8B2, 0xFFFFFF,
+    ];
 
     fn preview_payload(preview: GcodeLayerPreview) -> Result<Vec<f32>, EngineError> {
         let mut payload = vec![0.0; PREVIEW_MAX_PAYLOAD_FLOATS];
@@ -2920,8 +3027,8 @@ mod tests {
     #[test]
     fn toolpath_packing_preserves_ranges_layout_and_reverse_order() {
         let segments = [
-            10.0, 20.0, 30.0, 20.0, 0.2, 0.0, // outer wall
-            30.0, 20.0, 30.0, 40.0, 0.4, 1.0, // inner wall
+            10.0, 20.0, 30.0, 20.0, 0.2, 0.0, 0.0, // outer wall, tool 0
+            30.0, 20.0, 30.0, 40.0, 0.4, 1.0, 1.0, // inner wall, tool 1
         ];
         let path_starts = [0, 1];
         let path_ends = [1, 2];
@@ -2936,6 +3043,8 @@ mod tests {
                 max_z_mm: 0.4,
                 opacity: 0.92,
                 depth_contrast: 0.0,
+                filament_colors: &TEST_FILAMENT_COLORS,
+                color_by_filament: false,
                 reverse_for_early_z,
                 render_as_lines,
             })
@@ -2958,8 +3067,38 @@ mod tests {
     }
 
     #[test]
+    fn toolpath_packing_can_color_the_same_feature_by_filament() {
+        let segments = [
+            0.0, 0.0, 10.0, 0.0, 0.2, 0.0, 0.0, 10.0, 0.0, 20.0, 0.0, 0.2, 0.0, 1.0,
+        ];
+        let pack = |color_by_filament| {
+            pack_toolpath_geometry(ToolpathPackingRequest {
+                segments: &segments,
+                path_starts: &[0, 1],
+                path_ends_exclusive: &[1, 2],
+                bed_origin_x: 0.0,
+                bed_origin_y: 0.0,
+                min_z_mm: 0.2,
+                max_z_mm: 0.2,
+                opacity: 1.0,
+                depth_contrast: 0.0,
+                filament_colors: &TEST_FILAMENT_COLORS,
+                color_by_filament,
+                reverse_for_early_z: false,
+                render_as_lines: false,
+            })
+            .expect("pack toolpath colors")
+        };
+
+        let feature = pack(false);
+        assert_eq!(feature[7].to_bits(), feature[15].to_bits());
+        let filament = pack(true);
+        assert_ne!(filament[7].to_bits(), filament[15].to_bits());
+    }
+
+    #[test]
     fn toolpath_packing_rejects_overlapping_or_out_of_bounds_ranges() {
-        let segments = [0.0, 0.0, 1.0, 0.0, 0.2, 0.0];
+        let segments = [0.0, 0.0, 1.0, 0.0, 0.2, 0.0, 0.0];
         for (starts, ends) in [(vec![0, 0], vec![1, 1]), (vec![0], vec![2])] {
             let result = pack_toolpath_geometry(ToolpathPackingRequest {
                 segments: &segments,
@@ -2971,6 +3110,8 @@ mod tests {
                 max_z_mm: 0.2,
                 opacity: 1.0,
                 depth_contrast: 0.0,
+                filament_colors: &TEST_FILAMENT_COLORS,
+                color_by_filament: false,
                 reverse_for_early_z: false,
                 render_as_lines: false,
             });
@@ -2980,7 +3121,7 @@ mod tests {
 
     #[test]
     fn toolpath_packing_rejects_invalid_visual_parameters() {
-        let segments = [0.0, 0.0, 1.0, 0.0, 0.2, 0.0];
+        let segments = [0.0, 0.0, 1.0, 0.0, 0.2, 0.0, 0.0];
         for (opacity, depth_contrast) in [(f32::NAN, 0.5), (1.1, 0.5), (0.5, -0.1)] {
             let result = pack_toolpath_geometry(ToolpathPackingRequest {
                 segments: &segments,
@@ -2992,6 +3133,8 @@ mod tests {
                 max_z_mm: 0.2,
                 opacity,
                 depth_contrast,
+                filament_colors: &TEST_FILAMENT_COLORS,
+                color_by_filament: false,
                 reverse_for_early_z: false,
                 render_as_lines: false,
             });
@@ -3321,10 +3464,10 @@ mod tests {
         assert_eq!(
             preview.segments,
             vec![
-                [10.0, 10.0, 20.0, 10.0, 0.2, 0.0],
-                [20.0, 10.0, 20.0, 20.0, 0.2, 9.0],
-                [20.0, 20.0, 10.0, 20.0, 0.4, 4.0],
-                [10.0, 20.0, 10.0, 10.0, 0.4, 3.0],
+                [10.0, 10.0, 20.0, 10.0, 0.2, 0.0, 0.0],
+                [20.0, 10.0, 20.0, 20.0, 0.2, 9.0, 0.0],
+                [20.0, 20.0, 10.0, 20.0, 0.4, 4.0, 0.0],
+                [10.0, 20.0, 10.0, 10.0, 0.4, 3.0, 0.0],
             ]
         );
         assert_eq!(clamped.start_layer, 1);
@@ -3333,7 +3476,7 @@ mod tests {
         let payload = preview_payload(preview).expect("encode binary preview payload");
         assert_eq!(
             payload.len(),
-            PREVIEW_HEADER_FLOATS + 4 * 6 + 4 * PREVIEW_PATH_FLOATS
+            PREVIEW_HEADER_FLOATS + 4 * TOOLPATH_SEGMENT_FLOATS + 4 * PREVIEW_PATH_FLOATS
         );
         assert_eq!(payload[0], PREVIEW_PAYLOAD_MAGIC);
         assert_eq!(payload[1], PREVIEW_PAYLOAD_VERSION);
@@ -3346,10 +3489,37 @@ mod tests {
             ToolpathRole::OuterWall.code()
         );
         assert_eq!(
-            payload[PREVIEW_HEADER_FLOATS + 6 + 5],
+            payload[PREVIEW_HEADER_FLOATS + TOOLPATH_SEGMENT_FLOATS + 5],
             ToolpathRole::BottomSurface.code()
         );
         assert_eq!(&payload[payload.len() - 4..], &[1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn gcode_preview_preserves_tool_changes_as_distinct_paths() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-multitool-preview-{}.gcode",
+            std::process::id(),
+        ));
+        let mut file = File::create(&path).expect("create multi-tool fixture");
+        writeln!(
+            file,
+            "M83\n;LAYER_CHANGE\n;Z:0.2\n;TYPE:Outer wall\nT0\nG1 X10 Y10\nG1 X20 Y10 E1\nT1\nG1 X30 Y10 E1\nT255\nG1 X40 Y10 E1",
+        )
+        .expect("write multi-tool fixture");
+        drop(file);
+
+        let preview =
+            preview_gcode(path.to_str().expect("utf8 path"), 0, 0).expect("parse multi-tool gcode");
+        std::fs::remove_file(path).expect("remove fixture");
+
+        assert_eq!(preview.segments.len(), 3);
+        assert_eq!(preview.segments[0][6], 0.0);
+        assert_eq!(preview.segments[1][6], 1.0);
+        assert_eq!(preview.segments[2][6], 1.0);
+        assert_eq!(preview.paths.len(), 2);
+        assert_eq!(preview.paths[0].end_exclusive, 1);
+        assert_eq!(preview.paths[1].end_exclusive, 3);
     }
 
     #[test]
@@ -3360,7 +3530,7 @@ mod tests {
             layer_count: 1,
             min_z_mm: 0.2,
             max_z_mm: 0.2,
-            segments: vec![[0.0, 0.0, 1.0, 0.0, 0.2, ToolpathRole::OuterWall.code()]],
+            segments: vec![[0.0, 0.0, 1.0, 0.0, 0.2, ToolpathRole::OuterWall.code(), 0.0]],
             paths: vec![PreviewPathRange {
                 start: 0,
                 end_exclusive: 2,
@@ -3392,8 +3562,8 @@ mod tests {
         assert_eq!(
             preview.segments,
             vec![
-                [100.0, 100.0, 110.0, 100.0, 0.2, 0.0],
-                [110.0, 100.0, 130.0, 110.0, 0.2, 0.0],
+                [100.0, 100.0, 110.0, 100.0, 0.2, 0.0, 0.0],
+                [110.0, 100.0, 130.0, 110.0, 0.2, 0.0, 0.0],
             ],
         );
     }
@@ -3466,11 +3636,11 @@ mod tests {
     #[test]
     fn path_simplification_preserves_high_information_vertices() {
         let source = vec![
-            [0.0, 0.0, 1.0, 0.0, 0.2, 0.0],
-            [1.0, 0.0, 2.0, 0.0, 0.2, 0.0],
-            [2.0, 0.0, 3.0, 10.0, 0.2, 0.0],
-            [3.0, 10.0, 4.0, 0.0, 0.2, 0.0],
-            [4.0, 0.0, 5.0, 0.0, 0.2, 0.0],
+            [0.0, 0.0, 1.0, 0.0, 0.2, 0.0, 0.0],
+            [1.0, 0.0, 2.0, 0.0, 0.2, 0.0, 0.0],
+            [2.0, 0.0, 3.0, 10.0, 0.2, 0.0, 0.0],
+            [3.0, 10.0, 4.0, 0.0, 0.2, 0.0, 0.0],
+            [4.0, 0.0, 5.0, 0.0, 0.2, 0.0, 0.0],
         ];
 
         let simplified = simplify_continuous_path(source, 2);
@@ -3491,10 +3661,10 @@ mod tests {
     #[test]
     fn path_simplification_keeps_closed_contours_closed_and_deterministic() {
         let source = vec![
-            [0.0, 0.0, 10.0, 0.0, 0.2, 0.0],
-            [10.0, 0.0, 10.0, 10.0, 0.2, 0.0],
-            [10.0, 10.0, 0.0, 10.0, 0.2, 0.0],
-            [0.0, 10.0, 0.0, 0.0, 0.2, 0.0],
+            [0.0, 0.0, 10.0, 0.0, 0.2, 0.0, 0.0],
+            [10.0, 0.0, 10.0, 10.0, 0.2, 0.0, 0.0],
+            [10.0, 10.0, 0.0, 10.0, 0.2, 0.0, 0.0],
+            [0.0, 10.0, 0.0, 0.0, 0.2, 0.0, 0.0],
         ];
 
         let first = simplify_continuous_path(source.clone(), 3);
@@ -3522,6 +3692,7 @@ mod tests {
                 } else {
                     ToolpathRole::Infill
                 },
+                tool: 0,
                 segments: (0..4)
                     .map(|segment_index| {
                         let x = (path_index * 10 + segment_index) as f32;
@@ -3532,6 +3703,7 @@ mod tests {
                             path_index as f32,
                             path_index as f32,
                             (path_index % 2 * 2) as f32,
+                            0.0,
                         ]
                     })
                     .collect(),
@@ -3570,6 +3742,7 @@ mod tests {
                     order: layer * 2 + role as usize,
                     layer,
                     role,
+                    tool: 0,
                     segments: (0..20)
                         .map(|segment| {
                             let x = segment as f32;
@@ -3580,6 +3753,7 @@ mod tests {
                                 layer as f32,
                                 layer as f32,
                                 role.code(),
+                                0.0,
                             ]
                         })
                         .collect(),
@@ -3648,7 +3822,10 @@ mod tests {
 
         assert_eq!(preview.min_z_mm, 0.0);
         assert_eq!(preview.max_z_mm, 0.0);
-        assert_eq!(preview.segments, vec![[0.0, 0.0, 10.0, 10.0, 0.0, 8.0]]);
+        assert_eq!(
+            preview.segments,
+            vec![[0.0, 0.0, 10.0, 10.0, 0.0, 8.0, 0.0]],
+        );
     }
 
     #[test]

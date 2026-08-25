@@ -629,7 +629,7 @@ def valid_sources() -> dict[str, str]:
         "lib.rs": (
             "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRangeInto "
             "output: JByteBuffer "
-            "PREVIEW_PAYLOAD_MAGIC PREVIEW_PAYLOAD_VERSION: f32 = 2.0 "
+            "PREVIEW_PAYLOAD_MAGIC PREVIEW_PAYLOAD_VERSION: f32 = 3.0 "
             "PREVIEW_HEADER_FLOATS: usize = 9 + ToolpathRole::COUNT "
             "PREVIEW_PATH_FLOATS: usize = 1 paths: Vec<PreviewPathRange> "
             "role_segment_counts[path.role as usize] "

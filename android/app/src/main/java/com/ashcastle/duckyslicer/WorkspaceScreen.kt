@@ -156,16 +156,6 @@ import kotlinx.coroutines.withContext
 private val WorkspaceYellow = Color(0xFFF6C945)
 private val WorkspaceBlack = Color(0xFF202124)
 private val WorkspacePanel = Color(0xEE2A2A27)
-private val FilamentSlotColors = listOf(
-    WorkspaceYellow,
-    Color(0xFF44D7FF),
-    Color(0xFFFF62D0),
-    Color(0xFF5EE6A8),
-    Color(0xFFFF6B6B),
-    Color(0xFFA78BFA),
-    Color(0xFFFF9F43),
-    Color(0xFFE7E7E2),
-)
 private const val PreviewDepthBands = 12
 private const val TabletShortestSideDp = 600f
 private const val CompactNavigationLabelFontScale = 1.5f
@@ -268,7 +258,11 @@ internal fun shouldUseDepthTestedPreview(
     deviceSupported && runtimeAvailable
 
 internal fun filamentSlotColor(slot: Int): Color =
-    FilamentSlotColors[Math.floorMod(slot, FilamentSlotColors.size)]
+    Color(
+        0xFF000000.toInt() or DefaultFilamentPreviewColors[
+            Math.floorMod(slot, DefaultFilamentPreviewColors.size)
+        ],
+    )
 
 internal fun projectVolumeColor(role: ProjectVolumeRole, filamentSlot: Int): Color = when (role) {
     ProjectVolumeRole.MODEL_PART -> filamentSlotColor(filamentSlot)
@@ -616,6 +610,10 @@ internal fun WorkspaceScreen(
     var brimAddMode by remember { mutableStateOf(true) }
     var brimEditMessage by remember { mutableStateOf<String?>(null) }
     var visibleToolpathRoles by remember { mutableStateOf(ToolpathStyles.indices.toSet()) }
+    var previewColorModeName by rememberSaveable { mutableStateOf(PreviewColorMode.FEATURE.name) }
+    val previewColorMode = PreviewColorMode.entries.firstOrNull {
+        it.name == previewColorModeName
+    } ?: PreviewColorMode.FEATURE
     var previewControlsExpanded by rememberSaveable { mutableStateOf(false) }
     var cameraRequestSequence by rememberSaveable { mutableLongStateOf(0L) }
     var cameraRequest by remember { mutableStateOf<WorkspaceCameraRequest?>(null) }
@@ -714,6 +712,7 @@ internal fun WorkspaceScreen(
                     toolpathOpacity = appSettings.toolpathOpacity,
                     toolpathDepthContrast = appSettings.toolpathDepthContrast,
                     visibleToolpathRoles = visibleToolpathRoles,
+                    previewColorMode = previewColorMode,
                     previewDetail = appSettings.previewDetail,
                     previewRenderingMode = appSettings.previewRenderingMode,
                     cameraRequest = cameraRequest,
@@ -1063,6 +1062,8 @@ internal fun WorkspaceScreen(
                         onAppSettingsChanged(appSettings.copy(toolpathDepthContrast = it))
                     },
                     visibleToolpathRoles = visibleToolpathRoles,
+                    previewColorMode = previewColorMode,
+                    onPreviewColorModeChanged = { mode -> previewColorModeName = mode.name },
                     onToolpathRoleVisibilityChanged = { role, visible ->
                         visibleToolpathRoles = if (visible) {
                             visibleToolpathRoles + role
@@ -3690,6 +3691,7 @@ private fun BedScene(
     toolpathOpacity: Float,
     toolpathDepthContrast: Float,
     visibleToolpathRoles: Set<Int>,
+    previewColorMode: PreviewColorMode,
     previewDetail: PreviewDetail,
     previewRenderingMode: PreviewRenderingMode,
     cameraRequest: WorkspaceCameraRequest?,
@@ -3751,6 +3753,8 @@ private fun BedScene(
             opacity = toolpathOpacity,
             depthContrast = toolpathDepthContrast,
             visibleRoles = visibleToolpathRoles,
+            colorMode = previewColorMode,
+            filamentColors = DefaultFilamentPreviewColors,
             // Keep the Automatic request intact so the GLES renderer can promote its
             // settled geometry from Performance to Balanced/Detail using measured work.
             detail = previewDetail,
@@ -3981,7 +3985,9 @@ private fun BedScene(
             ?.placedModelFootprint(bedSizeX, bedSizeY)
     }
     val previewPaths = remember(preview) {
-        Array(PreviewDepthBands) { Array(ToolpathStyles.size) { Path() } }
+        Array(PreviewDepthBands) {
+            arrayOfNulls<Path>(ToolpathStyles.size * GcodeLayerPreview.MAX_TOOL_COUNT)
+        }
     }
     val movingPreviewPlan = remember(preview, effectivePreviewDetail, visibleToolpathRoles) {
         preview?.buildRenderPlan(
@@ -4963,7 +4969,7 @@ private fun BedScene(
         }
 
         if (preview != null) {
-            previewPaths.forEach { bandPaths -> bandPaths.forEach(Path::reset) }
+            previewPaths.forEach { bandPaths -> bandPaths.forEach { it?.reset() } }
             val renderPlan = if (interactionActive || !refinedPreview) {
                 movingPreviewPlan
             } else {
@@ -4973,6 +4979,9 @@ private fun BedScene(
             renderPlan?.segmentOffsets?.forEachIndexed { selectedIndex, segmentIndex ->
                 val role = preview.segments[segmentIndex + 5].roundToInt()
                     .coerceIn(0, ToolpathStyles.lastIndex)
+                val tool = preview.segments[segmentIndex + GcodeLayerPreview.TOOL_OFFSET]
+                    .roundToInt()
+                    .coerceIn(0, GcodeLayerPreview.MAX_TOOL_COUNT - 1)
                 if (role !in visibleToolpathRoles) return@forEachIndexed
                 val startX = preview.segments[segmentIndex] - bedOriginX
                 val startY = preview.segments[segmentIndex + 1] - bedOriginY
@@ -4981,7 +4990,10 @@ private fun BedScene(
                 val depthBand = (normalizedHeight * (PreviewDepthBands - 1))
                     .roundToInt()
                     .coerceIn(0, PreviewDepthBands - 1)
-                val rolePath = previewPaths[depthBand][role]
+                val bucket = role * GcodeLayerPreview.MAX_TOOL_COUNT + tool
+                val rolePath = previewPaths[depthBand][bucket] ?: Path().also {
+                    previewPaths[depthBand][bucket] = it
+                }
                 val end = project(
                     preview.segments[segmentIndex + 2] - bedOriginX,
                     preview.segments[segmentIndex + 3] - bedOriginY,
@@ -4999,22 +5011,32 @@ private fun BedScene(
                 val normalizedHeight = depthBand.toFloat() / (PreviewDepthBands - 1)
                 ToolpathDrawOrder.forEach { role ->
                     val style = ToolpathStyles[role]
-                    val coreWidth = style.widthDp.dp.toPx()
-                    val shadeAmount = toolpathDepthContrast * (1f - normalizedHeight) * 0.72f
-                    val highlightAmount = toolpathDepthContrast * normalizedHeight * 0.08f
-                    val shadedColor = lerp(style.color, Color(0xFF10120F), shadeAmount)
-                    val visibleColor = lerp(shadedColor, Color.White, highlightAmount)
-                    val heightAlpha = 1f - toolpathDepthContrast * (1f - normalizedHeight) * 0.36f
-                    drawPath(
-                        path = bandPaths[role],
-                        color = Color.Black.copy(alpha = toolpathOpacity * 0.82f),
-                        style = Stroke(width = coreWidth + 0.5.dp.toPx()),
-                    )
-                    drawPath(
-                        path = bandPaths[role],
-                        color = visibleColor.copy(alpha = toolpathOpacity * heightAlpha),
-                        style = Stroke(width = coreWidth),
-                    )
+                    repeat(GcodeLayerPreview.MAX_TOOL_COUNT) { tool ->
+                        val bucket = role * GcodeLayerPreview.MAX_TOOL_COUNT + tool
+                        val path = bandPaths[bucket] ?: return@repeat
+                        val baseColor = if (previewColorMode == PreviewColorMode.FILAMENT) {
+                            filamentSlotColor(tool)
+                        } else {
+                            style.color
+                        }
+                        val coreWidth = style.widthDp.dp.toPx()
+                        val shadeAmount = toolpathDepthContrast * (1f - normalizedHeight) * 0.72f
+                        val highlightAmount = toolpathDepthContrast * normalizedHeight * 0.08f
+                        val shadedColor = lerp(baseColor, Color(0xFF10120F), shadeAmount)
+                        val visibleColor = lerp(shadedColor, Color.White, highlightAmount)
+                        val heightAlpha =
+                            1f - toolpathDepthContrast * (1f - normalizedHeight) * 0.36f
+                        drawPath(
+                            path = path,
+                            color = Color.Black.copy(alpha = toolpathOpacity * 0.82f),
+                            style = Stroke(width = coreWidth + 0.5.dp.toPx()),
+                        )
+                        drawPath(
+                            path = path,
+                            color = visibleColor.copy(alpha = toolpathOpacity * heightAlpha),
+                            style = Stroke(width = coreWidth),
+                        )
+                    }
                 }
             }
         } else if (projectObjects.isNotEmpty()) {
@@ -6537,6 +6559,8 @@ private fun PreviewSheet(
     toolpathDepthContrast: Float,
     onToolpathDepthContrastChanged: (Float) -> Unit,
     visibleToolpathRoles: Set<Int>,
+    previewColorMode: PreviewColorMode,
+    onPreviewColorModeChanged: (PreviewColorMode) -> Unit,
     onToolpathRoleVisibilityChanged: (Int, Boolean) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
     onGoToSlice: () -> Unit,
@@ -6604,6 +6628,8 @@ private fun PreviewSheet(
                             toolpathDepthContrast = toolpathDepthContrast,
                             onToolpathDepthContrastChanged = onToolpathDepthContrastChanged,
                             visibleToolpathRoles = visibleToolpathRoles,
+                            previewColorMode = previewColorMode,
+                            onPreviewColorModeChanged = onPreviewColorModeChanged,
                             onToolpathRoleVisibilityChanged = onToolpathRoleVisibilityChanged,
                             onLayerRangeSelected = onLayerRangeSelected,
                         )
@@ -6701,6 +6727,8 @@ internal fun PreviewControls(
     toolpathDepthContrast: Float,
     onToolpathDepthContrastChanged: (Float) -> Unit,
     visibleToolpathRoles: Set<Int>,
+    previewColorMode: PreviewColorMode,
+    onPreviewColorModeChanged: (PreviewColorMode) -> Unit,
     onToolpathRoleVisibilityChanged: (Int, Boolean) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
 ) {
@@ -6722,6 +6750,39 @@ internal fun PreviewControls(
         (toolpathDepthContrast * 100).roundToInt(),
     )
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                stringResource(R.string.preview_color_mode),
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PreviewColorMode.entries.forEach { mode ->
+                    val selected = previewColorMode == mode
+                    val label = stringResource(
+                        if (mode == PreviewColorMode.FEATURE) {
+                            R.string.preview_color_feature
+                        } else {
+                            R.string.preview_color_filament
+                        },
+                    )
+                    Surface(
+                        onClick = { onPreviewColorModeChanged(mode) },
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (selected) WorkspaceYellow else Color(0xFF383936),
+                        contentColor = if (selected) WorkspaceBlack else Color(0xFFE2E3DD),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(label, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
                 stringResource(
@@ -6868,6 +6929,47 @@ internal fun PreviewControls(
                 )
             }
         }
+        if (previewColorMode == PreviewColorMode.FILAMENT) {
+            Text(
+                stringResource(R.string.preview_filaments),
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            preview.toolSegmentCounts.indices
+                .filter { preview.toolSegmentCounts[it] > 0 }
+                .chunked(2)
+                .forEach { tools ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        tools.forEach { tool ->
+                            Row(
+                                modifier = Modifier.weight(1f).heightIn(min = 40.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(width = 18.dp, height = 6.dp),
+                                    color = filamentSlotColor(tool),
+                                    shape = RoundedCornerShape(50),
+                                ) {}
+                                Spacer(Modifier.width(7.dp))
+                                Text(
+                                    stringResource(R.string.preview_filament_number, tool + 1),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color(0xFFE2E3DD),
+                                )
+                            }
+                        }
+                        if (tools.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
+        }
+        Text(
+            stringResource(R.string.preview_visible_features),
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelLarge,
+        )
         ToolpathStyles.chunked(2).forEach { rowStyles ->
             Row(
                 modifier = Modifier.fillMaxWidth(),

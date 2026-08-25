@@ -31,6 +31,30 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
+internal enum class PreviewColorMode {
+    FEATURE,
+    FILAMENT,
+}
+
+internal val DefaultFilamentPreviewColors: List<Int> = listOf(
+    0xF6C945,
+    0x44D7FF,
+    0xFF62D0,
+    0x5EE6A8,
+    0xFF6B6B,
+    0xA78BFA,
+    0xFF9F43,
+    0xE7E7E2,
+    0x78D6C6,
+    0xE99873,
+    0x8FB8FF,
+    0xD6A6E8,
+    0xA8D477,
+    0xFFB86B,
+    0xB8B8B2,
+    0xFFFFFF,
+)
+
 private inline fun <T> traced(name: String, block: () -> T): T {
     Trace.beginSection(name)
     return try {
@@ -52,6 +76,8 @@ internal fun DepthTestedToolpathScene(
     opacity: Float,
     depthContrast: Float,
     visibleRoles: Set<Int>,
+    colorMode: PreviewColorMode,
+    filamentColors: List<Int>,
     detail: PreviewDetail,
     cameraRequest: WorkspaceCameraRequest?,
     onUnavailable: () -> Unit,
@@ -75,6 +101,8 @@ internal fun DepthTestedToolpathScene(
                 opacity,
                 depthContrast,
                 visibleRoles,
+                colorMode,
+                filamentColors,
                 detail,
             )
         },
@@ -158,6 +186,8 @@ internal class ToolpathSurfaceView(
         opacity: Float,
         depthContrast: Float,
         visibleRoles: Set<Int>,
+        colorMode: PreviewColorMode = PreviewColorMode.FEATURE,
+        filamentColors: List<Int> = DefaultFilamentPreviewColors,
         detail: PreviewDetail,
     ) {
         updateSettledSurfaceDetail(
@@ -175,6 +205,8 @@ internal class ToolpathSurfaceView(
             depthContrast = depthContrast,
             detail = detail,
             visibleRoles = visibleRoles,
+            colorMode = colorMode,
+            filamentColors = filamentColors,
         )
         if (scene != latestSubmittedScene) {
             geometryGeneration.incrementAndGet()
@@ -456,6 +488,8 @@ internal data class ToolpathScene(
     val depthContrast: Float,
     val detail: PreviewDetail,
     val visibleRoles: Set<Int> = (0 until GcodeLayerPreview.ROLE_COUNT).toSet(),
+    val colorMode: PreviewColorMode = PreviewColorMode.FEATURE,
+    val filamentColors: List<Int> = DefaultFilamentPreviewColors,
     val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
     val bedExcludeArea: List<Float> = listOf(0f, 0f),
     val bedOriginX: Float = 0f,
@@ -463,6 +497,11 @@ internal data class ToolpathScene(
     val segmentBudgetOverride: Int? = null,
     val renderAsLines: Boolean = false,
 ) {
+    init {
+        require(filamentColors.size == GcodeLayerPreview.MAX_TOOL_COUNT)
+        require(filamentColors.all { it in 0..0xFFFFFF })
+    }
+
     /**
      * Preview payloads are immutable renderer inputs. Cache identity must therefore follow the
      * payload object, not hash every coordinate in its large FloatArray on every camera frame.
@@ -477,6 +516,8 @@ internal data class ToolpathScene(
             depthContrast.toBits() == other.depthContrast.toBits() &&
             detail == other.detail &&
             visibleRoles == other.visibleRoles &&
+            colorMode == other.colorMode &&
+            filamentColors == other.filamentColors &&
             bedPolygon == other.bedPolygon &&
             bedExcludeArea == other.bedExcludeArea &&
             bedOriginX.toBits() == other.bedOriginX.toBits() &&
@@ -493,6 +534,8 @@ internal data class ToolpathScene(
         result = 31 * result + depthContrast.hashCode()
         result = 31 * result + detail.hashCode()
         result = 31 * result + visibleRoles.hashCode()
+        result = 31 * result + colorMode.hashCode()
+        result = 31 * result + filamentColors.hashCode()
         result = 31 * result + bedPolygon.hashCode()
         result = 31 * result + bedExcludeArea.hashCode()
         result = 31 * result + bedOriginX.hashCode()
@@ -510,6 +553,8 @@ internal fun ToolpathScene.canReuseGeometryWhileBuilding(requested: ToolpathScen
         opacity.toBits() == requested.opacity.toBits() &&
         depthContrast.toBits() == requested.depthContrast.toBits() &&
         visibleRoles == requested.visibleRoles &&
+        colorMode == requested.colorMode &&
+        filamentColors == requested.filamentColors &&
         bedPolygon == requested.bedPolygon &&
         bedExcludeArea == requested.bedExcludeArea &&
         bedOriginX.toBits() == requested.bedOriginX.toBits() &&
@@ -1468,8 +1513,8 @@ internal object ToolpathMeshBuilder {
         // Preview G-code is layer ordered. For the normal near-opaque view, upload high
         // layers first so depth testing rejects covered internal fragments before shading.
         // A deliberately translucent view keeps source order so inner paths remain visible.
-        val packedRoleColors = FloatArray(roleColors.size)
-        val packedRoleColorValid = BooleanArray(roleColors.size)
+        val packedColors = FloatArray(GcodeLayerPreview.MAX_TOOL_COUNT)
+        val packedColorValid = BooleanArray(GcodeLayerPreview.MAX_TOOL_COUNT)
         var colorZBits = 0
         var colorZInitialized = false
         var heightShadeMultiplier = 1f
@@ -1496,6 +1541,9 @@ internal object ToolpathMeshBuilder {
                     val role = scene.preview.segments[offset + 5]
                         .toInt()
                         .coerceIn(0, roleColors.lastIndex)
+                    val tool = scene.preview.segments[offset + GcodeLayerPreview.TOOL_OFFSET]
+                        .toInt()
+                        .coerceIn(0, GcodeLayerPreview.MAX_TOOL_COUNT - 1)
                     val dx = x2 - x1
                     val dy = y2 - y1
                     if (dx * dx + dy * dy >= 0.000001f) {
@@ -1503,23 +1551,32 @@ internal object ToolpathMeshBuilder {
                         if (!colorZInitialized || nextZBits != colorZBits) {
                             colorZInitialized = true
                             colorZBits = nextZBits
-                            packedRoleColorValid.fill(false)
+                            packedColorValid.fill(false)
                             val normalizedHeight =
                                 ((z - scene.preview.minZMm) / zSpan).coerceIn(0f, 1f)
                             val shade = scene.depthContrast * (1f - normalizedHeight) * 0.56f
                             heightShadeMultiplier = 1f - shade
                         }
-                        if (!packedRoleColorValid[role]) {
-                            val base = roleColors[role]
-                            packedRoleColors[role] = packedColor(
+                        val colorIndex = if (scene.colorMode == PreviewColorMode.FILAMENT) {
+                            tool
+                        } else {
+                            role
+                        }
+                        if (!packedColorValid[colorIndex]) {
+                            val base = if (scene.colorMode == PreviewColorMode.FILAMENT) {
+                                rgbColor(scene.filamentColors[tool])
+                            } else {
+                                roleColors[role]
+                            }
+                            packedColors[colorIndex] = packedColor(
                                 base[0] * heightShadeMultiplier,
                                 base[1] * heightShadeMultiplier,
                                 base[2] * heightShadeMultiplier,
                                 scene.opacity,
                             )
-                            packedRoleColorValid[role] = true
+                            packedColorValid[colorIndex] = true
                         }
-                        val color = packedRoleColors[role]
+                        val color = packedColors[colorIndex]
                         val halfWidth = roleWidths[role] / 2f
                         instanceBuilder?.segment(
                             x1, y1, z + 0.024f,
@@ -1593,6 +1650,8 @@ internal object ToolpathMeshBuilder {
                     maxZMm = scene.preview.maxZMm,
                     opacity = scene.opacity,
                     depthContrast = scene.depthContrast,
+                    filamentColors = scene.filamentColors.toIntArray(),
+                    colorByFilament = scene.colorMode == PreviewColorMode.FILAMENT,
                     reverseForEarlyZ = reverseForEarlyZ,
                     renderAsLines = scene.renderAsLines,
                     output = output,
@@ -1621,6 +1680,12 @@ internal object ToolpathMeshBuilder {
                 (colorInt(green) shl 8) or
                 colorInt(red),
         )
+
+    private fun rgbColor(rgb: Int): FloatArray = floatArrayOf(
+        ((rgb shr 16) and 0xff) / 255f,
+        ((rgb shr 8) and 0xff) / 255f,
+        (rgb and 0xff) / 255f,
+    )
 
     private fun colorInt(value: Float): Int =
         (value.coerceIn(0f, 1f) * 255f).roundToInt()

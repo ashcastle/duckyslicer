@@ -12,7 +12,7 @@ import org.junit.runner.RunWith
 class ToolpathNativePackingInstrumentedTest {
     @Test
     fun rustPackingRejectsInvalidOutputBuffers() {
-        val segments = floatArrayOf(0f, 0f, 10f, 0f, 0.2f, 0f)
+        val segments = floatArrayOf(0f, 0f, 10f, 0f, 0.2f, 0f, 0f)
         val pathStarts = intArrayOf(0)
         val pathEndsExclusive = intArrayOf(1)
 
@@ -26,6 +26,8 @@ class ToolpathNativePackingInstrumentedTest {
             maxZMm = 0.2f,
             opacity = 1f,
             depthContrast = 0.5f,
+            filamentColors = DefaultFilamentPreviewColors.toIntArray(),
+            colorByFilament = false,
             reverseForEarlyZ = false,
             renderAsLines = false,
             output = output,
@@ -44,11 +46,11 @@ class ToolpathNativePackingInstrumentedTest {
             minZMm = 0.2f,
             maxZMm = 0.4f,
             segments = floatArrayOf(
-                10f, 20f, 20f, 20f, 0.2f, 0f,
-                20f, 20f, 20f, 30f, 0.2f, 0f,
-                20f, 30f, 20f, 30f, 0.2f, 0f, // degenerate segment is omitted
-                15f, 25f, 25f, 35f, 0.4f, 6f,
-                25f, 35f, 35f, 35f, 0.4f, 6f,
+                10f, 20f, 20f, 20f, 0.2f, 0f, 0f,
+                20f, 20f, 20f, 30f, 0.2f, 0f, 0f,
+                20f, 30f, 20f, 30f, 0.2f, 0f, 0f, // degenerate segment is omitted
+                15f, 25f, 25f, 35f, 0.4f, 6f, 1f,
+                25f, 35f, 35f, 35f, 0.4f, 6f, 1f,
             ),
             roleSegmentCounts = intArrayOf(3, 0, 0, 0, 0, 0, 2, 0, 0, 0),
         )

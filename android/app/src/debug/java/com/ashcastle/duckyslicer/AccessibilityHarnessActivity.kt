@@ -228,6 +228,7 @@ private fun PreviewAccessibilityHarness() {
     var opacity by remember { mutableFloatStateOf(0.92f) }
     var depthContrast by remember { mutableFloatStateOf(0.75f) }
     var visibleRoles by remember { mutableStateOf((0 until 10).toSet()) }
+    var colorMode by remember { mutableStateOf(PreviewColorMode.FEATURE) }
     PreviewControls(
         preview = GcodeLayerPreview(
             startLayer = 0,
@@ -243,6 +244,8 @@ private fun PreviewAccessibilityHarness() {
         toolpathDepthContrast = depthContrast,
         onToolpathDepthContrastChanged = { depthContrast = it },
         visibleToolpathRoles = visibleRoles,
+        previewColorMode = colorMode,
+        onPreviewColorModeChanged = { colorMode = it },
         onToolpathRoleVisibilityChanged = { role, visible ->
             visibleRoles = if (visible) visibleRoles + role else visibleRoles - role
         },

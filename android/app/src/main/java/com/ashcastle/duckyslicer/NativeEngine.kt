@@ -37,6 +37,8 @@ internal object NativeEngine {
         maxZMm: Float,
         opacity: Float,
         depthContrast: Float,
+        filamentColors: IntArray,
+        colorByFilament: Boolean,
         reverseForEarlyZ: Boolean,
         renderAsLines: Boolean,
         output: ByteBuffer,

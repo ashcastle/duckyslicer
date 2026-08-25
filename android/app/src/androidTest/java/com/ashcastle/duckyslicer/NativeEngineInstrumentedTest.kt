@@ -1032,7 +1032,7 @@ class NativeEngineInstrumentedTest {
                 layerCount = 1,
                 minZMm = 0.2f,
                 maxZMm = 0.2f,
-                segments = floatArrayOf(10f, 10f, 20f, 10f, 0.2f, 0f),
+                segments = floatArrayOf(10f, 10f, 20f, 10f, 0.2f, 0f, 0f),
                 roleSegmentCounts = intArrayOf(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
             )
             val scene = ToolpathScene(preview, 100f, 100f, 1f, 0.8f, PreviewDetail.BALANCED)
@@ -3924,6 +3924,19 @@ class NativeEngineInstrumentedTest {
         val manualGcode = manual.output.readText()
 
         assertTrue("Touching volumes must use both materials", interlockedGcode.lineSequence().any { it == "T1" })
+        assertTrue(
+            "The native Preview must preserve the first filament tool",
+            baselinePreview.toolSegmentCounts[0] > 0,
+        )
+        assertTrue(
+            "The native Preview must preserve the second filament tool",
+            baselinePreview.toolSegmentCounts[1] > 0,
+        )
+        assertTrue(
+            "Tool-preserving Preview must survive interlocking geometry",
+            interlockedPreview.toolSegmentCounts[0] > 0 &&
+                interlockedPreview.toolSegmentCounts[1] > 0,
+        )
         assertTrue(
             "Before-layer G-code must run on repeated real layer transitions",
             interlockedGcode.lineSequence().count { it == "; DUCKY_BEFORE_LAYER" } > 1,

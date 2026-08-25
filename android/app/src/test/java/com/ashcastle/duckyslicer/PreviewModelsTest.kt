@@ -13,10 +13,10 @@ class PreviewModelsTest {
     @Test
     fun nativePayloadKeepsMetadataSegmentsAndRolesWithoutJson() {
         val payload = floatArrayOf(
-            17_491f, 2f, 0f, 1f, 2f, 0.2f, 0.4f, 2f, 2f,
+            17_491f, 3f, 0f, 1f, 2f, 0.2f, 0.4f, 2f, 2f,
             1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 1f,
-            1f, 2f, 3f, 4f, 0.2f, 0f,
-            3f, 4f, 5f, 6f, 0.4f, 9f,
+            1f, 2f, 3f, 4f, 0.2f, 0f, 0f,
+            3f, 4f, 5f, 6f, 0.4f, 9f, 1f,
             1f, 2f,
         )
 
@@ -25,7 +25,9 @@ class PreviewModelsTest {
         assertEquals(0, preview.startLayer)
         assertEquals(1, preview.endLayer)
         assertEquals(2, preview.layerCount)
-        assertArrayEquals(payload.copyOfRange(19, 31), preview.segments, 0f)
+        assertArrayEquals(payload.copyOfRange(19, 33), preview.segments, 0f)
+        assertEquals(1, preview.toolSegmentCounts[0])
+        assertEquals(1, preview.toolSegmentCounts[1])
         assertEquals(1, preview.roleSegmentCounts[0])
         assertEquals(1, preview.roleSegmentCounts[9])
     }
@@ -33,10 +35,10 @@ class PreviewModelsTest {
     @Test
     fun trustedDirectPayloadKeepsExactMetadataAndRejectsInvalidBuffers() {
         val payload = floatArrayOf(
-            17_491f, 2f, 0f, 1f, 2f, 0.2f, 0.4f, 2f, 2f,
+            17_491f, 3f, 0f, 1f, 2f, 0.2f, 0.4f, 2f, 2f,
             1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 1f,
-            1f, 2f, 3f, 4f, 0.2f, 0f,
-            3f, 4f, 5f, 6f, 0.4f, 9f,
+            1f, 2f, 3f, 4f, 0.2f, 0f, 0f,
+            3f, 4f, 5f, 6f, 0.4f, 9f, 1f,
             1f, 2f,
         )
         val direct = ByteBuffer.allocateDirect(payload.size * Float.SIZE_BYTES)
@@ -46,7 +48,7 @@ class PreviewModelsTest {
         val preview = GcodeLayerPreview.fromTrustedNative(direct, payload.size)
 
         assertEquals(2, preview.layerCount)
-        assertArrayEquals(payload.copyOfRange(19, 31), preview.segments, 0f)
+        assertArrayEquals(payload.copyOfRange(19, 33), preview.segments, 0f)
         assertEquals(1, preview.roleSegmentCounts[0])
         assertEquals(1, preview.roleSegmentCounts[9])
         assertThrows(IllegalStateException::class.java) {
@@ -73,9 +75,9 @@ class PreviewModelsTest {
     @Test
     fun nativePayloadRejectsNonFiniteCoordinatesAndInvalidRoles() {
         val valid = floatArrayOf(
-            17_491f, 2f, 0f, 0f, 1f, 0.2f, 0.2f, 1f, 1f,
+            17_491f, 3f, 0f, 0f, 1f, 0.2f, 0.2f, 1f, 1f,
             1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-            1f, 2f, 3f, 4f, 0.2f, 0f,
+            1f, 2f, 3f, 4f, 0.2f, 0f, 0f,
             1f,
         )
         assertThrows(IllegalStateException::class.java) {
@@ -88,10 +90,16 @@ class PreviewModelsTest {
             GcodeLayerPreview.fromNative(valid.copyOf().apply { this[24] = 10f })
         }
         assertThrows(IllegalStateException::class.java) {
+            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[25] = 1.5f })
+        }
+        assertThrows(IllegalStateException::class.java) {
+            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[25] = 16f })
+        }
+        assertThrows(IllegalStateException::class.java) {
             GcodeLayerPreview.fromNative(valid.copyOf().apply { this[9] = 0f })
         }
         assertThrows(IllegalStateException::class.java) {
-            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[25] = 0f })
+            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[26] = 0f })
         }
     }
 
@@ -104,10 +112,10 @@ class PreviewModelsTest {
             minZMm = 0.2f,
             maxZMm = 0.4f,
             segments = floatArrayOf(
-                0f, 0f, 10f, 0f, 0.2f, 0f,
-                10f, 0f, 10f, 10f, 0.2f, 0f,
-                0f, 0f, 0f, 10f, 0.4f, 1f,
-                0f, 10f, 10f, 10f, 0.4f, 1f,
+                0f, 0f, 10f, 0f, 0.2f, 0f, 0f,
+                10f, 0f, 10f, 10f, 0.2f, 0f, 0f,
+                0f, 0f, 0f, 10f, 0.4f, 1f, 0f,
+                0f, 10f, 10f, 10f, 0.4f, 1f, 0f,
             ),
             roleSegmentCounts = intArrayOf(2, 2, 0, 0, 0, 0, 0, 0, 0, 0),
         )

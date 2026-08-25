@@ -56,6 +56,16 @@ data class GcodeLayerPreview(
     val segments: FloatArray,
     val roleSegmentCounts: IntArray,
 ) {
+    val toolSegmentCounts: IntArray by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        IntArray(MAX_TOOL_COUNT).also { counts ->
+            var offset = 0
+            while (offset < segments.size) {
+                counts[segments[offset + TOOL_OFFSET].toInt()] += 1
+                offset += SEGMENT_STRIDE
+            }
+        }
+    }
+
     @Volatile
     private var cachedPathIndex: ContinuousPathIndex? = null
     @Volatile
@@ -343,6 +353,7 @@ data class GcodeLayerPreview(
 
     private fun segmentsConnect(previous: Int, current: Int): Boolean =
         segments[previous + 5].toInt() == segments[current + 5].toInt() &&
+            segments[previous + TOOL_OFFSET].toInt() == segments[current + TOOL_OFFSET].toInt() &&
             abs(segments[previous + 2] - segments[current]) < Z_EPSILON &&
             abs(segments[previous + 3] - segments[current + 1]) < Z_EPSILON &&
             abs(segments[previous + 4] - segments[current + 4]) < Z_EPSILON
@@ -436,8 +447,10 @@ data class GcodeLayerPreview(
     private data class RenderPlanKey(val segmentBudget: Int, val visibleRoleMask: Int)
 
     companion object {
-        const val SEGMENT_STRIDE = 6
+        const val SEGMENT_STRIDE = 7
         internal const val ROLE_COUNT = 10
+        internal const val MAX_TOOL_COUNT = 16
+        internal const val TOOL_OFFSET = 6
         private const val Z_EPSILON = 0.001f
         private const val MAX_RENDER_PLAN_CACHE_ENTRIES = 6
         private const val ALL_ROLES_MASK = (1 shl ROLE_COUNT) - 1
@@ -522,6 +535,21 @@ data class GcodeLayerPreview(
                 }
                 val pathRole = roleValue.toInt()
                 check(pathRole in 0 until ROLE_COUNT) { "preview_path_role_invalid" }
+                val pathTool = floats.exactInt(
+                    HEADER_FLOATS + pathStart * SEGMENT_STRIDE + TOOL_OFFSET,
+                    MAX_TOOL_COUNT - 1,
+                )
+                var segmentIndex = pathStart
+                while (segmentIndex < pathEnd) {
+                    val offset = segmentIndex * SEGMENT_STRIDE
+                    check(segments[offset + 5].toInt() == pathRole) {
+                        "preview_path_role_invalid"
+                    }
+                    check(segments[offset + TOOL_OFFSET].exactTool() == pathTool) {
+                        "preview_path_tool_invalid"
+                    }
+                    segmentIndex += 1
+                }
                 checkNotNull(pathBuilder).add(pathStart, pathEnd, pathRole)
                 previousEnd = pathEnd
                 pathOffset += PATH_STRIDE
@@ -599,6 +627,7 @@ data class GcodeLayerPreview(
                     }
                     val role = roleValue.toInt()
                     check(role in 0 until ROLE_COUNT) { "preview_role_invalid" }
+                    segments[offset + TOOL_OFFSET].exactTool()
                     verifiedRoleCounts[role] += 1
                     offset += SEGMENT_STRIDE
                 }
@@ -621,14 +650,17 @@ data class GcodeLayerPreview(
                 }
                 val pathRole = roleValue.toInt()
                 check(pathRole in 0 until ROLE_COUNT) { "preview_path_role_invalid" }
-                if (validateCoordinates) {
-                    var segmentIndex = pathStart
-                    while (segmentIndex < pathEnd) {
-                        check(
-                            segments[segmentIndex * SEGMENT_STRIDE + 5].toInt() == pathRole,
-                        ) { "preview_path_role_invalid" }
-                        segmentIndex += 1
+                val pathTool = segments[pathStart * SEGMENT_STRIDE + TOOL_OFFSET].exactTool()
+                var segmentIndex = pathStart
+                while (segmentIndex < pathEnd) {
+                    val offset = segmentIndex * SEGMENT_STRIDE
+                    check(segments[offset + 5].toInt() == pathRole) {
+                        "preview_path_role_invalid"
                     }
+                    check(segments[offset + TOOL_OFFSET].exactTool() == pathTool) {
+                        "preview_path_tool_invalid"
+                    }
+                    segmentIndex += 1
                 }
                 checkNotNull(pathBuilder).add(pathStart, pathEnd, pathRole)
                 previousEnd = pathEnd
@@ -662,7 +694,7 @@ data class GcodeLayerPreview(
             MAX_SEGMENTS * (SEGMENT_STRIDE + PATH_STRIDE)
         internal const val MAX_PAYLOAD_BYTES = MAX_PAYLOAD_FLOATS * Float.SIZE_BYTES
         private const val PAYLOAD_MAGIC = 17_491f
-        private const val PAYLOAD_VERSION = 2f
+        private const val PAYLOAD_VERSION = 3f
         private const val MAX_LAYER_COUNT = 1_000_000
         private const val MAX_COORDINATE_ABS_MM = 1_000_000f
     }
@@ -679,6 +711,13 @@ private fun FloatArray.exactInt(index: Int, maximum: Int): Int {
         "preview_integer_invalid"
     }
     return value.toInt()
+}
+
+private fun Float.exactTool(): Int {
+    check(isFinite() && this % 1f == 0f) { "preview_tool_invalid" }
+    val tool = toInt()
+    check(tool in 0 until GcodeLayerPreview.MAX_TOOL_COUNT) { "preview_tool_invalid" }
+    return tool
 }
 
 private fun FloatBuffer.exactInt(index: Int, maximum: Int): Int {

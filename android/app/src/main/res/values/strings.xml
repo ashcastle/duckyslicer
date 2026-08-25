@@ -682,6 +682,12 @@
     <string name="toolpath_depth_contrast">Height contrast · %1$d%%</string>
     <string name="toolpath_visibility_control">Toolpath visibility</string>
     <string name="toolpath_depth_contrast_control">Height contrast</string>
+    <string name="preview_color_mode">Color</string>
+    <string name="preview_color_feature">Feature</string>
+    <string name="preview_color_filament">Filament</string>
+    <string name="preview_filaments">Filaments</string>
+    <string name="preview_filament_number">Filament %1$d</string>
+    <string name="preview_visible_features">Visible features</string>
     <string name="toolpath_outer_wall">Outer wall</string>
     <string name="toolpath_inner_wall">Inner wall</string>
     <string name="toolpath_infill">Infill</string>

@@ -36,6 +36,11 @@ class ToolpathMeshBuilderTest {
             ),
         )
         assertFalse(current.canReuseGeometryWhileBuilding(current.copy(opacity = 0.5f)))
+        assertFalse(
+            current.canReuseGeometryWhileBuilding(
+                current.copy(colorMode = PreviewColorMode.FILAMENT),
+            ),
+        )
         assertFalse(current.canReuseGeometryWhileBuilding(current.copy(preview = twoLayerPreview())))
         assertFalse(current.canReuseGeometryWhileBuilding(current.copy(visibleRoles = setOf(0))))
         assertFalse(
@@ -74,6 +79,7 @@ class ToolpathMeshBuilderTest {
                 30f + xOffset,
                 20f + yOffset,
                 0.2f,
+                0f,
                 0f,
             ),
             roleSegmentCounts = intArrayOf(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
@@ -283,8 +289,8 @@ class ToolpathMeshBuilderTest {
             minZMm = 0.2f,
             maxZMm = 0.4f,
             segments = floatArrayOf(
-                10f, 10f, 20f, 10f, 0.2f, 0f,
-                10f, 12f, 20f, 12f, 0.4f, 1f,
+                10f, 10f, 20f, 10f, 0.2f, 0f, 0f,
+                10f, 12f, 20f, 12f, 0.4f, 1f, 0f,
             ),
             roleSegmentCounts = intArrayOf(1, 1, 0, 0, 0, 0, 0, 0, 0),
         )
@@ -322,6 +328,48 @@ class ToolpathMeshBuilderTest {
         )
         assertTrue("GPU bed staging must use direct native memory", payload.bedVertices.isDirect)
         assertTrue("GPU instance staging must use direct native memory", payload.toolpathInstances.isDirect)
+    }
+
+    @Test
+    fun filamentColorModeDistinguishesToolsWithoutChangingFeatureWidths() {
+        val preview = GcodeLayerPreview(
+            startLayer = 0,
+            endLayer = 0,
+            layerCount = 1,
+            minZMm = 0.2f,
+            maxZMm = 0.2f,
+            segments = floatArrayOf(
+                10f, 10f, 20f, 10f, 0.2f, 0f, 0f,
+                20f, 10f, 30f, 10f, 0.2f, 0f, 1f,
+            ),
+            roleSegmentCounts = intArrayOf(2, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        )
+        fun colors(mode: PreviewColorMode): Pair<Int, Int> {
+            val payload = ToolpathMeshBuilder.build(
+                ToolpathScene(
+                    preview = preview,
+                    bedSizeX = 100f,
+                    bedSizeY = 100f,
+                    opacity = 1f,
+                    depthContrast = 0f,
+                    detail = PreviewDetail.BALANCED,
+                    colorMode = mode,
+                ),
+                useNativePacking = false,
+            )
+            val buffer = payload.toolpathInstances.duplicate()
+            val first = buffer.getInt(ToolpathMeshBuilder.INSTANCE_COLOR_OFFSET_BYTES)
+            val second = buffer.getInt(
+                ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES +
+                    ToolpathMeshBuilder.INSTANCE_COLOR_OFFSET_BYTES,
+            )
+            return first to second
+        }
+
+        val featureColors = colors(PreviewColorMode.FEATURE)
+        assertEquals(featureColors.first, featureColors.second)
+        val filamentColors = colors(PreviewColorMode.FILAMENT)
+        assertNotEquals(filamentColors.first, filamentColors.second)
     }
 
     @Test
@@ -371,8 +419,8 @@ class ToolpathMeshBuilderTest {
             minZMm = 0.2f,
             maxZMm = 0.2f,
             segments = floatArrayOf(
-                10f, 10f, 20f, 10f, 0.2f, 0f,
-                10f, 12f, 20f, 12f, 0.2f, 1f,
+                10f, 10f, 20f, 10f, 0.2f, 0f, 0f,
+                10f, 12f, 20f, 12f, 0.2f, 1f, 0f,
             ),
             roleSegmentCounts = intArrayOf(1, 1, 0, 0, 0, 0, 0, 0, 0),
         )
@@ -471,7 +519,7 @@ class ToolpathMeshBuilderTest {
             layerCount = 1,
             minZMm = 0.2f,
             maxZMm = 0.2f,
-            segments = floatArrayOf(10f, 10f, 20f, 10f, 0.2f, 0f),
+            segments = floatArrayOf(10f, 10f, 20f, 10f, 0.2f, 0f, 0f),
             roleSegmentCounts = intArrayOf(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
         )
         val scene = ToolpathScene(preview, 100f, 100f, 1f, 0.8f, PreviewDetail.BALANCED)
@@ -498,7 +546,7 @@ class ToolpathMeshBuilderTest {
             layerCount = 1,
             minZMm = 0.2f,
             maxZMm = 0.2f,
-            segments = floatArrayOf(10f, 10f, 20f, 10f, 0.2f, 0f),
+            segments = floatArrayOf(10f, 10f, 20f, 10f, 0.2f, 0f, 0f),
             roleSegmentCounts = intArrayOf(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
         )
         val scene = ToolpathScene(preview, 100f, 100f, 1f, 0.8f, PreviewDetail.BALANCED)
@@ -530,7 +578,7 @@ class ToolpathMeshBuilderTest {
             layerCount = 1,
             minZMm = 0.2f,
             maxZMm = 0.2f,
-            segments = floatArrayOf(10f, 10f, 20f, 10f, 0.2f, 0f),
+            segments = floatArrayOf(10f, 10f, 20f, 10f, 0.2f, 0f, 0f),
             roleSegmentCounts = intArrayOf(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
         )
         val requested = ToolpathScene(preview, 100f, 100f, 1f, 0.8f, PreviewDetail.BALANCED)
@@ -556,8 +604,8 @@ class ToolpathMeshBuilderTest {
         minZMm = 0.2f,
         maxZMm = 0.4f,
         segments = floatArrayOf(
-            10f, 10f, 20f, 10f, 0.2f, 0f,
-            10f, 12f, 20f, 12f, 0.4f, 0f,
+            10f, 10f, 20f, 10f, 0.2f, 0f, 0f,
+            10f, 12f, 20f, 12f, 0.4f, 0f, 0f,
         ),
         roleSegmentCounts = intArrayOf(2, 0, 0, 0, 0, 0, 0, 0, 0, 0),
     )

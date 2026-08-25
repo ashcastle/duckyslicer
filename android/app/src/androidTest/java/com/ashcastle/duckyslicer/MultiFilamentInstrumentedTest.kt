@@ -50,11 +50,14 @@ class MultiFilamentInstrumentedTest {
             output = outcome.output
             val gcode = outcome.output.readText()
             val commands = gcode.lineSequence().map(String::trim).toList()
+            val preview = loadGcodePreview(outcome.output.absolutePath, 0, Int.MAX_VALUE)
 
             assertTrue("Both filament definitions must reach Orca", gcode.contains("filament_type = PLA;PETG"))
             assertTrue("The first object must use tool 0", commands.any { it == "T0" })
             assertTrue("The second object must use tool 1", commands.any { it == "T1" })
             assertTrue("The two-tool slice must contain extrusion", gcode.contains(";TYPE:Outer wall"))
+            assertTrue("Preview must retain tool 0 geometry", preview.toolSegmentCounts[0] > 0)
+            assertTrue("Preview must retain tool 1 geometry", preview.toolSegmentCounts[1] > 0)
         } finally {
             output?.delete()
             model.delete()

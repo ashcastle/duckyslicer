@@ -1040,7 +1040,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "NativeEngine_previewGcodeRangeInto",
         "output: JByteBuffer",
         "PREVIEW_PAYLOAD_MAGIC",
-        "PREVIEW_PAYLOAD_VERSION: f32 = 2.0",
+        "PREVIEW_PAYLOAD_VERSION: f32 = 3.0",
         "PREVIEW_HEADER_FLOATS: usize = 9 + ToolpathRole::COUNT",
         "PREVIEW_PATH_FLOATS: usize = 1",
         "paths: Vec<PreviewPathRange>",

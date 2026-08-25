@@ -181,6 +181,8 @@ class AccessibilityInstrumentedTest {
     @Test
     fun previewRangeAndDisplaySlidersExposeDistinctNames() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val featureColor = context.getString(R.string.preview_color_feature)
+        val filamentColor = context.getString(R.string.preview_color_filament)
         val previewLabels = setOf(
             context.getString(R.string.first_visible_layer),
             context.getString(R.string.last_visible_layer),
@@ -204,6 +206,12 @@ class AccessibilityInstrumentedTest {
                 previewLabels.size,
                 nodes.count { it.className?.toString() == SEEK_BAR_CLASS },
             )
+            val colorNodes = waitForNodes(setOf(featureColor, filamentColor))
+            assertEquals(1, colorNodes.count { it.isClickable && it.effectiveLabel() == featureColor })
+            val filamentNode = colorNodes.single {
+                it.isClickable && it.effectiveLabel() == filamentColor
+            }
+            assertTrue(filamentNode.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         }
     }
 
