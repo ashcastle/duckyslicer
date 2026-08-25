@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Devices
@@ -103,6 +104,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -611,6 +613,8 @@ internal fun WorkspaceScreen(
     var brimEditMessage by remember { mutableStateOf<String?>(null) }
     var visibleToolpathRoles by remember { mutableStateOf(ToolpathStyles.indices.toSet()) }
     var previewControlsExpanded by rememberSaveable { mutableStateOf(false) }
+    var cameraRequestSequence by rememberSaveable { mutableLongStateOf(0L) }
+    var cameraRequest by remember { mutableStateOf<WorkspaceCameraRequest?>(null) }
     var plateRemovalRequested by remember { mutableStateOf(false) }
     val statusHostState = remember { SnackbarHostState() }
     val plateActionsEnabled = !importing && !editingBusy && !projectImporting &&
@@ -637,6 +641,11 @@ internal fun WorkspaceScreen(
         brimAddMode = projectObject.brimPoints.points.isEmpty()
         brimEditMessage = null
         brimEditing = true
+    }
+
+    fun requestCameraPreset(preset: WorkspaceCameraPreset) {
+        cameraRequestSequence += 1L
+        cameraRequest = WorkspaceCameraRequest(cameraRequestSequence, preset)
     }
 
     LaunchedEffect(selectedPlateId, selectedObjectId, selectedTab) {
@@ -703,6 +712,7 @@ internal fun WorkspaceScreen(
                     visibleToolpathRoles = visibleToolpathRoles,
                     previewDetail = appSettings.previewDetail,
                     previewRenderingMode = appSettings.previewRenderingMode,
+                    cameraRequest = cameraRequest,
                     objectManipulationEnabled = selectedTab == WorkspaceTab.SLICE &&
                         !importing && !editingBusy && !slicing && !previewLoading &&
                         !layingOnFace && !measuring && !supportPainting && !seamPainting &&
@@ -759,6 +769,15 @@ internal fun WorkspaceScreen(
                     onMultiColorPaintCommitted = onMultiColorPaintCommitted,
                     modifier = Modifier.fillMaxSize(),
                 )
+
+            if (selectedTab == WorkspaceTab.SLICE || selectedTab == WorkspaceTab.PREVIEW) {
+                CameraPresetButton(
+                    onPresetSelected = ::requestCameraPreset,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 72.dp, end = 16.dp),
+                )
+            }
 
             WorkspaceMenu(
                 importing = importing,
@@ -3467,6 +3486,46 @@ private fun PreviewExportSplitButton(
 }
 
 @Composable
+private fun CameraPresetButton(
+    onPresetSelected: (WorkspaceCameraPreset) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val optionsLabel = stringResource(R.string.view_options)
+    Box(modifier) {
+        Surface(
+            color = Color.Black.copy(alpha = 0.68f),
+            contentColor = WorkspaceYellow,
+            shape = RoundedCornerShape(50),
+            modifier = Modifier.size(48.dp),
+        ) {
+            IconButton(
+                onClick = { expanded = true },
+                modifier = Modifier.semantics { contentDescription = optionsLabel },
+            ) {
+                Icon(Icons.Default.CenterFocusStrong, contentDescription = null)
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            listOf(
+                WorkspaceCameraPreset.ISOMETRIC to R.string.view_isometric,
+                WorkspaceCameraPreset.TOP to R.string.view_top,
+                WorkspaceCameraPreset.FRONT to R.string.view_front,
+                WorkspaceCameraPreset.RIGHT to R.string.view_right,
+            ).forEach { (preset, label) ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(label)) },
+                    onClick = {
+                        expanded = false
+                        onPresetSelected(preset)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun WorkspaceNavigation(
     selectedTab: WorkspaceTab,
     onSelected: (WorkspaceTab) -> Unit,
@@ -3552,6 +3611,7 @@ private fun BedScene(
     visibleToolpathRoles: Set<Int>,
     previewDetail: PreviewDetail,
     previewRenderingMode: PreviewRenderingMode,
+    cameraRequest: WorkspaceCameraRequest?,
     objectManipulationEnabled: Boolean,
     transformGizmoMode: TransformGizmoMode,
     layOnFaceObjectId: String?,
@@ -3613,6 +3673,7 @@ private fun BedScene(
             // Keep the Automatic request intact so the GLES renderer can promote its
             // settled geometry from Performance to Balanced/Detail using measured work.
             detail = previewDetail,
+            cameraRequest = cameraRequest,
             onUnavailable = { depthPreviewRuntimeAvailable = false },
             modifier = modifier,
         )
@@ -3624,6 +3685,15 @@ private fun BedScene(
     var pan by remember { mutableStateOf(Offset.Zero) }
     var interactionActive by remember { mutableStateOf(false) }
     var refinedPreview by remember { mutableStateOf(true) }
+
+    LaunchedEffect(cameraRequest?.id) {
+        val request = cameraRequest ?: return@LaunchedEffect
+        val pose = cameraPoseForPreset(request.preset)
+        yaw = pose.yawDegrees
+        pitch = pose.elevationDegrees
+        zoom = pose.zoom
+        pan = Offset(pose.panX, pose.panY)
+    }
     val useDepthTestedPrepare = preview == null && projectObjects.isNotEmpty() &&
         depthPreviewSupported && prepareRendererRuntimeAvailable
     val objectIds = projectObjects.map(ProjectObject::id)

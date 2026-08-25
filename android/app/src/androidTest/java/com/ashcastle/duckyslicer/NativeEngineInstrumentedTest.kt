@@ -1046,6 +1046,18 @@ class NativeEngineInstrumentedTest {
             )
             assertEquals("The reused VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
 
+            renderer.applyCameraPreset(WorkspaceCameraPreset.RIGHT)
+            assertEquals(
+                cameraPoseForPreset(WorkspaceCameraPreset.RIGHT),
+                renderer.cameraPoseForTest(),
+            )
+            renderer.onDrawFrame(null)
+            assertEquals(
+                "Changing a camera preset must not rebuild or upload toolpath geometry",
+                2,
+                renderer.geometryUploadCountForTest(),
+            )
+
             renderer.setInteractionActive(true)
             renderer.onDrawFrame(null)
             assertEquals(

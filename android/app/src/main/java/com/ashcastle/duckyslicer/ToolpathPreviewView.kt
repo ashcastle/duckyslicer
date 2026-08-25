@@ -53,6 +53,7 @@ internal fun DepthTestedToolpathScene(
     depthContrast: Float,
     visibleRoles: Set<Int>,
     detail: PreviewDetail,
+    cameraRequest: WorkspaceCameraRequest?,
     onUnavailable: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -62,6 +63,7 @@ internal fun DepthTestedToolpathScene(
             ToolpathSurfaceView(context) { currentOnUnavailable.value() }
         },
         update = { view ->
+            view.applyCameraRequest(cameraRequest)
             view.submit(
                 preview,
                 bedSizeX,
@@ -125,6 +127,7 @@ internal class ToolpathSurfaceView(
     private var lastSpan = 0f
     private var lastCenterX = 0f
     private var lastCenterY = 0f
+    private var appliedCameraRequestId = Long.MIN_VALUE
     private var settledSurfaceDetail = PreviewDetail.PERFORMANCE
     private var activeSurfaceDetail = PreviewDetail.PERFORMANCE
     private var surfaceInteractionActive = false
@@ -196,6 +199,15 @@ internal class ToolpathSurfaceView(
         width.coerceAtLeast(1),
         height.coerceAtLeast(1),
     )
+
+    internal fun applyCameraRequest(request: WorkspaceCameraRequest?) {
+        if (request == null || request.id == appliedCameraRequestId) return
+        appliedCameraRequestId = request.id
+        toolpathRenderer.applyCameraPreset(request.preset)
+        requestRender()
+    }
+
+    internal fun cameraPoseForTest(): WorkspaceCameraPose = toolpathRenderer.cameraPoseForTest()
 
     override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
         super.onSizeChanged(width, height, oldWidth, oldHeight)
@@ -588,6 +600,14 @@ internal class ToolpathRenderer(
 
     internal fun effectiveDetailForTest(): PreviewDetail? = lastEffectiveDetail
 
+    internal fun cameraPoseForTest(): WorkspaceCameraPose = WorkspaceCameraPose(
+        yawDegrees = yawDegrees,
+        elevationDegrees = elevationDegrees,
+        zoom = zoom,
+        panX = panX,
+        panY = panY,
+    )
+
     internal fun automaticCalibrationSettledForTest(): Boolean =
         adaptivePreviewController.isSettledForTest()
 
@@ -654,6 +674,15 @@ internal class ToolpathRenderer(
         val scale = max(scene.bedSizeX, scene.bedSizeY) / max(width, height).coerceAtLeast(1)
         panX -= deltaX * scale / zoom
         panY += deltaY * scale / zoom
+    }
+
+    fun applyCameraPreset(preset: WorkspaceCameraPreset) {
+        val pose = cameraPoseForPreset(preset)
+        yawDegrees = pose.yawDegrees
+        elevationDegrees = pose.elevationDegrees
+        zoom = pose.zoom
+        panX = pose.panX
+        panY = pose.panY
     }
 
     override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {

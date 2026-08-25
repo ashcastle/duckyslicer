@@ -62,6 +62,31 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun workspaceCameraPresetActionsAreReachable() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val options = context.getString(R.string.view_options)
+        val presets = setOf(
+            context.getString(R.string.view_isometric),
+            context.getString(R.string.view_top),
+            context.getString(R.string.view_front),
+            context.getString(R.string.view_right),
+        )
+        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
+            val controls = waitForNodes(setOf(options))
+            val optionsAction = controls.first { it.isClickable && it.effectiveLabel() == options }
+            assertTrue(optionsAction.isFocusable)
+            assertTrue(optionsAction.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val presetNodes = waitForNodes(presets)
+            presets.forEach { label ->
+                assertTrue(
+                    "$label must be a reachable camera preset",
+                    presetNodes.any { it.isClickable && it.effectiveLabel() == label },
+                )
+            }
+        }
+    }
+
+    @Test
     fun cancelSupportDetailsSaveActionIsReachable() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val label = context.getString(R.string.stop_support_details_save)
@@ -1176,8 +1201,10 @@ class AccessibilityInstrumentedTest {
         requireLandscape: Boolean = false,
     ): List<AccessibilityNodeInfo> {
         val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
+        var observedLabels = emptyList<String>()
         do {
             val nodes = currentNodes()
+            observedLabels = nodes.map { it.effectiveLabel() }.filter { it.isNotBlank() }.distinct()
             val windowBounds = nodes.firstOrNull()?.screenBounds()
             val orientationMatches = !requireLandscape ||
                 (windowBounds != null && windowBounds.width() > windowBounds.height())
@@ -1189,7 +1216,9 @@ class AccessibilityInstrumentedTest {
             }
             SystemClock.sleep(NODE_POLL_MILLIS)
         } while (SystemClock.elapsedRealtime() < deadline)
-        throw AssertionError("Timed out waiting for accessibility labels: $labels")
+        throw AssertionError(
+            "Timed out waiting for accessibility labels: $labels; observed: ${observedLabels.take(40)}",
+        )
     }
 
     private fun scrollUntilClickable(

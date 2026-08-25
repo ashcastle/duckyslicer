@@ -25,6 +25,11 @@
     <string name="model_info">Model information</string>
     <string name="dimensions">Size</string>
     <string name="gesture_hint">Drag with one finger to turn. Use two fingers to move or zoom.</string>
+    <string name="view_options">View options</string>
+    <string name="view_isometric">Isometric</string>
+    <string name="view_top">Top</string>
+    <string name="view_front">Front</string>
+    <string name="view_right">Right</string>
     <string name="model_read_error">Couldn’t open this model.</string>
     <string name="model_too_large_error">This model is too large for this device.</string>
     <string name="slice_error">Couldn’t slice this model.</string>
