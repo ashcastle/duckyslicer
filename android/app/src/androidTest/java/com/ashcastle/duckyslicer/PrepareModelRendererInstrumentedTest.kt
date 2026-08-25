@@ -501,8 +501,8 @@ class PrepareModelRendererInstrumentedTest {
             GLES30.glFinish()
             assertEquals(preview.size / 3, renderer.lastMeshVertexCountForTest())
             assertEquals(
-                "The first useful frame must retain only four bed buffers and one preview VBO",
-                5,
+                "The first useful frame retains four bed buffers and one position/normal pair",
+                6,
                 renderer.retainedTopologyBufferCountForTest(),
             )
             assertEquals(1, renderer.geometryUploadCountForTest())
@@ -518,8 +518,8 @@ class PrepareModelRendererInstrumentedTest {
             GLES30.glFinish()
             assertEquals(detail.size / 3, renderer.lastMeshVertexCountForTest())
             assertEquals(
-                "Idle refinement must append one detail VBO without recreating the scene",
-                6,
+                "Idle refinement appends one detail position/normal pair without recreating the scene",
+                8,
                 renderer.retainedTopologyBufferCountForTest(),
             )
             assertEquals(1, renderer.geometryUploadCountForTest())
@@ -536,8 +536,8 @@ class PrepareModelRendererInstrumentedTest {
             GLES30.glFinish()
             assertEquals(coarse.size / 3, renderer.lastMeshVertexCountForTest())
             assertEquals(
-                "Gesture entry must append one connected coarse VBO and reuse every other buffer",
-                7,
+                "Gesture entry appends one connected coarse position/normal pair",
+                10,
                 renderer.retainedTopologyBufferCountForTest(),
             )
             assertEquals(1, renderer.geometryUploadCountForTest())
@@ -742,8 +742,8 @@ class PrepareModelRendererInstrumentedTest {
             GLES30.glFinish()
 
             assertEquals(
-                "Four bed buffers plus one lazily requested shared detail topology must be retained",
-                5,
+                "Four bed buffers plus one shared position/normal topology must be retained",
+                6,
                 renderer.retainedTopologyBufferCountForTest(),
             )
             assertEquals(detail.size / 3 * 2, renderer.lastMeshVertexCountForTest())
@@ -776,9 +776,7 @@ class PrepareModelRendererInstrumentedTest {
                     transform = ModelTransform(offsetXmm = index * 6f),
                 )
             }
-            val baselineBytes = models.sumOf {
-                it.coarsePreviewTriangles.size.toLong() * Float.SIZE_BYTES
-            }
+            val baselineBytes = models.sumOf { prepareMeshGpuBytes(it.coarsePreviewTriangles) }
             val geometry = PrepareModelSceneBuilder.build(
                 projectObjects = objects,
                 bedSizeX = 40f,
@@ -786,7 +784,7 @@ class PrepareModelRendererInstrumentedTest {
                 requestedBedPolygon = rectangularBedPolygon(40f, 40f),
                 additionalDetailBudgetBytes = 0L,
                 lowDetailBudgetBytes = baselineBytes +
-                    models.first().previewTriangles.size.toLong() * Float.SIZE_BYTES,
+                    prepareMeshGpuBytes(models.first().previewTriangles),
             )
             val renderer = PrepareModelRenderer()
             renderer.setLogicalViewportSize(128, 128)
@@ -809,8 +807,8 @@ class PrepareModelRendererInstrumentedTest {
             GLES30.glFinish()
 
             assertEquals(
-                "Four bed buffers and three distinct coarse meshes are retained lazily",
-                7,
+                "Four bed buffers and three distinct position/normal pairs are retained lazily",
+                10,
                 renderer.retainedTopologyBufferCountForTest(),
             )
             assertEquals(

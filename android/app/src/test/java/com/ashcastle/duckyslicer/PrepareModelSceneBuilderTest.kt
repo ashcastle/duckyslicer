@@ -90,10 +90,9 @@ class PrepareModelSceneBuilderTest {
     fun distinctInteractionLodsFallBackToCompleteCoarseMeshesAtTheSceneBudget() {
         val first = modelWithDetail("first")
         val second = modelWithDetail("second")
-        val baselineBytes =
-            (first.coarsePreviewTriangles.size + second.coarsePreviewTriangles.size).toLong() *
-                Float.SIZE_BYTES
-        val onePreviewBytes = first.previewTriangles.size.toLong() * Float.SIZE_BYTES
+        val baselineBytes = prepareMeshGpuBytes(first.coarsePreviewTriangles) +
+            prepareMeshGpuBytes(second.coarsePreviewTriangles)
+        val onePreviewBytes = prepareMeshGpuBytes(first.previewTriangles)
         val scene = PrepareModelSceneBuilder.build(
             projectObjects = listOf(
                 ProjectObject(id = "first", model = first),
@@ -119,8 +118,8 @@ class PrepareModelSceneBuilderTest {
     @Test
     fun repeatedPlacementsChargeSharedInteractionTopologyOnlyOnce() {
         val shared = modelWithDetail("shared")
-        val budget = shared.coarsePreviewTriangles.size.toLong() * Float.SIZE_BYTES +
-            shared.previewTriangles.size.toLong() * Float.SIZE_BYTES
+        val budget = prepareMeshGpuBytes(shared.coarsePreviewTriangles) +
+            prepareMeshGpuBytes(shared.previewTriangles)
         val scene = PrepareModelSceneBuilder.build(
             projectObjects = listOf(
                 ProjectObject(id = "first", model = shared),
@@ -141,7 +140,7 @@ class PrepareModelSceneBuilderTest {
     fun distinctDetailLodsObeyTheSceneBudgetWithoutTruncatingLowLods() {
         val first = modelWithDetail("first")
         val second = modelWithDetail("second")
-        val oneDetailBufferBytes = first.detailPreviewTriangles.size.toLong() * Float.SIZE_BYTES
+        val oneDetailBufferBytes = prepareMeshGpuBytes(first.detailPreviewTriangles)
         val scene = PrepareModelSceneBuilder.build(
             projectObjects = listOf(
                 ProjectObject(id = "first", model = first),
@@ -185,8 +184,7 @@ class PrepareModelSceneBuilderTest {
             bedSizeX = 100f,
             bedSizeY = 100f,
             requestedBedPolygon = rectangularBedPolygon(100f, 100f),
-            additionalDetailBudgetBytes =
-                printable.detailPreviewTriangles.size.toLong() * Float.SIZE_BYTES,
+            additionalDetailBudgetBytes = prepareMeshGpuBytes(printable.detailPreviewTriangles),
         )
 
         assertSame(auxiliary.previewTriangles, scene.meshes[0].detailVertices)
@@ -197,9 +195,8 @@ class PrepareModelSceneBuilderTest {
     fun printableInteractionMeshTakesPriorityOverEarlierAuxiliaryVolumes() {
         val auxiliary = modelWithDetail("auxiliary-low")
         val printable = modelWithDetail("printable-low")
-        val baselineBytes =
-            (auxiliary.coarsePreviewTriangles.size + printable.coarsePreviewTriangles.size)
-                .toLong() * Float.SIZE_BYTES
+        val baselineBytes = prepareMeshGpuBytes(auxiliary.coarsePreviewTriangles) +
+            prepareMeshGpuBytes(printable.coarsePreviewTriangles)
         val scene = PrepareModelSceneBuilder.build(
             projectObjects = listOf(
                 ProjectObject(
@@ -218,8 +215,7 @@ class PrepareModelSceneBuilderTest {
             bedSizeY = 100f,
             requestedBedPolygon = rectangularBedPolygon(100f, 100f),
             additionalDetailBudgetBytes = 0L,
-            lowDetailBudgetBytes = baselineBytes +
-                printable.previewTriangles.size.toLong() * Float.SIZE_BYTES,
+            lowDetailBudgetBytes = baselineBytes + prepareMeshGpuBytes(printable.previewTriangles),
         )
 
         assertSame(auxiliary.coarsePreviewTriangles, scene.meshes[0].vertices)

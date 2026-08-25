@@ -320,7 +320,16 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "!refinementReady -> PrepareModelRenderTier.PREVIEW",
         "ensureMeshTierUploaded(frame.geometry, renderTier)",
         "private val meshVertexBuffers = IdentityHashMap<FloatArray, Int>()",
-        "retainedTopologyBufferCount = PREPARE_BED_BUFFER_COUNT + meshVertexBuffers.size",
+        "private val meshNormalBuffers = IdentityHashMap<FloatArray, Int>()",
+        "meshVertexBuffers.size + meshNormalBuffers.size",
+        "uploadNormalBuffer(buffers[bufferOffset + 1], vertices)",
+        "buildPackedPrepareSmoothNormals(vertices)",
+        "val positionRecords = LongArray(vertexCount)",
+        "}.apply { sort() }",
+        "prepareMeshGpuBytes(mesh.coarseVertices)",
+        "in vec3 aNormal;",
+        "out vec3 vNormal;",
+        "GLES30.GL_BYTE",
         "prepareSurfaceSize(",
         "texture.setDefaultBufferSize(target.width, target.height)",
         "resizeEglSurface(texture, target)",
@@ -347,6 +356,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in prepare_renderer:
             raise VerificationError(f"Prepare model loading contract is missing: {marker}")
+    if "dFdx(vWorldPosition)" in prepare_renderer:
+        raise VerificationError("Prepare model lighting must not expose triangle facets")
 
     prepare_overlays = sources["PrepareModelOverlays.kt"]
     for marker in (
@@ -572,16 +583,16 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "p95Ms <= 1.0",
         "densePrepareInteractionReducesRasterWorkWithoutDroppingTheLowDetailShape",
         "densePrepareLazilyUploadsPreviewThenDetailAndGestureTopology",
-        "The first useful frame must retain only four bed buffers and one preview VBO",
-        "Idle refinement must append one detail VBO without recreating the scene",
-        "Gesture entry must append one connected coarse VBO and reuse every other buffer",
+        "The first useful frame retains four bed buffers and one position/normal pair",
+        "Idle refinement appends one detail position/normal pair without recreating the scene",
+        "Gesture entry appends one connected coarse position/normal pair",
         "productionPrepareSurfaceRestoresFullDetailAfterReducedRasterInteraction",
         "reducedMetrics.vertexCount",
         "reducedMetrics.p95Ms <= fullMetrics.p95Ms * 1.35 + 2.0",
         "Repeated memory callbacks must be deduplicated until foreground recovery",
         "Recovered Prepare rendering must remain available",
         "repeatedPlacementsShareOneLazilyRequestedDetailTopology",
-        "Four bed buffers plus one lazily requested shared detail topology must be retained",
+        "Four bed buffers plus one shared position/normal topology must be retained",
     ):
         if marker not in prepare_tests:
             raise VerificationError(f"Prepare performance regression is missing: {marker}")

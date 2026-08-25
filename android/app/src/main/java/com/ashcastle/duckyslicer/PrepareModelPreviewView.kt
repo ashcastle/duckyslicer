@@ -36,7 +36,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 @Composable
 internal fun DepthTestedPrepareModelScene(
@@ -209,6 +211,9 @@ internal fun uniquePrepareVertexArrays(meshes: List<PrepareModelMeshData>): List
     return unique
 }
 
+internal fun prepareMeshGpuBytes(vertices: FloatArray): Long =
+    vertices.size.toLong() * PREPARE_GPU_BYTES_PER_POSITION_COMPONENT
+
 private fun boundedPrepareLowMeshes(
     meshes: List<PrepareModelMeshData>,
     lowDetailBudgetBytes: Long,
@@ -218,7 +223,7 @@ private fun boundedPrepareLowMeshes(
     var baselineBytes = 0L
     meshes.forEach { mesh ->
         if (baselineArrays.put(mesh.coarseVertices, Unit) == null) {
-            baselineBytes += mesh.coarseVertices.size.toLong() * Float.SIZE_BYTES
+            baselineBytes += prepareMeshGpuBytes(mesh.coarseVertices)
         }
     }
     var retainedBytes = baselineBytes
@@ -234,7 +239,7 @@ private fun boundedPrepareLowMeshes(
                 !baselineArrays.containsKey(preview) &&
                 visitedPreviewArrays.put(preview, Unit) == null
             ) {
-                val previewBytes = preview.size.toLong() * Float.SIZE_BYTES
+                val previewBytes = prepareMeshGpuBytes(preview)
                 if (previewBytes <= lowDetailBudgetBytes - retainedBytes) {
                     retainedPreviewArrays[preview] = Unit
                     retainedBytes += previewBytes
@@ -270,7 +275,7 @@ private fun boundedPrepareDetailMeshes(
                 !lowDetailArrays.containsKey(detail) &&
                 visitedDetailArrays.put(detail, Unit) == null
             ) {
-                val detailBytes = detail.size.toLong() * Float.SIZE_BYTES
+                val detailBytes = prepareMeshGpuBytes(detail)
                 if (detailBytes <= additionalDetailBudgetBytes - retainedBytes) {
                     retainedDetailArrays[detail] = Unit
                     retainedBytes += detailBytes
@@ -364,9 +369,8 @@ internal object PrepareModelSceneBuilder {
                     role = volume.role,
                     sourceCenter = center,
                     // The imported preview already is a packed triangle-position stream.
-                    // Keep it by reference instead of rebuilding and doubling it with three
-                    // duplicated CPU normals per triangle. Flat normals are derived by the
-                    // fragment shader from the transformed surface.
+                    // Keep it by reference. Crease-aware normals are generated only for the
+                    // LOD that reaches the GPU and uploaded as compact signed bytes.
                     vertices = volume.model.previewTriangles,
                     coarseVertices = volume.model.coarsePreviewTriangles,
                     detailVertices = volume.model.detailPreviewTriangles,
@@ -900,10 +904,12 @@ internal class PrepareModelRenderer(
     private val meshBuffers = ArrayList<Int>()
     private val detailMeshBuffers = ArrayList<Int>()
     private val meshVertexBuffers = IdentityHashMap<FloatArray, Int>()
+    private val meshNormalBuffers = IdentityHashMap<FloatArray, Int>()
     private val overlayBuffers = ArrayList<PrepareOverlayGpuBuffers>()
     private var uploadedOverlays: List<PrepareModelOverlayData>? = null
     private var program = 0
     private var positionLocation = -1
+    private var normalLocation = -1
     private var viewportLocation = -1
     private var sceneCenterLocation = -1
     private var bedSizeLocation = -1
@@ -978,6 +984,7 @@ internal class PrepareModelRenderer(
             return
         }
         positionLocation = GLES30.glGetAttribLocation(program, "aPosition")
+        normalLocation = GLES30.glGetAttribLocation(program, "aNormal")
         viewportLocation = GLES30.glGetUniformLocation(program, "uViewport")
         sceneCenterLocation = GLES30.glGetUniformLocation(program, "uSceneCenter")
         bedSizeLocation = GLES30.glGetUniformLocation(program, "uBedSize")
@@ -996,6 +1003,7 @@ internal class PrepareModelRenderer(
         if (
             intArrayOf(
                 positionLocation,
+                normalLocation,
                 viewportLocation,
                 sceneCenterLocation,
                 bedSizeLocation,
@@ -1062,6 +1070,7 @@ internal class PrepareModelRenderer(
             if (bedOutlineBuffer != 0) add(bedOutlineBuffer)
             if (bedExcludeOutlineBuffer != 0) add(bedExcludeOutlineBuffer)
             addAll(meshVertexBuffers.values)
+            addAll(meshNormalBuffers.values)
             overlayBuffers.forEach { buffers ->
                 if (buffers.vertices != 0) add(buffers.vertices)
                 if (buffers.fill != 0) add(buffers.fill)
@@ -1077,6 +1086,7 @@ internal class PrepareModelRenderer(
         meshBuffers.clear()
         detailMeshBuffers.clear()
         meshVertexBuffers.clear()
+        meshNormalBuffers.clear()
         overlayBuffers.clear()
         uploadedGeometry = null
         uploadedOverlays = null
@@ -1134,14 +1144,18 @@ internal class PrepareModelRenderer(
             !meshVertexBuffers.containsKey(vertices) && seen.put(vertices, Unit) == null
         }
         if (missing.isNotEmpty()) {
-            val buffers = IntArray(missing.size)
+            val buffers = IntArray(missing.size * PREPARE_MESH_BUFFERS_PER_TOPOLOGY)
             GLES30.glGenBuffers(buffers.size, buffers, 0)
             if (buffers.any { it == 0 }) {
                 GLES30.glDeleteBuffers(buffers.size, buffers, 0)
                 failRenderer("mesh_buffer_allocation")
                 return false
             }
-            missing.forEachIndexed { index, vertices -> uploadBuffer(buffers[index], vertices) }
+            missing.forEachIndexed { index, vertices ->
+                val bufferOffset = index * PREPARE_MESH_BUFFERS_PER_TOPOLOGY
+                uploadBuffer(buffers[bufferOffset], vertices)
+                uploadNormalBuffer(buffers[bufferOffset + 1], vertices)
+            }
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
             if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
                 GLES30.glDeleteBuffers(buffers.size, buffers, 0)
@@ -1149,9 +1163,12 @@ internal class PrepareModelRenderer(
                 return false
             }
             missing.forEachIndexed { index, vertices ->
-                meshVertexBuffers[vertices] = buffers[index]
+                val bufferOffset = index * PREPARE_MESH_BUFFERS_PER_TOPOLOGY
+                meshVertexBuffers[vertices] = buffers[bufferOffset]
+                meshNormalBuffers[vertices] = buffers[bufferOffset + 1]
             }
-            retainedTopologyBufferCount = PREPARE_BED_BUFFER_COUNT + meshVertexBuffers.size
+            retainedTopologyBufferCount = PREPARE_BED_BUFFER_COUNT +
+                meshVertexBuffers.size + meshNormalBuffers.size
         }
         val targets = when (tier) {
             PrepareModelRenderTier.COARSE -> coarseMeshBuffers
@@ -1170,6 +1187,21 @@ internal class PrepareModelRenderer(
         GLES30.glBufferData(
             GLES30.GL_ARRAY_BUFFER,
             buffer.remaining() * Float.SIZE_BYTES,
+            buffer,
+            GLES30.GL_STATIC_DRAW,
+        )
+    }
+
+    private fun uploadNormalBuffer(id: Int, vertices: FloatArray) {
+        val packedNormals = buildPackedPrepareSmoothNormals(vertices)
+        val buffer = ByteBuffer.allocateDirect(packedNormals.size).apply {
+            put(packedNormals)
+            flip()
+        }
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, id)
+        GLES30.glBufferData(
+            GLES30.GL_ARRAY_BUFFER,
+            buffer.remaining(),
             buffer,
             GLES30.GL_STATIC_DRAW,
         )
@@ -1338,6 +1370,7 @@ internal class PrepareModelRenderer(
                 PrepareModelRenderTier.PREVIEW -> meshBuffers[index]
                 PrepareModelRenderTier.DETAIL -> detailMeshBuffers[index]
             }
+            val normalBuffer = checkNotNull(meshNormalBuffers[vertices])
             lastMeshVertexCount += vertices.size / PREPARE_VERTEX_FLOATS
             val auxiliary = mesh.role != ProjectVolumeRole.MODEL_PART
             if (auxiliary) {
@@ -1353,6 +1386,7 @@ internal class PrepareModelRenderer(
                 color.green,
                 color.blue,
                 if (auxiliary) 0.48f else 1f,
+                normalBuffer,
             )
             if (auxiliary) {
                 GLES30.glDepthMask(true)
@@ -1478,15 +1512,16 @@ internal class PrepareModelRenderer(
         green: Float,
         blue: Float,
         opacity: Float = 1f,
+        normalBufferId: Int = 0,
     ) {
         if (id == 0 || vertexCount == 0) return
         GLES30.glUniform3f(baseColorLocation, red, green, blue)
         GLES30.glUniform1f(opacityLocation, opacity)
-        bindVertexBuffer(id)
+        bindVertexBuffer(id, normalBufferId)
         GLES30.glDrawArrays(mode, 0, vertexCount)
     }
 
-    private fun bindVertexBuffer(id: Int) {
+    private fun bindVertexBuffer(id: Int, normalBufferId: Int = 0) {
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, id)
         GLES30.glVertexAttribPointer(
             positionLocation,
@@ -1497,6 +1532,21 @@ internal class PrepareModelRenderer(
             0,
         )
         GLES30.glEnableVertexAttribArray(positionLocation)
+        if (normalBufferId != 0) {
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, normalBufferId)
+            GLES30.glVertexAttribPointer(
+                normalLocation,
+                PREPARE_NORMAL_COMPONENTS,
+                GLES30.GL_BYTE,
+                true,
+                PREPARE_NORMAL_STRIDE_BYTES,
+                0,
+            )
+            GLES30.glEnableVertexAttribArray(normalLocation)
+        } else {
+            GLES30.glDisableVertexAttribArray(normalLocation)
+            GLES30.glVertexAttrib3f(normalLocation, 0f, 0f, 1f)
+        }
     }
 
     private fun createProgramSafely(vertexSource: String, fragmentSource: String): Int = try {
@@ -1555,6 +1605,152 @@ internal class PrepareModelRenderer(
     }
 }
 
+/**
+ * Produces one signed-normalized byte normal per packed position component.
+ * Faces meeting above the crease threshold share an area-weighted normal; sharper edges retain
+ * their face normals. A compact sorted index avoids per-vertex map objects on dense mobile meshes,
+ * and all temporary adjacency data is discarded immediately after GPU upload.
+ */
+internal fun buildPackedPrepareSmoothNormals(
+    vertices: FloatArray,
+    creaseCosine: Float = PREPARE_SMOOTH_NORMAL_CREASE_COSINE,
+): ByteArray {
+    require(vertices.size % PREPARE_TRIANGLE_FLOATS == 0)
+    require(vertices.all(Float::isFinite))
+    require(creaseCosine.isFinite() && creaseCosine in -1f..1f)
+    if (vertices.isEmpty()) return ByteArray(0)
+
+    val vertexCount = vertices.size / PREPARE_VERTEX_FLOATS
+    val triangleCount = vertices.size / PREPARE_TRIANGLE_FLOATS
+    val faceAreaNormals = FloatArray(triangleCount * PREPARE_NORMAL_COMPONENTS)
+    val faceUnitNormals = FloatArray(triangleCount * PREPARE_NORMAL_COMPONENTS)
+
+    repeat(triangleCount) { triangleIndex ->
+        val offset = triangleIndex * PREPARE_TRIANGLE_FLOATS
+        val edge1x = vertices[offset + 3] - vertices[offset]
+        val edge1y = vertices[offset + 4] - vertices[offset + 1]
+        val edge1z = vertices[offset + 5] - vertices[offset + 2]
+        val edge2x = vertices[offset + 6] - vertices[offset]
+        val edge2y = vertices[offset + 7] - vertices[offset + 1]
+        val edge2z = vertices[offset + 8] - vertices[offset + 2]
+        val normalX = edge1y * edge2z - edge1z * edge2y
+        val normalY = edge1z * edge2x - edge1x * edge2z
+        val normalZ = edge1x * edge2y - edge1y * edge2x
+        val normalOffset = triangleIndex * PREPARE_NORMAL_COMPONENTS
+        faceAreaNormals[normalOffset] = normalX
+        faceAreaNormals[normalOffset + 1] = normalY
+        faceAreaNormals[normalOffset + 2] = normalZ
+        val length = sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ)
+        if (length > PREPARE_NORMAL_EPSILON) {
+            faceUnitNormals[normalOffset] = normalX / length
+            faceUnitNormals[normalOffset + 1] = normalY / length
+            faceUnitNormals[normalOffset + 2] = normalZ / length
+        } else {
+            faceUnitNormals[normalOffset + 2] = 1f
+        }
+    }
+
+    val positionRecords = LongArray(vertexCount) { vertexIndex ->
+        val offset = vertexIndex * PREPARE_VERTEX_FLOATS
+        val positionHash = prepareNormalPositionHash(
+            vertices[offset].prepareNormalBits(),
+            vertices[offset + 1].prepareNormalBits(),
+            vertices[offset + 2].prepareNormalBits(),
+        )
+        (positionHash.toLong() shl Int.SIZE_BITS) or
+            (vertexIndex.toLong() and PREPARE_UNSIGNED_INT_MASK)
+    }.apply { sort() }
+
+    val packed = ByteArray(vertices.size)
+    var hashStart = 0
+    while (hashStart < positionRecords.size) {
+        val positionHash = positionRecords[hashStart] ushr Int.SIZE_BITS
+        var hashEnd = hashStart + 1
+        while (
+            hashEnd < positionRecords.size &&
+            positionRecords[hashEnd] ushr Int.SIZE_BITS == positionHash
+        ) {
+            hashEnd += 1
+        }
+        var positionStart = hashStart
+        while (positionStart < hashEnd) {
+            val referenceVertex = positionRecords[positionStart].prepareNormalVertexIndex()
+            var positionEnd = positionStart + 1
+            var candidate = positionEnd
+            while (candidate < hashEnd) {
+                val candidateVertex = positionRecords[candidate].prepareNormalVertexIndex()
+                if (vertices.haveSamePreparePosition(referenceVertex, candidateVertex)) {
+                    val displaced = positionRecords[positionEnd]
+                    positionRecords[positionEnd] = positionRecords[candidate]
+                    positionRecords[candidate] = displaced
+                    positionEnd += 1
+                }
+                candidate += 1
+            }
+            for (recordIndex in positionStart until positionEnd) {
+                val vertexIndex = positionRecords[recordIndex].prepareNormalVertexIndex()
+                val faceOffset = vertexIndex / PREPARE_VERTICES_PER_TRIANGLE *
+                    PREPARE_NORMAL_COMPONENTS
+                var sumX = 0f
+                var sumY = 0f
+                var sumZ = 0f
+                for (adjacentIndex in positionStart until positionEnd) {
+                    val adjacentVertex =
+                        positionRecords[adjacentIndex].prepareNormalVertexIndex()
+                    val adjacentFaceOffset = adjacentVertex / PREPARE_VERTICES_PER_TRIANGLE *
+                        PREPARE_NORMAL_COMPONENTS
+                    val dot = faceUnitNormals[faceOffset] * faceUnitNormals[adjacentFaceOffset] +
+                        faceUnitNormals[faceOffset + 1] *
+                        faceUnitNormals[adjacentFaceOffset + 1] +
+                        faceUnitNormals[faceOffset + 2] *
+                        faceUnitNormals[adjacentFaceOffset + 2]
+                    if (dot >= creaseCosine) {
+                        sumX += faceAreaNormals[adjacentFaceOffset]
+                        sumY += faceAreaNormals[adjacentFaceOffset + 1]
+                        sumZ += faceAreaNormals[adjacentFaceOffset + 2]
+                    }
+                }
+                var length = sqrt(sumX * sumX + sumY * sumY + sumZ * sumZ)
+                if (length <= PREPARE_NORMAL_EPSILON) {
+                    sumX = faceUnitNormals[faceOffset]
+                    sumY = faceUnitNormals[faceOffset + 1]
+                    sumZ = faceUnitNormals[faceOffset + 2]
+                    length = 1f
+                }
+                val vertexOffset = vertexIndex * PREPARE_VERTEX_FLOATS
+                packed[vertexOffset] = (sumX / length).toPackedNormalByte()
+                packed[vertexOffset + 1] = (sumY / length).toPackedNormalByte()
+                packed[vertexOffset + 2] = (sumZ / length).toPackedNormalByte()
+            }
+            positionStart = positionEnd
+        }
+        hashStart = hashEnd
+    }
+    return packed
+}
+
+private fun Float.prepareNormalBits(): Int = if (this == 0f) 0 else toRawBits()
+
+private fun prepareNormalPositionHash(x: Int, y: Int, z: Int): Int {
+    var hash = PREPARE_NORMAL_HASH_OFFSET
+    hash = (hash xor x) * PREPARE_NORMAL_HASH_PRIME
+    hash = (hash xor y) * PREPARE_NORMAL_HASH_PRIME
+    return (hash xor z) * PREPARE_NORMAL_HASH_PRIME
+}
+
+private fun Long.prepareNormalVertexIndex(): Int = (this and PREPARE_UNSIGNED_INT_MASK).toInt()
+
+private fun FloatArray.haveSamePreparePosition(firstVertex: Int, secondVertex: Int): Boolean {
+    val firstOffset = firstVertex * PREPARE_VERTEX_FLOATS
+    val secondOffset = secondVertex * PREPARE_VERTEX_FLOATS
+    return this[firstOffset].prepareNormalBits() == this[secondOffset].prepareNormalBits() &&
+        this[firstOffset + 1].prepareNormalBits() == this[secondOffset + 1].prepareNormalBits() &&
+        this[firstOffset + 2].prepareNormalBits() == this[secondOffset + 2].prepareNormalBits()
+}
+
+private fun Float.toPackedNormalByte(): Byte =
+    (coerceIn(-1f, 1f) * Byte.MAX_VALUE.toFloat()).roundToInt().coerceIn(-127, 127).toByte()
+
 private fun FloatArray.toDirectFloatBuffer(): FloatBuffer = ByteBuffer
     .allocateDirect(size * Float.SIZE_BYTES)
     .order(ByteOrder.nativeOrder())
@@ -1581,6 +1777,18 @@ private data class PrepareOverlayGpuBuffers(
 
 private const val PREPARE_VERTEX_FLOATS = 3
 private const val PREPARE_VERTEX_STRIDE_BYTES = PREPARE_VERTEX_FLOATS * Float.SIZE_BYTES
+private const val PREPARE_VERTICES_PER_TRIANGLE = 3
+private const val PREPARE_TRIANGLE_FLOATS = PREPARE_VERTEX_FLOATS * PREPARE_VERTICES_PER_TRIANGLE
+private const val PREPARE_NORMAL_COMPONENTS = 3
+private const val PREPARE_NORMAL_STRIDE_BYTES = PREPARE_NORMAL_COMPONENTS
+private const val PREPARE_GPU_BYTES_PER_POSITION_COMPONENT =
+    Float.SIZE_BYTES + PREPARE_NORMAL_STRIDE_BYTES / PREPARE_NORMAL_COMPONENTS
+private const val PREPARE_MESH_BUFFERS_PER_TOPOLOGY = 2
+private const val PREPARE_NORMAL_EPSILON = 1e-12f
+private const val PREPARE_NORMAL_HASH_OFFSET = -0x7ee3623b
+private const val PREPARE_NORMAL_HASH_PRIME = 0x01000193
+private const val PREPARE_UNSIGNED_INT_MASK = 0xffff_ffffL
+internal const val PREPARE_SMOOTH_NORMAL_CREASE_COSINE = 0.70710677f
 private const val PREPARE_BED_FILL_Z = -0.08f
 private const val PREPARE_BED_GRID_Z = -0.06f
 private const val PREPARE_BED_OUTLINE_Z = -0.04f
@@ -1612,12 +1820,15 @@ private const val PREPARE_VERTEX_SHADER = """#version 300 es
     uniform mat3 uObjectRotation;
     uniform vec3 uTranslation;
     in vec3 aPosition;
-    out vec3 vWorldPosition;
+    in vec3 aNormal;
+    out vec3 vNormal;
 
     void main() {
         vec3 world = aPosition;
+        vNormal = aNormal;
         if (uObjectMode != 0) {
             world = uObjectRotation * ((aPosition - uSourceCenter) * uSignedScale) + uTranslation;
+            vNormal = normalize(uObjectRotation * (aNormal / uSignedScale));
         }
         vec2 delta = world.xy - uBedSize * 0.5;
         float yawCos = uCameraRotation.x;
@@ -1633,7 +1844,6 @@ private const val PREPARE_VERTEX_SHADER = """#version 300 es
         float depth = rotatedY * pitchCos + world.z * pitchSin;
         vec2 ndc = vec2(screen.x / uViewport.x * 2.0 - 1.0, 1.0 - screen.y / uViewport.y * 2.0);
         gl_Position = vec4(ndc, clamp(-depth / uDepthScale, -0.98, 0.98), 1.0);
-        vWorldPosition = world;
     }
 """
 
@@ -1643,16 +1853,16 @@ private const val PREPARE_FRAGMENT_SHADER = """#version 300 es
     uniform float uOpacity;
     uniform int uLighting;
     uniform int uSelected;
-    in vec3 vWorldPosition;
+    in vec3 vNormal;
     out vec4 outColor;
     void main() {
         float light = 1.0;
         if (uLighting != 0) {
-            vec3 xGradient = dFdx(vWorldPosition);
-            vec3 yGradient = dFdy(vWorldPosition);
-            vec3 normal = normalize(cross(xGradient, yGradient));
+            vec3 normal = normalize(vNormal);
             vec3 lightDirection = normalize(vec3(0.36, -0.48, 0.80));
-            light = 0.55 + abs(dot(normal, lightDirection)) * 0.45;
+            vec3 fillDirection = normalize(vec3(-0.45, 0.20, 0.87));
+            light = 0.52 + abs(dot(normal, lightDirection)) * 0.36 +
+                abs(dot(normal, fillDirection)) * 0.12;
         }
         if (uSelected != 0) light = min(1.0, light + 0.10);
         vec3 color = mix(vec3(0.067, 0.075, 0.059), uBaseColor, light);
