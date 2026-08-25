@@ -3005,6 +3005,134 @@ object OnDeviceSlicer {
         }
     }
 
+    internal fun exportThreeMf(
+        objects: List<ProjectObject>,
+        options: SliceOptions,
+        output: File,
+        requestId: String = UUID.randomUUID().toString(),
+        cancellationRequested: () -> Boolean = { false },
+    ): File {
+        require(objects.isNotEmpty()) { "Project has no objects" }
+        val filamentSlots = options.resolvedFilamentSlots()
+        val volumes = objects.flatMap(ProjectObject::volumes)
+        require(volumes.all { volume ->
+            !volume.role.acceptsFilament || volume.filamentSlot in filamentSlots.indices
+        }) { "Volume filament assignment is unavailable" }
+        require(volumes.all { volume ->
+            volume.role.acceptsFacetPaint || (
+                volume.supportPaint.facets.isEmpty() && volume.seamPaint.facets.isEmpty() &&
+                    volume.multiColorPaint.facets.isEmpty() && volume.orcaFacetAnnotations.isEmpty
+            )
+        }) { "Auxiliary project volumes cannot carry facet paint" }
+        return withTransformedModels(
+            objects = objects,
+            options = options,
+            cancellationRequested = cancellationRequested,
+        ) { transformedModels ->
+            val supportPaintFiles = volumes.mapIndexed { index, volume ->
+                volume.supportPaint.takeIf { it.facets.isNotEmpty() }?.let {
+                    File.createTempFile(
+                        "3mf-support-$index-",
+                        ".bin",
+                        File(volume.model.localPath).parentFile,
+                    ).also(it::writeSidecar)
+                }
+            }
+            val seamPaintFiles = volumes.mapIndexed { index, volume ->
+                volume.seamPaint.takeIf { it.facets.isNotEmpty() }?.let {
+                    File.createTempFile(
+                        "3mf-seam-$index-",
+                        ".bin",
+                        File(volume.model.localPath).parentFile,
+                    ).also(it::writeSidecar)
+                }
+            }
+            val multiColorPaintFiles = volumes.mapIndexed { index, volume ->
+                volume.multiColorPaint.takeIf { it.facets.isNotEmpty() }?.let {
+                    File.createTempFile(
+                        "3mf-colors-$index-",
+                        ".bin",
+                        File(volume.model.localPath).parentFile,
+                    ).also(it::writeSidecar)
+                }
+            }
+            val orcaSupportFiles = volumes.mapIndexed { index, volume ->
+                volume.orcaFacetAnnotations.support.takeIf { it.triangles.isNotEmpty() }?.let {
+                    File.createTempFile(
+                        "3mf-orca-support-$index-",
+                        ".bin",
+                        File(volume.model.localPath).parentFile,
+                    ).also(it::writeSidecar)
+                }
+            }
+            val orcaSeamFiles = volumes.mapIndexed { index, volume ->
+                volume.orcaFacetAnnotations.seam.takeIf { it.triangles.isNotEmpty() }?.let {
+                    File.createTempFile(
+                        "3mf-orca-seam-$index-",
+                        ".bin",
+                        File(volume.model.localPath).parentFile,
+                    ).also(it::writeSidecar)
+                }
+            }
+            val orcaMultiColorFiles = volumes.mapIndexed { index, volume ->
+                volume.orcaFacetAnnotations.multiColor.takeIf { it.triangles.isNotEmpty() }?.let {
+                    File.createTempFile(
+                        "3mf-orca-colors-$index-",
+                        ".bin",
+                        File(volume.model.localPath).parentFile,
+                    ).also(it::writeSidecar)
+                }
+            }
+            val volumeConfigFiles = volumes.mapIndexed { index, volume ->
+                volume.config.takeUnless(ProjectVolumeConfig::isEmpty)?.let {
+                    File.createTempFile(
+                        "3mf-volume-config-$index-",
+                        ".bin",
+                        File(volume.model.localPath).parentFile,
+                    ).also(it::writeSidecar)
+                }
+            }
+            val temporaryFiles = listOf(
+                supportPaintFiles,
+                seamPaintFiles,
+                multiColorPaintFiles,
+                orcaSupportFiles,
+                orcaSeamFiles,
+                orcaMultiColorFiles,
+                volumeConfigFiles,
+            ).flatten().filterNotNull()
+            try {
+                if (cancellationRequested()) throw ProjectEditCancelledException()
+                SlicerProcessClient.exportThreeMf(
+                    transformedModels = transformedModels.files,
+                    objectVolumeCounts = transformedModels.objectVolumeCounts,
+                    filamentSlots = volumes.map(ProjectVolume::filamentSlot).toIntArray(),
+                    volumeRoles = volumes.map { it.role.nativeValue }.toIntArray(),
+                    volumeConfigFiles = volumeConfigFiles,
+                    supportPaintFiles = supportPaintFiles,
+                    seamPaintFiles = seamPaintFiles,
+                    multiColorPaintFiles = multiColorPaintFiles,
+                    orcaSupportAnnotationFiles = orcaSupportFiles,
+                    orcaSeamAnnotationFiles = orcaSeamFiles,
+                    orcaMultiColorAnnotationFiles = orcaMultiColorFiles,
+                    objectNames = objects.mapIndexed { index, projectObject ->
+                        threeMfDisplayName(
+                            projectObject.primaryModelPart.model.fileName,
+                            "Object ${index + 1}",
+                        )
+                    },
+                    volumeNames = volumes.mapIndexed { index, volume ->
+                        threeMfDisplayName(volume.model.fileName, "Part ${index + 1}")
+                    },
+                    output = output,
+                    requestId = requestId,
+                )
+            } finally {
+                temporaryFiles.forEach(File::delete)
+            }
+        }
+    }
+
     fun arrange(
         objects: List<ProjectObject>,
         options: SliceOptions = SliceOptions(),
@@ -3142,4 +3270,23 @@ object OnDeviceSlicer {
             transformedModels.forEach(File::delete)
         }
     }
+}
+
+internal fun threeMfDisplayName(candidate: String, fallback: String): String {
+    val withoutExtension = candidate.substringBeforeLast('.', candidate)
+    val source = withoutExtension.trim().takeIf(String::isNotEmpty) ?: fallback
+    val output = StringBuilder()
+    var encodedBytes = 0
+    var offset = 0
+    while (offset < source.length) {
+        val codePoint = Character.codePointAt(source, offset)
+        offset += Character.charCount(codePoint)
+        val normalized = if (Character.isISOControl(codePoint)) ' '.code else codePoint
+        val value = String(Character.toChars(normalized))
+        val valueBytes = value.toByteArray(Charsets.UTF_8).size
+        if (encodedBytes + valueBytes > 200) break
+        output.append(value)
+        encodedBytes += valueBytes
+    }
+    return output.toString().trim().takeIf(String::isNotEmpty) ?: fallback
 }

@@ -506,6 +506,7 @@ internal fun WorkspaceScreen(
     onEditAuxiliaryVolume: (OrcaAuxiliaryVolumeEditDraft) -> Unit,
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
+    onExportModel: () -> Unit,
     onPlateSelected: (String) -> Unit,
     onAddPlate: () -> Unit,
     onRemovePlate: () -> Unit,
@@ -770,6 +771,7 @@ internal fun WorkspaceScreen(
                 projectTransferCancellationRequested = projectTransferCancellationRequested,
                 slicing = slicing,
                 previewLoading = previewLoading,
+                canExportModel = projectObjects.isNotEmpty(),
                 canExport = sliceOutcome != null && !exportingGcode,
                 exportingGcode = exportingGcode,
                 gcodeExportCancellationRequested = gcodeExportCancellationRequested,
@@ -778,6 +780,7 @@ internal fun WorkspaceScreen(
                 onExportProfiles = onExportProfiles,
                 onCancelProfileTransfer = onCancelProfileTransfer,
                 onAddShape = { showPrimitivePicker = true },
+                onExportModel = onExportModel,
                 onExport = onSave,
                 onCancelGcodeExport = onCancelGcodeExport,
                 canArrange = projectObjects.size > 1 &&
@@ -3143,6 +3146,7 @@ private fun WorkspaceMenu(
     projectTransferCancellationRequested: Boolean,
     slicing: Boolean,
     previewLoading: Boolean,
+    canExportModel: Boolean,
     canExport: Boolean,
     exportingGcode: Boolean,
     gcodeExportCancellationRequested: Boolean,
@@ -3152,6 +3156,7 @@ private fun WorkspaceMenu(
     onExportProfiles: () -> Unit,
     onCancelProfileTransfer: () -> Unit,
     onAddShape: () -> Unit,
+    onExportModel: () -> Unit,
     onExport: () -> Unit,
     onCancelGcodeExport: () -> Unit,
     onArrange: () -> Unit,
@@ -3265,6 +3270,17 @@ private fun WorkspaceMenu(
                 onClick = {
                     expanded = false
                     onAddShape()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.export_model)) },
+                leadingIcon = { Icon(Icons.Default.SaveAlt, null) },
+                enabled = canExportModel && !importing && !editingBusy &&
+                    !projectImporting && !projectExporting &&
+                    !slicing && !previewLoading,
+                onClick = {
+                    expanded = false
+                    onExportModel()
                 },
             )
             DropdownMenuItem(

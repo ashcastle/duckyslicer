@@ -400,6 +400,98 @@ class OrcaModelImportInstrumentedTest {
     }
 
     @Test
+    fun exportedThreeMfRoundTripsVolumesFilamentsAndFacetAnnotations() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val source = File(context.cacheDir, "export-round-trip-source.3mf")
+        val exportDirectory = File(
+            context.cacheDir,
+            "$THREE_MF_EXPORT_DIRECTORY_PREFIX${java.util.UUID.randomUUID()}",
+        )
+        val exported = File(exportDirectory, THREE_MF_EXPORT_FILE_NAME)
+        projectRoot.deleteRecursively()
+        source.delete()
+        exportDirectory.deleteRecursively()
+        try {
+            writeMultiVolume3mf(source, bbsPainted = true)
+            val options = SliceOptions().copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                bedSizeX = 100f,
+                bedSizeY = 100f,
+                bedPolygon = rectangularBedPolygon(100f, 100f),
+            )
+            val sourceUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.debug-files",
+                source,
+            )
+            val imported = importOrcaModels(
+                context,
+                sourceUri,
+                ProjectStore(context),
+                options,
+            )
+            assertEquals(2, imported.single().volumes.size)
+            assertEquals(
+                "841",
+                imported.single().volumes[0].orcaFacetAnnotations.support.triangles[0],
+            )
+            assertTrue(exportDirectory.mkdir())
+            val unicodeName = "🦆".repeat(50)
+            val namedProject = imported.map { projectObject ->
+                projectObject.copy(
+                    volumes = projectObject.volumes.map { volume ->
+                        volume.copy(model = volume.model.copy(fileName = "$unicodeName.stl"))
+                    },
+                )
+            }
+
+            OnDeviceSlicer.exportThreeMf(namedProject, options, exported)
+
+            assertTrue(exported.length() > 0L)
+            assertEquals(
+                listOf(0x50, 0x4b, 0x03, 0x04),
+                exported.inputStream().use { input -> List(4) { input.read() } },
+            )
+            val (exportedModelXml, exportedConfigXml) = java.util.zip.ZipFile(exported).use { zip ->
+                val modelXml = zip.getInputStream(zip.getEntry("3D/3dmodel.model"))
+                    .bufferedReader().use { it.readText() }
+                val configXml = zip.getInputStream(
+                    zip.getEntry("Metadata/Slic3r_PE_model.config"),
+                ).bufferedReader().use { it.readText() }
+                modelXml to configXml
+            }
+            assertTrue(exportedModelXml.contains("<metadata name=\"Application\">DuckySlicer-"))
+            assertTrue(exportedConfigXml.contains(unicodeName))
+            val exportedUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.debug-files",
+                exported,
+            )
+            val restored = importOrcaModels(
+                context,
+                exportedUri,
+                ProjectStore(context),
+                options,
+            ).single()
+
+            assertEquals(2, restored.volumes.size)
+            assertEquals(listOf(0, 1), restored.volumes.map(ProjectVolume::filamentSlot))
+            assertEquals(
+                listOf(ProjectVolumeRole.MODEL_PART, ProjectVolumeRole.MODEL_PART),
+                restored.volumes.map(ProjectVolume::role),
+            )
+            assertEquals("841", restored.volumes[0].orcaFacetAnnotations.support.triangles[0])
+            assertEquals("8", restored.volumes[0].orcaFacetAnnotations.seam.triangles[0])
+            assertEquals("8", restored.volumes[0].orcaFacetAnnotations.multiColor.triangles[0])
+        } finally {
+            source.delete()
+            exportDirectory.deleteRecursively()
+            projectRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun negative3mfVolumePreservesItsRoleAndDoesNotBecomePrintableGeometry() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
@@ -560,6 +652,7 @@ class OrcaModelImportInstrumentedTest {
     private fun writeMultiVolume3mf(
         destination: File,
         accentSubtype: String = "normal_part",
+        bbsPainted: Boolean = false,
     ) {
         require(
             accentSubtype in setOf(
@@ -591,9 +684,10 @@ class OrcaModelImportInstrumentedTest {
             zip.writeEntry(
                 "3D/3dmodel.model",
                 """<?xml version="1.0" encoding="UTF-8"?>
-                    <model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+                    <model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06">
+                      ${if (bbsPainted) "<metadata name=\"Application\">BambuStudio-01.09.00.00</metadata>" else ""}
                       <resources>
-                        ${tetrahedronObject(1, "Body")}
+                        ${tetrahedronObject(1, "Body", bbsPainted = bbsPainted)}
                         ${tetrahedronObject(2, "Accent")}
                         <object id="3" type="model" name="Assembly">
                           <components>

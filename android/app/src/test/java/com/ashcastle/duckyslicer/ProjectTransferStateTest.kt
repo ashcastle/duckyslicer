@@ -9,6 +9,15 @@ import org.junit.Test
 
 class ProjectTransferStateTest {
     @Test
+    fun threeMfNamesDropExtensionsControlsAndRespectWriterLimit() {
+        assertEquals("duck", threeMfDisplayName("duck.stl", "Object"))
+        assertEquals("bad name", threeMfDisplayName("bad\u0000name.3mf", "Object"))
+        val bounded = threeMfDisplayName("한".repeat(100), "Object")
+        assertTrue(bounded.toByteArray(Charsets.UTF_8).size <= 200)
+        assertEquals("Object", threeMfDisplayName("\u0000.stl", "Object"))
+    }
+
+    @Test
     fun importedPartAssignmentsExpandAvailableFilamentSlotsWithinPrinterCapacity() {
         val options = SliceOptions().copy(filamentSlots = listOf(FilamentProfile.PLA))
 

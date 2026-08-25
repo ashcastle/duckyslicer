@@ -27,6 +27,7 @@ import android.util.Log
 import com.u1.slicer.NativeLibrary
 import java.io.DataInputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.file.Files
 import java.util.UUID
@@ -345,6 +346,138 @@ internal object SlicerProcessClient {
             putInt(SlicerProcessContract.KEY_PRIMITIVE_TYPE, primitive.nativeId)
             putFloat(SlicerProcessContract.KEY_PRIMITIVE_SIZE_MM, sizeMm)
         }.single()
+    }
+
+    /** Writes one selected plate as an interoperable 3MF through Orca's native writer. */
+    fun exportThreeMf(
+        transformedModels: List<File>,
+        objectVolumeCounts: IntArray,
+        filamentSlots: IntArray,
+        volumeRoles: IntArray,
+        volumeConfigFiles: List<File?>,
+        supportPaintFiles: List<File?>,
+        seamPaintFiles: List<File?>,
+        multiColorPaintFiles: List<File?>,
+        orcaSupportAnnotationFiles: List<File?>,
+        orcaSeamAnnotationFiles: List<File?>,
+        orcaMultiColorAnnotationFiles: List<File?>,
+        objectNames: List<String>,
+        volumeNames: List<String>,
+        output: File,
+        requestId: String = UUID.randomUUID().toString(),
+    ): File {
+        check(Looper.myLooper() != Looper.getMainLooper()) {
+            "3MF export must run outside the application main thread"
+        }
+        requireValidRequestId(requestId)
+        require(
+            transformedModels.isNotEmpty() &&
+                objectVolumeCounts.all { it in 1..MAX_PROJECT_VOLUMES_PER_OBJECT } &&
+                objectVolumeCounts.sum() == transformedModels.size &&
+                objectNames.size == objectVolumeCounts.size &&
+                volumeNames.size == transformedModels.size,
+        ) { "3MF model metadata does not match the project" }
+        val perVolumeLists = listOf(
+            volumeConfigFiles,
+            supportPaintFiles,
+            seamPaintFiles,
+            multiColorPaintFiles,
+            orcaSupportAnnotationFiles,
+            orcaSeamAnnotationFiles,
+            orcaMultiColorAnnotationFiles,
+        )
+        require(
+            filamentSlots.size == transformedModels.size &&
+                volumeRoles.size == transformedModels.size &&
+                perVolumeLists.all { it.size == transformedModels.size },
+        ) { "3MF volume metadata does not match the project" }
+        require(
+            (objectNames + volumeNames).all { name ->
+                name.length in 1..200 && name.none(Char::isISOControl)
+            },
+        ) { "3MF names are invalid" }
+        val modelPaths = transformedModels.map(File::getAbsolutePath)
+        val sidecarPaths = perVolumeLists.map { files ->
+            files.map { it?.absolutePath.orEmpty() }
+        }
+        require(
+            encodedRequestBytes(
+                modelPaths + sidecarPaths.flatten() + objectNames + volumeNames + output.absolutePath,
+                "",
+            ) <= SlicerProcessContract.MAX_REQUEST_BYTES,
+        ) { "3MF export request is too large" }
+        throwIfProjectRequestCanceled(requestId)
+        check(activeRequestId.compareAndSet(null, requestId)) {
+            "Another slicer operation is already running"
+        }
+        return try {
+            val response = withWorker(DuckySlicerApplication.context()) { worker ->
+                worker.request(
+                    what = SlicerProcessContract.MESSAGE_EXPORT_THREE_MF,
+                    data = Bundle().apply {
+                        putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
+                        putStringArrayList(SlicerProcessContract.KEY_MODEL_PATHS, ArrayList(modelPaths))
+                        putIntArray(SlicerProcessContract.KEY_OBJECT_VOLUME_COUNTS, objectVolumeCounts)
+                        putIntArray(SlicerProcessContract.KEY_FILAMENT_SLOTS, filamentSlots)
+                        putIntArray(SlicerProcessContract.KEY_VOLUME_ROLES, volumeRoles)
+                        putStringArrayList(
+                            SlicerProcessContract.KEY_VOLUME_CONFIG_PATHS,
+                            ArrayList(sidecarPaths[0]),
+                        )
+                        putStringArrayList(
+                            SlicerProcessContract.KEY_SUPPORT_PAINT_PATHS,
+                            ArrayList(sidecarPaths[1]),
+                        )
+                        putStringArrayList(
+                            SlicerProcessContract.KEY_SEAM_PAINT_PATHS,
+                            ArrayList(sidecarPaths[2]),
+                        )
+                        putStringArrayList(
+                            SlicerProcessContract.KEY_MULTI_COLOR_PAINT_PATHS,
+                            ArrayList(sidecarPaths[3]),
+                        )
+                        putStringArrayList(
+                            SlicerProcessContract.KEY_ORCA_SUPPORT_ANNOTATION_PATHS,
+                            ArrayList(sidecarPaths[4]),
+                        )
+                        putStringArrayList(
+                            SlicerProcessContract.KEY_ORCA_SEAM_ANNOTATION_PATHS,
+                            ArrayList(sidecarPaths[5]),
+                        )
+                        putStringArrayList(
+                            SlicerProcessContract.KEY_ORCA_MULTI_COLOR_ANNOTATION_PATHS,
+                            ArrayList(sidecarPaths[6]),
+                        )
+                        putStringArrayList(SlicerProcessContract.KEY_OBJECT_NAMES, ArrayList(objectNames))
+                        putStringArrayList(SlicerProcessContract.KEY_VOLUME_NAMES, ArrayList(volumeNames))
+                        putString(SlicerProcessContract.KEY_OUTPUT_PATH, output.absolutePath)
+                    },
+                    timeoutSeconds = MODEL_NORMALIZATION_TIMEOUT_SECONDS,
+                )
+            }
+            throwIfProjectRequestCanceled(requestId)
+            check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
+                response.getString(SlicerProcessContract.KEY_ERROR) ?: "3MF could not be exported"
+            }
+            latestWorkerPid = response.getInt(SlicerProcessContract.KEY_PID)
+            val returned = File(
+                requireNotNull(response.getString(SlicerProcessContract.KEY_OUTPUT_PATH)) {
+                    "Slicer returned no 3MF"
+                },
+            ).canonicalFile
+            require(returned == output.canonicalFile && returned.isFile) {
+                "Slicer returned an invalid 3MF"
+            }
+            returned
+        } catch (failure: Exception) {
+            if (projectRequestCancellationRequested(requestId)) {
+                throw ProjectEditCancelledException()
+            }
+            throw failure
+        } finally {
+            activeRequestId.compareAndSet(requestId, null)
+            cancelledRequestId.compareAndSet(requestId, null)
+        }
     }
 
     private fun runModelOperation(
@@ -1304,6 +1437,7 @@ internal object SlicerProcessClient {
                 what == SlicerProcessContract.MESSAGE_CUT_MODEL ||
                 what == SlicerProcessContract.MESSAGE_SIMPLIFY_MODEL ||
                 what == SlicerProcessContract.MESSAGE_CREATE_PRIMITIVE ||
+                what == SlicerProcessContract.MESSAGE_EXPORT_THREE_MF ||
                 what == SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST
             if (!cancellable) return
             val requestId = data.getString(SlicerProcessContract.KEY_REQUEST_ID) ?: return
@@ -1458,6 +1592,8 @@ private data class OrcaImportedProjectVolumeRecord(
 )
 
 private const val MAX_MODEL_COORDINATE_MM = 1_000_000f
+internal const val THREE_MF_EXPORT_DIRECTORY_PREFIX = "three-mf-export-"
+internal const val THREE_MF_EXPORT_FILE_NAME = "project.3mf"
 
 class SlicerProcessService : Service() {
     private val activeRequestId = AtomicReference<String?>(null)
@@ -1703,6 +1839,8 @@ class SlicerProcessService : Service() {
                 startWork(message, WorkOperation.SIMPLIFY_MODEL)
             SlicerProcessContract.MESSAGE_CREATE_PRIMITIVE ->
                 startWork(message, WorkOperation.CREATE_PRIMITIVE)
+            SlicerProcessContract.MESSAGE_EXPORT_THREE_MF ->
+                startWork(message, WorkOperation.EXPORT_THREE_MF)
             SlicerProcessContract.MESSAGE_ATTACH -> attachToForegroundSlice(message)
             SlicerProcessContract.MESSAGE_CANCEL -> cancelWork(message)
             SlicerProcessContract.MESSAGE_HEALTH -> send(
@@ -1868,6 +2006,7 @@ class SlicerProcessService : Service() {
                 WorkOperation.CUT_MODEL -> runCutModel(requestData)
                 WorkOperation.SIMPLIFY_MODEL -> runSimplifyModel(requestData)
                 WorkOperation.CREATE_PRIMITIVE -> runCreatePrimitive(requestData)
+                WorkOperation.EXPORT_THREE_MF -> runExportThreeMf(requestData)
                 WorkOperation.SLICE -> runSlice(requestData) { percent ->
                     foregroundProgress = maxOf(foregroundProgress, percent.coerceIn(0, 100))
                     mainHandler.post { updateForegroundSlice(requestId, percent) }
@@ -2331,6 +2470,229 @@ class SlicerProcessService : Service() {
     } catch (error: Exception) {
         if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model normalization failed", error)
         failure(error.message ?: "Slicer could not import the model")
+    }
+
+    private fun runExportThreeMf(extras: Bundle): Bundle = try {
+        val paths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_MODEL_PATHS),
+        ) { "Model paths are unavailable" }
+        require(paths.size in 1..ProjectStore.MAX_PROJECT_VOLUMES) {
+            "Invalid 3MF model count"
+        }
+        val models = paths.map(::validateModel)
+        val objectVolumeCounts = requireNotNull(
+            extras.getIntArray(SlicerProcessContract.KEY_OBJECT_VOLUME_COUNTS),
+        ) { "Object volume counts are unavailable" }
+        require(
+            objectVolumeCounts.size in 1..MAX_OBJECTS &&
+                objectVolumeCounts.all { it in 1..MAX_PROJECT_VOLUMES_PER_OBJECT } &&
+                objectVolumeCounts.sum() == models.size,
+        ) { "Object volume counts do not match models" }
+        val objectNames = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_OBJECT_NAMES),
+        ) { "Object names are unavailable" }
+        val volumeNames = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_VOLUME_NAMES),
+        ) { "Volume names are unavailable" }
+        require(
+            objectNames.size == objectVolumeCounts.size && volumeNames.size == models.size &&
+                (objectNames + volumeNames).all(::validThreeMfName),
+        ) { "3MF names are invalid" }
+        val volumeRoles = requireNotNull(
+            extras.getIntArray(SlicerProcessContract.KEY_VOLUME_ROLES),
+        ).map(ProjectVolumeRole::fromNative)
+        val filamentSlots = requireNotNull(
+            extras.getIntArray(SlicerProcessContract.KEY_FILAMENT_SLOTS),
+        ) { "Filament assignments are unavailable" }
+        require(
+            volumeRoles.size == models.size && filamentSlots.size == models.size &&
+                volumeRoles.indices.all { index ->
+                    if (volumeRoles[index].acceptsFilament) {
+                        filamentSlots[index] in 0 until MAX_FILAMENT_SLOTS
+                    } else {
+                        filamentSlots[index] == 0
+                    }
+                },
+        ) { "3MF volume assignments are invalid" }
+
+        fun requestedPaths(key: String, label: String): List<String> = requireNotNull(
+            extras.getStringArrayList(key),
+        ) { "$label paths are unavailable" }.also { values ->
+            require(values.size == models.size) { "$label count does not match models" }
+        }
+
+        val volumeConfigPaths = requestedPaths(
+            SlicerProcessContract.KEY_VOLUME_CONFIG_PATHS,
+            "Volume setting",
+        )
+        val supportPaintPaths = requestedPaths(
+            SlicerProcessContract.KEY_SUPPORT_PAINT_PATHS,
+            "Support paint",
+        )
+        val seamPaintPaths = requestedPaths(
+            SlicerProcessContract.KEY_SEAM_PAINT_PATHS,
+            "Seam paint",
+        )
+        val multiColorPaintPaths = requestedPaths(
+            SlicerProcessContract.KEY_MULTI_COLOR_PAINT_PATHS,
+            "Multi-color paint",
+        )
+        val orcaSupportPaths = requestedPaths(
+            SlicerProcessContract.KEY_ORCA_SUPPORT_ANNOTATION_PATHS,
+            "Support annotation",
+        )
+        val orcaSeamPaths = requestedPaths(
+            SlicerProcessContract.KEY_ORCA_SEAM_ANNOTATION_PATHS,
+            "Seam annotation",
+        )
+        val orcaMultiColorPaths = requestedPaths(
+            SlicerProcessContract.KEY_ORCA_MULTI_COLOR_ANNOTATION_PATHS,
+            "Multi-color annotation",
+        )
+        val outputPath = requireNotNull(extras.getString(SlicerProcessContract.KEY_OUTPUT_PATH)) {
+            "3MF output is unavailable"
+        }
+        require(
+            encodedRequestBytes(
+                paths + objectNames + volumeNames + volumeConfigPaths + supportPaintPaths +
+                    seamPaintPaths + multiColorPaintPaths + orcaSupportPaths + orcaSeamPaths +
+                    orcaMultiColorPaths + outputPath,
+                "",
+            ) <= SlicerProcessContract.MAX_REQUEST_BYTES,
+        ) { "3MF export request is too large" }
+        val volumeConfigs = volumeConfigPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let(::validateVolumeConfig)
+        }
+        val supportPaint = supportPaintPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let(::validateSupportPaint)
+        }
+        val seamPaint = seamPaintPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let(::validateSeamPaint)
+        }
+        val multiColorPaint = multiColorPaintPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let(::validateMultiColorPaint)
+        }
+        val orcaSupport = orcaSupportPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let { validateOrcaFacetAnnotation(it, 2) }
+        }
+        val orcaSeam = orcaSeamPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let { validateOrcaFacetAnnotation(it, 2) }
+        }
+        val orcaMultiColor = orcaMultiColorPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let {
+                validateOrcaFacetAnnotation(it, MAX_FILAMENT_SLOTS)
+            }
+        }
+        require(volumeRoles.indices.all { index ->
+            volumeRoles[index].acceptsFacetPaint || (
+                supportPaint[index] == null && seamPaint[index] == null &&
+                    multiColorPaint[index] == null && orcaSupport[index] == null &&
+                    orcaSeam[index] == null && orcaMultiColor[index] == null
+            )
+        }) { "Auxiliary project volumes cannot carry facet paint" }
+        require(
+            multiColorPaint.filterNotNull().all { paint ->
+                paint.filamentSlots.all { it in 0 until MAX_FILAMENT_SLOTS }
+            } && orcaMultiColor.filterNotNull().all { annotation ->
+                annotation.annotation.maximumState <= MAX_FILAMENT_SLOTS
+            },
+        ) { "Multi-color paint uses an unavailable filament" }
+        val output = validateThreeMfExportOutput(outputPath)
+        val runtime = createNativeRuntime()
+        try {
+            val mapping = loadNativeObjects(runtime, models, objectVolumeCounts)
+            objectNames.forEachIndexed { objectIndex, name ->
+                check(runtime.nativeSetProjectObjectName(objectIndex, name)) {
+                    "3MF object name could not be applied"
+                }
+            }
+            models.indices.forEach { volumeIndex ->
+                val nativeObjectIndex = mapping.objectIndices[volumeIndex]
+                val nativeVolumeIndex = mapping.volumeIndices[volumeIndex]
+                check(
+                    runtime.nativeSetProjectVolumeName(
+                        nativeObjectIndex,
+                        nativeVolumeIndex,
+                        volumeNames[volumeIndex],
+                    ),
+                ) { "3MF volume name could not be applied" }
+                check(
+                    runtime.nativeSetVolumeSemantics(
+                        nativeObjectIndex,
+                        nativeVolumeIndex,
+                        volumeRoles[volumeIndex].nativeValue,
+                        volumeConfigs[volumeIndex]?.absolutePath.orEmpty(),
+                    ),
+                ) { "3MF volume role or settings could not be applied" }
+                if (volumeRoles[volumeIndex].acceptsFilament) {
+                    check(
+                        runtime.nativeSetVolumeExtruder(
+                            nativeObjectIndex,
+                            nativeVolumeIndex,
+                            filamentSlots[volumeIndex] + 1,
+                        ),
+                    ) { "3MF filament assignment could not be applied" }
+                }
+                val importedSupport = orcaSupport[volumeIndex]
+                val importedSeam = orcaSeam[volumeIndex]
+                val importedColor = orcaMultiColor[volumeIndex]
+                if (importedSupport != null || importedSeam != null || importedColor != null) {
+                    check(
+                        runtime.nativeApplyOrcaFacetAnnotations(
+                            nativeObjectIndex,
+                            nativeVolumeIndex,
+                            importedSupport?.file?.absolutePath.orEmpty(),
+                            importedSeam?.file?.absolutePath.orEmpty(),
+                            importedColor?.file?.absolutePath.orEmpty(),
+                        ),
+                    ) { "Imported 3MF facet annotations could not be applied" }
+                }
+                supportPaint[volumeIndex]?.let { paint ->
+                    check(
+                        runtime.applySupportPaint(
+                            nativeObjectIndex,
+                            nativeVolumeIndex,
+                            paint.file.absolutePath,
+                        ),
+                    ) { "3MF support paint could not be applied" }
+                }
+                seamPaint[volumeIndex]?.let { paint ->
+                    check(
+                        runtime.applySeamPaint(
+                            nativeObjectIndex,
+                            nativeVolumeIndex,
+                            paint.file.absolutePath,
+                        ),
+                    ) { "3MF seam paint could not be applied" }
+                }
+                multiColorPaint[volumeIndex]?.let { paint ->
+                    check(
+                        runtime.applyMultiColorPaint(
+                            nativeObjectIndex,
+                            nativeVolumeIndex,
+                            paint.file.absolutePath,
+                        ),
+                    ) { "3MF multi-color paint could not be applied" }
+                }
+            }
+            check(runtime.nativeExportLoadedProject3mf(output.absolutePath)) {
+                "Orca could not write the 3MF"
+            }
+            require(
+                output.isFile && !Files.isSymbolicLink(output.toPath()) &&
+                    output.length() in 1..MAX_MODEL_BYTES && output.hasZipLocalHeader(),
+            ) { "Orca returned an invalid 3MF" }
+            Bundle().apply {
+                putBoolean(SlicerProcessContract.KEY_OK, true)
+                putInt(SlicerProcessContract.KEY_PID, Process.myPid())
+                putString(SlicerProcessContract.KEY_OUTPUT_PATH, output.absolutePath)
+            }
+        } finally {
+            runtime.clearModel()
+        }
+    } catch (error: Exception) {
+        if (BuildConfig.DEBUG) Log.e(LOG_TAG, "3MF export failed", error)
+        failure(error.message ?: "3MF could not be exported")
     }
 
     private fun runSplitModel(extras: Bundle): Bundle = try {
@@ -2913,6 +3275,31 @@ class SlicerProcessService : Service() {
         return directory
     }
 
+    private fun validateThreeMfExportOutput(path: String): File {
+        require(path.length in 1..MAX_PATH_LENGTH) { "Invalid 3MF output path" }
+        val output = File(path).canonicalFile
+        val directory = output.parentFile
+        val cacheRoot = cacheDir.canonicalFile
+        val identifier = directory.name.removePrefix(THREE_MF_EXPORT_DIRECTORY_PREFIX)
+        val expectedName = runCatching { UUID.fromString(identifier).toString() }
+            .getOrNull()
+            ?.let { "$THREE_MF_EXPORT_DIRECTORY_PREFIX$it" }
+        require(
+            output.name == THREE_MF_EXPORT_FILE_NAME && expectedName == directory.name &&
+                directory.parentFile == cacheRoot && directory.isDirectory &&
+                !Files.isSymbolicLink(directory.toPath()) && !output.exists() &&
+                !Files.isSymbolicLink(output.toPath()),
+        ) { "3MF output is unavailable" }
+        return output
+    }
+
+    private fun validThreeMfName(value: String): Boolean =
+        value.toByteArray(Charsets.UTF_8).size in 1..200 && value.none(Char::isISOControl)
+
+    private fun File.hasZipLocalHeader(): Boolean = runCatching {
+        DataInputStream(FileInputStream(this)).use { input -> input.readInt() == 0x504B0304 }
+    }.getOrDefault(false)
+
     private fun createNativeRuntime(onProgress: (Int) -> Unit = {}): NativeLibrary =
         NativeLibrary(onProgress)
 
@@ -3278,6 +3665,7 @@ class SlicerProcessService : Service() {
         CUT_MODEL,
         SIMPLIFY_MODEL,
         CREATE_PRIMITIVE,
+        EXPORT_THREE_MF,
         TEST_PROBE,
     }
 
@@ -3328,11 +3716,14 @@ private object SlicerProcessContract {
     const val MESSAGE_CREATE_PRIMITIVE = 14
     const val MESSAGE_SIMPLIFY_MODEL = 15
     const val MESSAGE_SPLIT_MODEL_VOLUME = 16
+    const val MESSAGE_EXPORT_THREE_MF = 17
     const val KEY_REQUEST_ID = "requestId"
     const val KEY_MODEL_PATH = "modelPath"
     const val KEY_MODEL_PATHS = "modelPaths"
     const val KEY_MODEL_OUTPUT_DIRECTORY = "modelOutputDirectory"
     const val KEY_NORMALIZED_MODELS = "normalizedModels"
+    const val KEY_OBJECT_NAMES = "objectNames"
+    const val KEY_VOLUME_NAMES = "volumeNames"
     const val KEY_OBJECT_VOLUME_COUNTS = "objectVolumeCounts"
     const val KEY_FILAMENT_SLOTS = "filamentSlots"
     const val KEY_VOLUME_ROLES = "volumeRoles"

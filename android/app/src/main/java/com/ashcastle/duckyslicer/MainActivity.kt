@@ -46,9 +46,11 @@ private val DuckyColors = darkColorScheme(
 )
 
 internal const val GCODE_DOCUMENT_MIME_TYPE = "application/octet-stream"
+internal const val THREE_MF_DOCUMENT_MIME_TYPE = "model/3mf"
 private const val SLICE_NOTIFICATION_PREFERENCES = "slice_notifications"
 private const val SLICE_NOTIFICATION_PERMISSION_ASKED = "permission_asked"
 private const val DEFAULT_PROJECT_ARCHIVE_NAME = "DuckySlicer-project$PROJECT_ARCHIVE_FILE_EXTENSION"
+private const val DEFAULT_THREE_MF_NAME = "DuckySlicer-model.3mf"
 private const val DEFAULT_PROFILE_BUNDLE_NAME = "DuckySlicer-profiles$PROFILE_BUNDLE_FILE_EXTENSION"
 
 data class ModelInfo(
@@ -377,6 +379,9 @@ private fun DuckySlicerScreen(
     val projectExportError = stringResource(R.string.project_export_error)
     val projectImportCanceledNotice = stringResource(R.string.project_import_canceled)
     val projectExportCanceledNotice = stringResource(R.string.project_export_canceled)
+    val modelExportedNotice = stringResource(R.string.model_exported)
+    val modelExportError = stringResource(R.string.model_export_error)
+    val modelExportCanceledNotice = stringResource(R.string.model_export_canceled)
     val savedDataUnavailable = stringResource(R.string.saved_data_unavailable)
     val previewError = stringResource(R.string.preview_error)
     val remoteSavedNotice = stringResource(R.string.device_saved)
@@ -527,7 +532,11 @@ private fun DuckySlicerScreen(
                 }
             }
             is ProjectTransferCompletion.Exported -> {
-                notice = projectSavedNotice
+                notice = if (completion.format == ProjectExportFormat.THREE_MF) {
+                    modelExportedNotice
+                } else {
+                    projectSavedNotice
+                }
                 error = null
             }
             is ProjectTransferCompletion.Canceled -> {
@@ -538,7 +547,11 @@ private fun DuckySlicerScreen(
                         onExternalProjectRequestConsumed(externalProjectRequest.id)
                     }
                 } else {
-                    notice = projectExportCanceledNotice
+                    notice = if (completion.format == ProjectExportFormat.THREE_MF) {
+                        modelExportCanceledNotice
+                    } else {
+                        projectExportCanceledNotice
+                    }
                 }
                 error = null
             }
@@ -550,7 +563,11 @@ private fun DuckySlicerScreen(
                         onExternalProjectRequestConsumed(externalProjectRequest.id)
                     }
                 } else {
-                    error = projectExportError
+                    error = if (completion.format == ProjectExportFormat.THREE_MF) {
+                        modelExportError
+                    } else {
+                        projectExportError
+                    }
                 }
                 externalProjectConfirmation = null
                 notice = null
@@ -1104,6 +1121,23 @@ private fun DuckySlicerScreen(
         }
     }
 
+    val modelExportPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(THREE_MF_DOCUMENT_MIME_TYPE),
+    ) { uri ->
+        if (
+            uri != null && projectRestored && !projectTransferBusy && !importing &&
+            !autoLaying && !arranging && !splitting && !cutting && !slicing && !previewLoading
+        ) {
+            val snapshot = projectTransferModel.state.value.history.current
+            val options = projectTransferModel.state.value.plateOptions[snapshot.selectedPlateId]
+                ?: projectTransferModel.state.value.sliceOptions
+            if (projectTransferModel.exportThreeMf(uri, snapshot, options)) {
+                error = null
+                notice = null
+            }
+        }
+    }
+
     fun importProfiles(uri: Uri): Boolean {
         if (
             !profileBusy && projectRestored && !projectTransferBusy &&
@@ -1318,6 +1352,15 @@ private fun DuckySlicerScreen(
             )
         },
         onSaveProject = { projectSavePicker.launch(DEFAULT_PROJECT_ARCHIVE_NAME) },
+        onExportModel = {
+            val sourceName = projectHistory.current.selectedObject
+                ?.primaryModelPart?.model?.fileName
+                ?: projectObjects.firstOrNull()?.primaryModelPart?.model?.fileName
+            val suggestedName = sourceName?.let {
+                "${threeMfDisplayName(it, "DuckySlicer-model")}.3mf"
+            } ?: DEFAULT_THREE_MF_NAME
+            modelExportPicker.launch(suggestedName)
+        },
         onPlateSelected = { plateId ->
             if (
                 !projectTransferBusy && !slicing && !previewLoading && !exportingGcode &&

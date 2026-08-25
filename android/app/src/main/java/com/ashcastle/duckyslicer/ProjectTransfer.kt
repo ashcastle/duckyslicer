@@ -22,9 +22,16 @@ internal enum class ProjectTransferDirection {
     EXPORT,
 }
 
+internal enum class ProjectExportFormat {
+    PROJECT_ARCHIVE,
+    THREE_MF,
+}
+
 internal data class ActiveProjectTransfer(
     val id: Long,
     val direction: ProjectTransferDirection,
+    val exportFormat: ProjectExportFormat = ProjectExportFormat.PROJECT_ARCHIVE,
+    val requestId: String = "transfer-$id",
 )
 
 internal enum class ProjectPersistenceMessage {
@@ -83,18 +90,21 @@ internal sealed interface ProjectTransferCompletion {
     data class Exported(
         override val id: Long,
         override val uri: Uri,
+        val format: ProjectExportFormat = ProjectExportFormat.PROJECT_ARCHIVE,
     ) : ProjectTransferCompletion
 
     data class Canceled(
         override val id: Long,
         override val uri: Uri,
         val direction: ProjectTransferDirection,
+        val format: ProjectExportFormat = ProjectExportFormat.PROJECT_ARCHIVE,
     ) : ProjectTransferCompletion
 
     data class Failed(
         override val id: Long,
         override val uri: Uri,
         val direction: ProjectTransferDirection,
+        val format: ProjectExportFormat = ProjectExportFormat.PROJECT_ARCHIVE,
     ) : ProjectTransferCompletion
 }
 
@@ -162,6 +172,16 @@ internal fun ProjectTransferState.withCompletedTransfer(
         is ProjectTransferCompletion.Failed -> requestedCompletion.direction
     }
     if (completionDirection != operation.direction) return null
+    val completionFormat = when (requestedCompletion) {
+        is ProjectTransferCompletion.Imported -> null
+        is ProjectTransferCompletion.Exported -> requestedCompletion.format
+        is ProjectTransferCompletion.Canceled -> requestedCompletion.format
+        is ProjectTransferCompletion.Failed -> requestedCompletion.format
+    }
+    if (
+        operation.direction == ProjectTransferDirection.EXPORT &&
+        completionFormat != operation.exportFormat
+    ) return null
     val successfulCompletion =
         requestedCompletion is ProjectTransferCompletion.Exported ||
             requestedCompletion is ProjectTransferCompletion.Imported
@@ -170,6 +190,7 @@ internal fun ProjectTransferState.withCompletedTransfer(
             operation.id,
             requestedCompletion.uri,
             operation.direction,
+            operation.exportFormat,
         )
     } else {
         requestedCompletion
@@ -1034,6 +1055,115 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         return true
     }
 
+    @Synchronized
+    fun exportThreeMf(
+        uri: Uri,
+        snapshot: ProjectSnapshot,
+        options: SliceOptions,
+    ): Boolean {
+        if (uri.scheme != ContentResolver.SCHEME_CONTENT || snapshot.objects.isEmpty()) return false
+        val operation = ActiveProjectTransfer(
+            id = ++nextOperationId,
+            direction = ProjectTransferDirection.EXPORT,
+            exportFormat = ProjectExportFormat.THREE_MF,
+        )
+        val started = mutableState.value.withStartedTransfer(operation) ?: return false
+        val cancellation = DocumentTransferCancellation()
+        activeProjectDocumentTransfer = ActiveProjectDocumentTransfer(operation, cancellation)
+        mutableState.value = started
+        viewModelScope.launch(Dispatchers.IO) {
+            val application = getApplication<Application>()
+            val stagingDirectory = File(
+                application.cacheDir,
+                "$THREE_MF_EXPORT_DIRECTORY_PREFIX${UUID.randomUUID()}",
+            )
+            val stagedOutput = File(stagingDirectory, THREE_MF_EXPORT_FILE_NAME)
+            val completion = try {
+                require(stagingDirectory.mkdir()) { "export_staging_unavailable" }
+                cancellation.throwIfRequested()
+                OnDeviceSlicer.exportThreeMf(
+                    objects = snapshot.objects,
+                    options = options,
+                    output = stagedOutput,
+                    requestId = operation.requestId,
+                    cancellationRequested = cancellation::wasRequested,
+                )
+                cancellation.throwIfRequested()
+                val descriptor = requireNotNull(
+                    application.contentResolver.openAssetFileDescriptor(
+                        uri,
+                        "wt",
+                        cancellation.providerSignal,
+                    ),
+                ) { "output_unavailable" }
+                descriptor.use {
+                    stagedOutput.inputStream().use { input ->
+                        descriptor.createOutputStream().use { output ->
+                            cancellation.attachInput(input)
+                            cancellation.attachOutput(output)
+                            try {
+                                copyThreeMfToDocument(input, output, cancellation::throwIfRequested)
+                                output.flush()
+                                cancellation.complete()
+                            } finally {
+                                cancellation.detachInput(input)
+                                cancellation.detachOutput(output)
+                            }
+                        }
+                    }
+                }
+                ProjectTransferCompletion.Exported(
+                    operation.id,
+                    uri,
+                    operation.exportFormat,
+                )
+            } catch (_: CancellationException) {
+                cancellation.cancel()
+                deleteFailedCreatedDocument(application, uri)
+                ProjectTransferCompletion.Canceled(
+                    operation.id,
+                    uri,
+                    operation.direction,
+                    operation.exportFormat,
+                )
+            } catch (failure: Exception) {
+                deleteFailedCreatedDocument(application, uri)
+                if (
+                    cancellation.wasRequested() || failure is DocumentTransferCancelledException ||
+                    failure is ProjectEditCancelledException || failure is SlicingCancelledException
+                ) {
+                    ProjectTransferCompletion.Canceled(
+                        operation.id,
+                        uri,
+                        operation.direction,
+                        operation.exportFormat,
+                    )
+                } else {
+                    ProjectTransferCompletion.Failed(
+                        operation.id,
+                        uri,
+                        operation.direction,
+                        operation.exportFormat,
+                    )
+                }
+            } finally {
+                stagingDirectory.deleteRecursively()
+                cancellation.close()
+                SlicerProcessClient.releaseProjectRequest(operation.requestId)
+            }
+            synchronized(this@ProjectTransferViewModel) {
+                if (activeProjectDocumentTransfer?.operation == operation) {
+                    activeProjectDocumentTransfer = null
+                }
+                val settled = mutableState.value.withCompletedTransfer(operation, completion)
+                    ?: return@synchronized
+                mutableState.value = settled
+                schedulePersistenceLocked(allowPendingCompletion = true)
+            }
+        }
+        return true
+    }
+
     fun cancelProjectExport(): Boolean {
         return cancelProjectTransfer(ProjectTransferDirection.EXPORT)
     }
@@ -1047,6 +1177,9 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             activeProjectDocumentTransfer?.takeIf { it.operation.direction == direction }
         } ?: return false
         if (!active.cancellation.cancel()) return false
+        if (active.operation.exportFormat == ProjectExportFormat.THREE_MF) {
+            SlicerProcessClient.cancelProjectRequestAsync(active.operation.requestId)
+        }
         synchronized(this) {
             mutableState.value.withTransferCancellationRequested(active.operation)
                 ?.let { canceling -> mutableState.value = canceling }
@@ -1297,6 +1430,11 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             )
         }
         cleanup.transfer?.cancellation?.cancel()
+        cleanup.transfer?.operation
+            ?.takeIf { it.exportFormat == ProjectExportFormat.THREE_MF }
+            ?.let { operation ->
+                SlicerProcessClient.cancelProjectRequestAsync(operation.requestId)
+            }
         cleanup.modelImport?.cancellation?.cancel()
         val pending = cleanup.pendingProject?.takeUnless {
             cleanup.transfer?.operation?.direction == ProjectTransferDirection.IMPORT &&
@@ -1318,6 +1456,25 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     private companion object {
         const val PROJECT_SAVE_DEBOUNCE_MILLIS = 400L
     }
+}
+
+private fun copyThreeMfToDocument(
+    input: java.io.InputStream,
+    output: java.io.OutputStream,
+    checkCancellation: () -> Unit,
+) {
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var total = 0L
+    while (true) {
+        checkCancellation()
+        val count = input.read(buffer)
+        if (count < 0) break
+        if (count == 0) continue
+        total += count
+        require(total <= 512L * 1024L * 1024L) { "3mf_export_too_large" }
+        output.write(buffer, 0, count)
+    }
+    require(total > 0L) { "3mf_export_empty" }
 }
 
 private fun ProjectTransferState.hasPersistableChanges(

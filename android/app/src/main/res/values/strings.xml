@@ -708,9 +708,13 @@
     <string name="cancel_project_import">Stop opening project</string>
     <string name="canceling_project_import">Stopping project open…</string>
     <string name="project_import_canceled">Project open stopped. Your current project was left unchanged.</string>
-    <string name="cancel_project_export">Stop saving project</string>
-    <string name="canceling_project_export">Stopping project save…</string>
+    <string name="cancel_project_export">Stop export</string>
+    <string name="canceling_project_export">Stopping export…</string>
     <string name="project_export_canceled">Project save stopped.</string>
+    <string name="export_model">Export model (.3MF)</string>
+    <string name="model_exported">Model exported.</string>
+    <string name="model_export_error">Couldn’t export the model.</string>
+    <string name="model_export_canceled">Model export stopped.</string>
     <string name="plate_number">Plate %1$d</string>
     <string name="add_plate">Add plate</string>
     <string name="remove_plate">Remove plate</string>

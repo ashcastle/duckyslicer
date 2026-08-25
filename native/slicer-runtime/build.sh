@@ -118,6 +118,9 @@ prepare_runtime_source() {
 
     # Normalize the generated worktree before applying the reviewed patch stack.
     # Reverse in the opposite order so repeated local builds stay reproducible.
+    if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/project-3mf.patch" 2>/dev/null; then
+        git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/project-3mf.patch"
+    fi
     if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/flush-multiplier.patch" 2>/dev/null; then
         git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/flush-multiplier.patch"
     fi
@@ -154,6 +157,9 @@ prepare_runtime_source() {
     git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/runtime.patch" 2>/dev/null || \
         die "reviewed runtime patch no longer applies"
     git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/runtime.patch"
+    git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/project-3mf.patch" 2>/dev/null || \
+        die "runtime project 3MF bridge contains unreviewed changes"
+    git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/project-3mf.patch"
     git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/profile-options.patch" 2>/dev/null || \
         die "runtime profile-option bridge contains unreviewed changes"
     git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/profile-options.patch"
@@ -183,21 +189,39 @@ prepare_runtime_source() {
     git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/flush-multiplier.patch"
 
     local engine_root="$SOURCE_ROOT/app/src/main/cpp/orcaslicer"
-    if git -C "$engine_root" apply --reverse --check "$SCRIPT_DIR/engine-nozzle-volume.patch" 2>/dev/null; then
-        git -C "$engine_root" apply --reverse "$SCRIPT_DIR/engine-nozzle-volume.patch"
+    local engine_patches=(
+        "$SCRIPT_DIR/engine-profile-options.patch"
+        "$SCRIPT_DIR/engine-nozzle-volume.patch"
+        "$SCRIPT_DIR/engine-branding.patch"
+    )
+    local engine_patches_applied=true
+    local engine_patch
+    for engine_patch in "${engine_patches[@]}"; do
+        if ! git -C "$engine_root" apply --reverse --check "$engine_patch" 2>/dev/null; then
+            engine_patches_applied=false
+            break
+        fi
+    done
+    if [ "$engine_patches_applied" = false ]; then
+        # Normalize only an incomplete patch stack. Reversing an already complete
+        # stack needlessly changes shared-header mtimes and rebuilds the full engine.
+        for ((index=${#engine_patches[@]} - 1; index >= 0; --index)); do
+            engine_patch="${engine_patches[index]}"
+            if git -C "$engine_root" apply --reverse --check "$engine_patch" 2>/dev/null; then
+                git -C "$engine_root" apply --reverse "$engine_patch"
+            fi
+        done
+        if ! git -C "$engine_root" diff --quiet; then
+            die "slicer engine patch stack contains unreviewed changes"
+        fi
+        for engine_patch in "${engine_patches[@]}"; do
+            git -C "$engine_root" apply --check "$engine_patch" 2>/dev/null || \
+                die "reviewed slicer engine patch no longer applies: $(basename "$engine_patch")"
+            git -C "$engine_root" apply "$engine_patch"
+        done
+    elif ! git -C "$engine_root" diff --check; then
+        die "applied slicer engine patch stack is malformed"
     fi
-    if git -C "$engine_root" apply --reverse --check "$SCRIPT_DIR/engine-profile-options.patch" 2>/dev/null; then
-        git -C "$engine_root" apply --reverse "$SCRIPT_DIR/engine-profile-options.patch"
-    fi
-    if ! git -C "$engine_root" diff --quiet; then
-        die "slicer engine profile-option bridge contains unreviewed changes"
-    fi
-    git -C "$engine_root" apply --check "$SCRIPT_DIR/engine-profile-options.patch" 2>/dev/null || \
-        die "reviewed slicer engine profile-option patch no longer applies"
-    git -C "$engine_root" apply "$SCRIPT_DIR/engine-profile-options.patch"
-    git -C "$engine_root" apply --check "$SCRIPT_DIR/engine-nozzle-volume.patch" 2>/dev/null || \
-        die "reviewed slicer engine nozzle-volume patch no longer applies"
-    git -C "$engine_root" apply "$SCRIPT_DIR/engine-nozzle-volume.patch"
 
     mkdir -p "$EXTERN_ROOT/openssl_stub/include/openssl"
     mkdir -p "$EXTERN_ROOT/libpng_stub/include"

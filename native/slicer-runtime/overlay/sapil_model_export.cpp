@@ -12,6 +12,7 @@
 
 #include "libslic3r/Model.hpp"
 #include "libslic3r/TriangleMesh.hpp"
+#include "libslic3r/Format/3mf.hpp"
 
 namespace sapil {
 Slic3r::Model& getGlobalModel();
@@ -33,6 +34,51 @@ constexpr int MAX_FILAMENT_SLOTS = 16;
 constexpr std::uint64_t MAX_EXPORTED_BYTES = 512ULL * 1024ULL * 1024ULL;
 constexpr std::uint64_t BINARY_STL_HEADER_BYTES = 84;
 constexpr std::uint64_t BINARY_STL_TRIANGLE_BYTES = 50;
+
+bool read_bounded_name(JNIEnv* env, jstring value, std::string& output)
+{
+    if (value == nullptr) return false;
+    const jsize length = env->GetStringLength(value);
+    const jchar* chars = env->GetStringChars(value, nullptr);
+    if (chars == nullptr) return false;
+    output.clear();
+    bool valid = true;
+    for (jsize index = 0; index < length && valid; ++index) {
+        std::uint32_t code_point = chars[index];
+        if (code_point >= 0xd800 && code_point <= 0xdbff) {
+            if (++index >= length || chars[index] < 0xdc00 || chars[index] > 0xdfff) {
+                valid = false;
+                break;
+            }
+            code_point = 0x10000 + ((code_point - 0xd800) << 10) + (chars[index] - 0xdc00);
+        } else if (code_point >= 0xdc00 && code_point <= 0xdfff) {
+            valid = false;
+            break;
+        }
+        if (code_point < 0x20 || (code_point >= 0x7f && code_point <= 0x9f)) {
+            valid = false;
+            break;
+        }
+        if (code_point <= 0x7f) {
+            output.push_back(static_cast<char>(code_point));
+        } else if (code_point <= 0x7ff) {
+            output.push_back(static_cast<char>(0xc0 | (code_point >> 6)));
+            output.push_back(static_cast<char>(0x80 | (code_point & 0x3f)));
+        } else if (code_point <= 0xffff) {
+            output.push_back(static_cast<char>(0xe0 | (code_point >> 12)));
+            output.push_back(static_cast<char>(0x80 | ((code_point >> 6) & 0x3f)));
+            output.push_back(static_cast<char>(0x80 | (code_point & 0x3f)));
+        } else {
+            output.push_back(static_cast<char>(0xf0 | (code_point >> 18)));
+            output.push_back(static_cast<char>(0x80 | ((code_point >> 12) & 0x3f)));
+            output.push_back(static_cast<char>(0x80 | ((code_point >> 6) & 0x3f)));
+            output.push_back(static_cast<char>(0x80 | (code_point & 0x3f)));
+        }
+        if (output.size() > 200) valid = false;
+    }
+    env->ReleaseStringChars(value, chars);
+    return valid && !output.empty();
+}
 
 struct ExportRecord {
     std::string path;
@@ -445,6 +491,75 @@ jobjectArray encode_project_records(
 }
 
 } // namespace
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_u1_slicer_NativeLibrary_nativeSetProjectObjectName(
+    JNIEnv* env,
+    jobject,
+    jint object_index,
+    jstring name)
+{
+    if (!sapil::isModelLoaded() || object_index < 0) return JNI_FALSE;
+    Slic3r::Model& model = sapil::getGlobalModel();
+    if (static_cast<std::size_t>(object_index) >= model.objects.size()) return JNI_FALSE;
+    Slic3r::ModelObject* object = model.objects[static_cast<std::size_t>(object_index)];
+    std::string decoded;
+    if (object == nullptr || !read_bounded_name(env, name, decoded)) return JNI_FALSE;
+    object->name = std::move(decoded);
+    return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_u1_slicer_NativeLibrary_nativeSetProjectVolumeName(
+    JNIEnv* env,
+    jobject,
+    jint object_index,
+    jint volume_index,
+    jstring name)
+{
+    if (!sapil::isModelLoaded() || object_index < 0 || volume_index < 0) return JNI_FALSE;
+    Slic3r::Model& model = sapil::getGlobalModel();
+    if (static_cast<std::size_t>(object_index) >= model.objects.size()) return JNI_FALSE;
+    Slic3r::ModelObject* object = model.objects[static_cast<std::size_t>(object_index)];
+    if (object == nullptr || static_cast<std::size_t>(volume_index) >= object->volumes.size()) {
+        return JNI_FALSE;
+    }
+    Slic3r::ModelVolume* volume = object->volumes[static_cast<std::size_t>(volume_index)];
+    std::string decoded;
+    if (volume == nullptr || !read_bounded_name(env, name, decoded)) return JNI_FALSE;
+    volume->name = std::move(decoded);
+    return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_u1_slicer_NativeLibrary_nativeExportLoadedProject3mf(
+    JNIEnv* env,
+    jobject,
+    jstring output_path)
+{
+    if (!sapil::isModelLoaded() || output_path == nullptr) return JNI_FALSE;
+    const char* path_chars = env->GetStringUTFChars(output_path, nullptr);
+    if (path_chars == nullptr) return JNI_FALSE;
+    const std::string path(path_chars);
+    env->ReleaseStringUTFChars(output_path, path_chars);
+    if (path.empty() || path.size() > 900 || path.size() < 4 ||
+        path.compare(path.size() - 4, 4, ".3mf") != 0) {
+        return JNI_FALSE;
+    }
+    std::remove(path.c_str());
+    try {
+        Slic3r::Model& model = sapil::getGlobalModel();
+        if (model.objects.empty() ||
+            !Slic3r::store_3mf(path.c_str(), &model, nullptr, false, nullptr, false)) {
+            std::remove(path.c_str());
+            return JNI_FALSE;
+        }
+        return JNI_TRUE;
+    } catch (...) {
+        std::remove(path.c_str());
+        return JNI_FALSE;
+    }
+}
 
 extern "C" JNIEXPORT jobjectArray JNICALL
 Java_com_u1_slicer_NativeLibrary_nativeExportLoadedObjects(

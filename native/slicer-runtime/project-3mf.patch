@@ -1,0 +1,76 @@
+diff --git a/app/src/main/cpp/CMakeLists.txt b/app/src/main/cpp/CMakeLists.txt
+--- a/app/src/main/cpp/CMakeLists.txt
++++ b/app/src/main/cpp/CMakeLists.txt
+@@ -536,8 +536,8 @@ endif()
+ # Generate version header
+ # =============================================================================
+ if(SLICER_BACKEND STREQUAL "orca")
+-    set(SLIC3R_APP_NAME "SnapmakerOrcaSlicer")
+-    set(SLIC3R_APP_KEY "SnapmakerOrcaSlicer")
++    set(SLIC3R_APP_NAME "DuckySlicer")
++    set(SLIC3R_APP_KEY "DuckySlicer")
+     set(SLIC3R_VERSION "2.2.4")
+     set(Snapmaker_VERSION "2.2.4")
+     set(SLIC3R_VERSION_FULL "2.2.4-sm-android")
+diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_model.cpp
+--- a/app/src/main/cpp/src/sapil_model.cpp
++++ b/app/src/main/cpp/src/sapil_model.cpp
+@@ -98,6 +98,39 @@ static int locateZipEntry(mz_zip_archive& zip, const char* exact_path)
+     return -1;
+ }
+ 
++static bool hasDuckySlicerApplication(const std::string& filepath)
++{
++    mz_zip_archive zip;
++    mz_zip_zero_struct(&zip);
++    if (!mz_zip_reader_init_file(&zip, filepath.c_str(), 0)) return false;
++    bool found = false;
++    const int model_index = locateZipEntry(zip, "3D/3dmodel.model");
++    if (model_index >= 0) {
++        mz_zip_reader_extract_iter_state* iterator =
++            mz_zip_reader_extract_iter_new(&zip, static_cast<mz_uint>(model_index), 0);
++        if (iterator != nullptr) {
++            std::string prefix;
++            prefix.reserve(64 * 1024);
++            char buffer[4096];
++            while (prefix.size() < 64 * 1024) {
++                const std::size_t remaining = 64 * 1024 - prefix.size();
++                const std::size_t count = mz_zip_reader_extract_iter_read(
++                    iterator, buffer, std::min(remaining, sizeof(buffer)));
++                if (count == 0) break;
++                prefix.append(buffer, count);
++                if (prefix.find("<metadata name=\"Application\">DuckySlicer-") != std::string::npos) {
++                    found = true;
++                    break;
++                }
++                if (prefix.find("<resources") != std::string::npos) break;
++            }
++            mz_zip_reader_extract_iter_free(iterator);
++        }
++    }
++    mz_zip_reader_end(&zip);
++    return found;
++}
++
+ static std::vector<std::vector<int>> parsePreviewExtrudersFromModelConfig(const std::string& xml)
+ {
+     std::vector<std::vector<int>> object_extruders;
+@@ -185,7 +218,17 @@ bool SlicerEngine::loadModel(const std::string& filepath, int plate_id) {
+             Slic3r::LoadStrategy::LoadModel |
+             Slic3r::LoadStrategy::LoadConfig |
+             Slic3r::LoadStrategy::AddDefaultInstances;
+-        if (ext == "3mf" && plate_id == 0) {
++        if (ext == "3mf" && plate_id == 0 && hasDuckySlicerApplication(filepath)) {
++            // DuckySlicer's generic writer stores volume boundaries and native
++            // facet annotations in Slic3r_PE_model.config. Select the matching
++            // reader only for archives written by this app; component-oriented
++            // 3MF files continue through the existing archive discriminator.
++            g_model = Slic3r::Model();
++            if (!Slic3r::load_3mf(
++                    filepath.c_str(), config, config_substitutions, &g_model, true)) return false;
++            g_model.add_default_instances();
++            g_is_bbl = false;
++        } else if (ext == "3mf" && plate_id == 0) {
+             // Use Orca's archive discriminator so Prusa/Slic3rPE projects retain
+             // their native facet annotations instead of being forced through the
+             // BBS attribute vocabulary. Plate-filtered loads remain BBS-specific.

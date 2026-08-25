@@ -61,6 +61,13 @@ class NativeLibrary(
     external fun nativeExportLoadedObjects(outputDirectory: String): Array<String>?
     external fun nativeGetUnsupportedProjectSemanticCount(): Int
     external fun nativeExportLoadedProjectVolumes(outputDirectory: String): Array<String>?
+    external fun nativeSetProjectObjectName(objectIndex: Int, name: String): Boolean
+    external fun nativeSetProjectVolumeName(
+        objectIndex: Int,
+        volumeIndex: Int,
+        name: String,
+    ): Boolean
+    external fun nativeExportLoadedProject3mf(outputPath: String): Boolean
     external fun nativeExportObjectVolumeRange(
         outputDirectory: String,
         objectIndex: Int,

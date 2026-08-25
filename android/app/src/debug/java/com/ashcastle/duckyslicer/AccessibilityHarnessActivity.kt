@@ -406,6 +406,7 @@ private fun WorkspaceAccessibilityHarness(
         onEditAuxiliaryVolume = {},
         onOpenProject = {},
         onSaveProject = {},
+        onExportModel = {},
         onPlateSelected = { selectedPlateId = it },
         onAddPlate = {
             if (projectPlates.size < MAX_PROJECT_PLATES) {
