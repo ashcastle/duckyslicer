@@ -396,6 +396,21 @@ internal class ProjectStore(
         pruneUnreferencedModels(referenced)
     }
 
+    @Synchronized
+    fun deleteModelsReferencedBy(snapshot: ProjectSnapshot) {
+        val modelRoot = modelsDirectory.canonicalFile
+        snapshot.allObjects
+            .asSequence()
+            .flatMap { it.volumes.asSequence() }
+            .mapNotNull { volume ->
+                runCatching { File(volume.model.localPath).canonicalFile }
+                    .getOrNull()
+                    ?.takeIf { it.parentFile == modelRoot }
+            }
+            .distinctBy(File::getPath)
+            .forEach(File::delete)
+    }
+
     private fun pruneUnreferencedModels(referenced: Set<File>) {
         val modelRoot = modelsDirectory.canonicalFile
         modelsDirectory.listFiles().orEmpty().forEach { candidate ->

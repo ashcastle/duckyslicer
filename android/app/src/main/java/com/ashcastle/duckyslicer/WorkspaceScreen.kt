@@ -504,6 +504,7 @@ internal fun WorkspaceScreen(
     onCreatePrimitive: (OrcaPrimitive, Float) -> Unit,
     onCreateAuxiliaryPrimitive: (OrcaAuxiliaryPrimitiveDraft) -> Unit,
     onEditAuxiliaryVolume: (OrcaAuxiliaryVolumeEditDraft) -> Unit,
+    onNewProject: () -> Unit,
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
     onExportModel: () -> Unit,
@@ -1077,6 +1078,9 @@ internal fun WorkspaceScreen(
 
                 WorkspaceTab.PROJECT -> ProjectSheet(
                     objects = projectObjects,
+                    hasProjectContent = projectPlates.size > 1 || projectPlates.any {
+                        it.objects.isNotEmpty()
+                    },
                     selectedObjectId = selectedObjectId,
                     outcome = sliceOutcome,
                     busy = importing || editingBusy,
@@ -1084,6 +1088,7 @@ internal fun WorkspaceScreen(
                     exporting = projectExporting,
                     cancellationRequested = projectTransferCancellationRequested,
                     onObjectSelected = onObjectSelected,
+                    onNewProject = onNewProject,
                     onOpenProject = onOpenProject,
                     onSaveProject = onSaveProject,
                     onCancelProjectImport = onCancelProjectImport,
@@ -6746,6 +6751,7 @@ internal fun PreviewControls(
 @Composable
 private fun ProjectSheet(
     objects: List<ProjectObject>,
+    hasProjectContent: Boolean,
     selectedObjectId: String?,
     outcome: SliceOutcome?,
     busy: Boolean,
@@ -6753,6 +6759,7 @@ private fun ProjectSheet(
     exporting: Boolean,
     cancellationRequested: Boolean,
     onObjectSelected: (String) -> Unit,
+    onNewProject: () -> Unit,
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
     onCancelProjectImport: () -> Unit,
@@ -6760,6 +6767,7 @@ private fun ProjectSheet(
     modifier: Modifier = Modifier,
 ) {
     var confirmReplacement by remember { mutableStateOf(false) }
+    var confirmNewProject by remember { mutableStateOf(false) }
     WorkspaceCard(modifier) {
         Text(
             stringResource(R.string.tab_project),
@@ -6792,6 +6800,19 @@ private fun ProjectSheet(
             if (outcome == null) stringResource(R.string.no_gcode) else stringResource(R.string.gcode_ready),
             color = if (outcome == null) Color(0xFFC8C9C2) else WorkspaceYellow,
         )
+        Button(
+            onClick = { confirmNewProject = true },
+            enabled = hasProjectContent && !busy && !importing && !exporting,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF454640),
+                contentColor = Color(0xFFF4F4EE),
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Default.AddBox, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.new_project))
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -6868,6 +6889,29 @@ private fun ProjectSheet(
                 onOpenProject()
             },
             onDismiss = { confirmReplacement = false },
+        )
+    }
+    if (confirmNewProject) {
+        AlertDialog(
+            onDismissRequest = { confirmNewProject = false },
+            title = { Text(stringResource(R.string.new_project_title)) },
+            text = { Text(stringResource(R.string.new_project_body)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmNewProject = false
+                        onNewProject()
+                    },
+                    colors = primaryButtonColors(),
+                ) {
+                    Text(stringResource(R.string.start_new_project))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmNewProject = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
         )
     }
 }

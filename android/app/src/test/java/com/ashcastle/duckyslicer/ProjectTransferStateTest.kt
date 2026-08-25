@@ -124,6 +124,47 @@ class ProjectTransferStateTest {
     }
 
     @Test
+    fun newProjectClearsEveryPlateAndHistoryButKeepsActiveProfiles() {
+        val original = history()
+        val secondPlate = original.addPlate("second-plate")
+        val secondOptions = SliceOptions().copy(fillDensity = 0.41f)
+        val state = ProjectTransferState(
+            history = secondPlate,
+            sliceOptions = secondOptions,
+            plateOptions = mapOf(
+                legacyProjectPlateId() to SliceOptions().copy(fillDensity = 0.18f),
+                "second-plate" to secondOptions,
+            ),
+            restored = true,
+            sessionRevision = 5,
+            persistedRevision = 5,
+        )
+
+        val updated = requireNotNull(state.withNewProject())
+
+        assertEquals(1, updated.history.current.plates.size)
+        assertTrue(updated.history.current.allObjects.isEmpty())
+        assertFalse(updated.history.canUndo)
+        assertFalse(updated.history.canRedo)
+        assertEquals(secondOptions, updated.sliceOptions)
+        assertEquals(
+            mapOf(updated.history.current.selectedPlateId to secondOptions),
+            updated.plateOptions,
+        )
+        assertEquals(6L, updated.sessionRevision)
+        assertEquals(5L, updated.persistedRevision)
+    }
+
+    @Test
+    fun newProjectRejectsUnsafeOrAlreadyEmptyTransitions() {
+        val empty = ProjectTransferState(restored = true)
+
+        assertNull(empty.withNewProject())
+        assertNull(empty.copy(restored = false).withNewProject())
+        assertNull(empty.copy(busy = true, history = history()).withNewProject())
+    }
+
+    @Test
     fun retainedEditAppliesOneMatchingBaselineAndAdvancesTheSessionOnce() {
         val history = history()
         val options = SliceOptions()

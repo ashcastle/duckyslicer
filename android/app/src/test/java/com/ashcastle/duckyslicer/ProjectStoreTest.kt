@@ -26,6 +26,30 @@ class ProjectStoreTest {
     }
 
     @Test
+    fun confirmedProjectResetDeletesOnlyItsPrivateModelFiles() = withStore { root, store ->
+        val removed = store.createModelDestination("removed.stl").apply { writeText("remove") }
+        val unrelated = store.createModelDestination("new-import.stl").apply { writeText("keep") }
+        val outside = File(root.parentFile, "outside-${root.name}.stl").apply { writeText("keep") }
+        val snapshot = ProjectSnapshot(
+            objects = listOf(
+                ProjectObject("removed", inspectedModel(removed)),
+                ProjectObject(
+                    "outside",
+                    inspectedModel(outside).copy(localPath = outside.canonicalPath),
+                ),
+            ),
+            selectedObjectId = "removed",
+        )
+
+        store.deleteModelsReferencedBy(snapshot)
+
+        assertFalse(removed.exists())
+        assertTrue(unrelated.isFile)
+        assertTrue(outside.isFile)
+        outside.delete()
+    }
+
+    @Test
     fun projectRoundTripsAndPrunesOnlyUnreferencedPrivateModels() = withStore { root, store ->
         val modelFile = store.createModelDestination("오리 모형.stl").apply { writeText("solid duck") }
         val orphan = store.createModelDestination("old.stl").apply { writeText("solid old") }

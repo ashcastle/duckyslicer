@@ -697,6 +697,11 @@
     <string name="profile_export_error">Couldn’t export profiles.</string>
     <string name="profile_save_error">Couldn’t save this profile.</string>
     <string name="project_save_error">Couldn’t save this project.</string>
+    <string name="new_project">New project</string>
+    <string name="new_project_title">Start a new project?</string>
+    <string name="new_project_body">All models and plates in the current project will be removed. Project files you already saved are not affected.</string>
+    <string name="start_new_project">Start new project</string>
+    <string name="new_project_started">New project started.</string>
     <string name="open_project">Open project</string>
     <string name="save_project">Save project</string>
     <string name="replace_project_title">Open another project?</string>

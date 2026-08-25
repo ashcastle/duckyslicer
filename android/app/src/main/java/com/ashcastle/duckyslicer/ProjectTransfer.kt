@@ -228,6 +228,21 @@ internal fun ProjectTransferState.withUpdatedSession(
     )
 }
 
+internal fun ProjectTransferState.withNewProject(): ProjectTransferState? {
+    if (!restored || busy || completion != null || editCompletion != null) return null
+    val nextHistory = ProjectHistoryState()
+    val nextPlateOptions = mapOf(nextHistory.current.selectedPlateId to sliceOptions)
+    if (history == nextHistory && plateOptions == nextPlateOptions) return null
+    return copy(
+        history = nextHistory,
+        plateOptions = nextPlateOptions,
+        persistenceMessage = ProjectPersistenceMessage.STORAGE_UNAVAILABLE.takeIf {
+            persistenceBlocked
+        },
+        sessionRevision = sessionRevision + 1,
+    )
+}
+
 internal fun ProjectTransferState.withStartedEdit(
     operation: ActiveProjectEdit,
 ): ProjectTransferState? {
@@ -395,6 +410,18 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         expectedOptions = expectedOptions,
         nextOptions = nextOptions,
     )
+
+    @Synchronized
+    fun newProject(): Boolean {
+        val previous = mutableState.value
+        val updated = previous.withNewProject() ?: return false
+        mutableState.value = updated
+        schedulePersistenceLocked(
+            delayMillis = 0L,
+            obsoleteModelsAfterSave = previous.history.current,
+        )
+        return true
+    }
 
     @Synchronized
     fun autoLaySelectedModel(): Boolean {
@@ -1358,6 +1385,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     private fun schedulePersistenceLocked(
         allowPendingCompletion: Boolean = false,
         delayMillis: Long = PROJECT_SAVE_DEBOUNCE_MILLIS,
+        obsoleteModelsAfterSave: ProjectSnapshot? = null,
     ) {
         persistenceJob?.cancel()
         val expectedRevision = mutableState.value.sessionRevision
@@ -1376,6 +1404,9 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             val failure = try {
                 withContext(Dispatchers.IO) {
                     projectStore.save(document.history.current, document.plateOptions)
+                    if (obsoleteModelsAfterSave != null) {
+                        runCatching { projectStore.deleteModelsReferencedBy(obsoleteModelsAfterSave) }
+                    }
                 }
                 null
             } catch (cancellation: CancellationException) {

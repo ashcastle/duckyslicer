@@ -404,6 +404,10 @@ private fun WorkspaceAccessibilityHarness(
         onCreatePrimitive = { _, _ -> },
         onCreateAuxiliaryPrimitive = {},
         onEditAuxiliaryVolume = {},
+        onNewProject = {
+            projectPlates = listOf(ProjectPlate("accessibility-plate-new"))
+            selectedPlateId = projectPlates.single().id
+        },
         onOpenProject = {},
         onSaveProject = {},
         onExportModel = {},

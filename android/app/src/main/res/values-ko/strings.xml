@@ -697,6 +697,11 @@
     <string name="profile_export_error">프로필을 내보내지 못했습니다.</string>
     <string name="profile_save_error">이 프로필을 저장하지 못했습니다.</string>
     <string name="project_save_error">이 프로젝트를 저장하지 못했습니다.</string>
+    <string name="new_project">새 프로젝트</string>
+    <string name="new_project_title">새 프로젝트를 시작할까요?</string>
+    <string name="new_project_body">현재 프로젝트의 모든 모델과 플레이트가 제거됩니다. 이미 저장한 프로젝트 파일은 그대로 유지됩니다.</string>
+    <string name="start_new_project">새 프로젝트 시작</string>
+    <string name="new_project_started">새 프로젝트를 시작했습니다.</string>
     <string name="open_project">프로젝트 열기</string>
     <string name="save_project">프로젝트 저장</string>
     <string name="replace_project_title">다른 프로젝트를 열까요?</string>

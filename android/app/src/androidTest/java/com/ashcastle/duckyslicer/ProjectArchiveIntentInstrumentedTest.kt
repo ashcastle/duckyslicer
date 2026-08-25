@@ -13,6 +13,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -21,6 +22,53 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ProjectArchiveIntentInstrumentedTest {
+    @Test
+    fun newProjectPersistsAnEmptyWorkspaceAndKeepsTheActiveProfiles() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val owner = ViewModelStore()
+        projectRoot.deleteRecursively()
+        try {
+            seedCurrentProject("reset-object", "reset-object.stl")
+            val application = context.applicationContext as Application
+            val model = ViewModelProvider(
+                owner,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[ProjectTransferViewModel::class.java]
+            waitForSession(model, "reset-object")
+            val initial = model.state.value
+            val installedModel = File(
+                requireNotNull(initial.history.current.selectedObject).model.localPath,
+            )
+            val retainedOptions = initial.sliceOptions.copy(fillDensity = 0.39f)
+            assertTrue(
+                model.updateSession(
+                    initial.history,
+                    initial.history,
+                    initial.sliceOptions,
+                    retainedOptions,
+                ),
+            )
+
+            assertTrue(model.newProject())
+            val cleared = model.state.value
+            assertEquals(1, cleared.history.current.plates.size)
+            assertTrue(cleared.history.current.allObjects.isEmpty())
+            assertFalse(cleared.history.canUndo)
+            assertEquals(retainedOptions, cleared.sliceOptions)
+            waitForPersistence(model, cleared.sessionRevision)
+
+            assertFalse(installedModel.exists())
+            val restored = ProjectStore(context).loadProject()
+            assertTrue(restored.snapshot.allObjects.isEmpty())
+            assertEquals(1, restored.snapshot.plates.size)
+            assertEquals(retainedOptions.fillDensity, restored.activeSliceOptions.fillDensity)
+        } finally {
+            owner.clear()
+            projectRoot.deleteRecursively()
+        }
+    }
+
     @Test
     fun clearingRetainedOwnerFlushesProjectBeforeDebounce() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -398,6 +446,16 @@ class ProjectArchiveIntentInstrumentedTest {
             SystemClock.sleep(WAIT_POLL_MILLIS)
         }
         throw AssertionError("Timed out waiting for retained project session: $objectId")
+    }
+
+    private fun waitForPersistence(model: ProjectTransferViewModel, revision: Long) {
+        val deadline = SystemClock.elapsedRealtime() + WAIT_TIMEOUT_MILLIS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val state = model.state.value
+            if (state.persistedRevision >= revision) return
+            SystemClock.sleep(WAIT_POLL_MILLIS)
+        }
+        throw AssertionError("Timed out waiting for project persistence revision $revision")
     }
 
     private fun waitForPersistedSession(

@@ -387,6 +387,7 @@ private fun DuckySlicerScreen(
     val profileExportError = stringResource(R.string.profile_export_error)
     val filamentSlotUnavailable = stringResource(R.string.filament_slot_unavailable)
     val projectSaveError = stringResource(R.string.project_save_error)
+    val newProjectStartedNotice = stringResource(R.string.new_project_started)
     val projectOpenedNotice = stringResource(R.string.project_opened)
     val projectSavedNotice = stringResource(R.string.project_saved)
     val projectOpenError = stringResource(R.string.project_open_error)
@@ -1405,6 +1406,13 @@ private fun DuckySlicerScreen(
         onCreatePrimitive = ::addPrimitive,
         onCreateAuxiliaryPrimitive = ::addAuxiliaryPrimitive,
         onEditAuxiliaryVolume = ::editAuxiliaryVolume,
+        onNewProject = {
+            if (projectTransferModel.newProject()) {
+                clearAllCompletedSlices()
+                notice = newProjectStartedNotice
+                error = null
+            }
+        },
         onOpenProject = {
             projectOpenPicker.launch(
                 arrayOf(PROJECT_ARCHIVE_MIME_TYPE, "application/zip"),
