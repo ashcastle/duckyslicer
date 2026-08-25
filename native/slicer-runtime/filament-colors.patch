@@ -1,0 +1,74 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+index a00f139a..8e39fabc 100644
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -369,6 +369,7 @@ struct SliceConfig {
+     float filament_diameter = 1.75f;
+     std::string filament_type = "PLA";
+     std::vector<std::string> filament_types; // per-extruder material types; empty = use filament_type
++    std::vector<int> filament_colors; // per-extruder 24-bit RGB values
+ 
+     // Multi-extruder (up to 4 for Snapmaker U1)
+     int extruder_count = 1;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+index 65df7a38..79fb7d3b 100644
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -399,6 +399,7 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.filament_diameter = getFloat("filamentDiameter");
+     config.filament_type = getString("filamentType");
+     config.filament_types = getStringArray("filamentTypes");
++    config.filament_colors = getIntArray("filamentColors");
+ 
+     // Multi-extruder
+     config.extruder_count = getInt("extruderCount");
+@@ -1023,6 +1024,7 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setFloat("filamentDiameter", config.filament_diameter);
+     setString("filamentType", config.filament_type);
+     setStringArray("filamentTypes", config.filament_types);
++    setIntArray("filamentColors", config.filament_colors);
+ 
+     // Multi-extruder
+     setInt("extruderCount", config.extruder_count);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+index 05e4ad98..628c5527 100644
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -1038,7 +1038,8 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     dpc.set_key_value("nozzle_diameter", new Slic3r::ConfigOptionFloats(nozzle_diameters));
+     dpc.set_key_value("filament_diameter", new Slic3r::ConfigOptionFloats(filament_diameters));
+ 
+-    // Filament colour — MUST be sized to at least n_ext.
++    // Filament colour — MUST be sized to at least n_ext. Project slot colors
++    // override physical entries while embedded SEMM virtual colors are retained.
+     // multi_material_segmentation_by_painting() uses filament_colour.size()+1 as
+     // num_facets_states to dimension per-layer arrays.  Default is a single entry,
+     // so with 2+ extruders the segmentation function creates arrays too small for
+@@ -1048,10 +1049,24 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     // when it was already set by the embedded profile.
+     {
+         auto* fc = dpc.option<Slic3r::ConfigOptionStrings>("filament_colour");
+-        int current_fc_size = (fc ? (int)fc->values.size() : 0);
+-        if (current_fc_size < n_ext) {
+-            dpc.set_key_value("filament_colour", new Slic3r::ConfigOptionStrings(std::vector<std::string>(n_ext, "#FFFFFF")));
++        std::vector<std::string> colors = fc ? fc->values : std::vector<std::string>{};
++        colors.resize(std::max<int>(n_ext, colors.size()), "#FFFFFF");
++        const char hex[] = "0123456789ABCDEF";
++        for (int index = 0;
++             index < std::min<int>(n_ext, config.filament_colors.size());
++             ++index) {
++            const int rgb = config.filament_colors[index];
++            if (rgb < 0 || rgb > 0xFFFFFF) {
++                throw std::invalid_argument("Invalid filament color");
++            }
++            std::string value(7, '0');
++            value[0] = '#';
++            for (int nibble = 0; nibble < 6; ++nibble) {
++                value[nibble + 1] = hex[(rgb >> ((5 - nibble) * 4)) & 0x0F];
++            }
++            colors[index] = std::move(value);
+         }
++        dpc.set_key_value("filament_colour", new Slic3r::ConfigOptionStrings(std::move(colors)));
+     }
+ 
+     // Flush volumes matrix — NxN where N = effective extruder count.

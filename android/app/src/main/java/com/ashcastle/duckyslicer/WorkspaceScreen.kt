@@ -257,15 +257,22 @@ internal fun shouldUseDepthTestedPreview(
 ): Boolean = renderingMode == PreviewRenderingMode.DEPTH_TESTED &&
     deviceSupported && runtimeAvailable
 
-internal fun filamentSlotColor(slot: Int): Color =
-    Color(
-        0xFF000000.toInt() or DefaultFilamentPreviewColors[
-            Math.floorMod(slot, DefaultFilamentPreviewColors.size)
-        ],
+internal fun filamentSlotColor(
+    slot: Int,
+    filamentColors: List<Int> = DefaultFilamentColors,
+): Color {
+    val colors = filamentColors.ifEmpty { DefaultFilamentColors }
+    return Color(
+        0xFF000000.toInt() or colors[Math.floorMod(slot, colors.size)],
     )
+}
 
-internal fun projectVolumeColor(role: ProjectVolumeRole, filamentSlot: Int): Color = when (role) {
-    ProjectVolumeRole.MODEL_PART -> filamentSlotColor(filamentSlot)
+internal fun projectVolumeColor(
+    role: ProjectVolumeRole,
+    filamentSlot: Int,
+    filamentColors: List<Int> = DefaultFilamentColors,
+): Color = when (role) {
+    ProjectVolumeRole.MODEL_PART -> filamentSlotColor(filamentSlot, filamentColors)
     ProjectVolumeRole.NEGATIVE_VOLUME -> Color(0xFFFF7043)
     ProjectVolumeRole.PARAMETER_MODIFIER -> Color(0xFF42C6D7)
     ProjectVolumeRole.SUPPORT_BLOCKER -> Color(0xFFEF5350)
@@ -569,6 +576,7 @@ internal fun WorkspaceScreen(
     val stringResourceBrimPlacementHint = stringResource(R.string.brim_point_invalid)
     val selectedSingleVolume = selectedObject?.singleVolumeOrNull
     val availableFilaments = sliceOptions.resolvedFilamentSlots()
+    val filamentColors = sliceOptions.previewFilamentColors()
     val modelDimensions = (selectedObject ?: projectObjects.firstOrNull())?.geometry()?.let {
         listOf(it.maxX - it.minX, it.maxY - it.minY, it.maxZ - it.minZ)
     }
@@ -702,6 +710,7 @@ internal fun WorkspaceScreen(
                     projectObjects = projectObjects,
                     selectedObjectId = selectedObjectId,
                     preview = if (selectedTab == WorkspaceTab.PREVIEW) layerPreview else null,
+                    filamentColors = filamentColors,
                     bedSizeX = sliceOptions.bedSizeX,
                     bedSizeY = sliceOptions.bedSizeY,
                     maxPrintHeight = sliceOptions.maxPrintHeight,
@@ -939,6 +948,7 @@ internal fun WorkspaceScreen(
             if (selectedObject != null && selectedTab == WorkspaceTab.SLICE && multiColorPainting) {
                 MultiColorPaintPalette(
                     filaments = availableFilaments,
+                    filamentColors = filamentColors,
                     selectedSlot = multiColorPaintSlot,
                     onSlotSelected = { multiColorPaintSlot = it },
                     brushRadiusDp = facetBrushRadiusDp,
@@ -1063,6 +1073,7 @@ internal fun WorkspaceScreen(
                     },
                     visibleToolpathRoles = visibleToolpathRoles,
                     previewColorMode = previewColorMode,
+                    filamentColors = filamentColors,
                     onPreviewColorModeChanged = { mode -> previewColorModeName = mode.name },
                     onToolpathRoleVisibilityChanged = { role, visible ->
                         visibleToolpathRoles = if (visible) {
@@ -1177,6 +1188,7 @@ internal fun WorkspaceScreen(
         ModelTransformSheet(
             transform = modelTransform,
             filamentSlot = selectedFilamentSlot,
+            filamentColor = filamentColors[selectedFilamentSlot],
             filamentProfile = filamentSlots.getOrElse(selectedFilamentSlot) {
                 filamentSlots.first()
             },
@@ -2181,6 +2193,7 @@ internal fun SplitPartsSheet(
 private fun ModelTransformSheet(
     transform: ModelTransform,
     filamentSlot: Int,
+    filamentColor: Int,
     filamentProfile: FilamentProfile,
     bedSizeX: Float,
     bedSizeY: Float,
@@ -2460,7 +2473,7 @@ private fun ModelTransformSheet(
                 Surface(
                     modifier = Modifier.size(18.dp),
                     shape = RoundedCornerShape(50),
-                    color = filamentSlotColor(filamentSlot),
+                    color = filamentSlotColor(0, listOf(filamentColor)),
                 ) {}
                 Spacer(Modifier.width(8.dp))
                 Text(
@@ -3681,6 +3694,7 @@ private fun BedScene(
     projectObjects: List<ProjectObject>,
     selectedObjectId: String?,
     preview: GcodeLayerPreview?,
+    filamentColors: List<Int>,
     bedSizeX: Float,
     bedSizeY: Float,
     maxPrintHeight: Float,
@@ -3754,7 +3768,7 @@ private fun BedScene(
             depthContrast = toolpathDepthContrast,
             visibleRoles = visibleToolpathRoles,
             colorMode = previewColorMode,
-            filamentColors = DefaultFilamentPreviewColors,
+            filamentColors = filamentColors,
             // Keep the Automatic request intact so the GLES renderer can promote its
             // settled geometry from Performance to Balanced/Detail using measured work.
             detail = previewDetail,
@@ -3909,6 +3923,7 @@ private fun BedScene(
         prepareOverlayTopology,
         layOnFaceObjectId,
         layOnFaceCandidateFacets,
+        filamentColors,
     ) {
         mutableStateOf<List<PrepareModelOverlayData>>(emptyList())
     }
@@ -3916,6 +3931,7 @@ private fun BedScene(
         prepareOverlayTopology,
         layOnFaceObjectId,
         layOnFaceCandidateFacets,
+        filamentColors,
         prepareDerivedCacheLifecycle,
     ) {
         if (prepareDerivedCacheLifecycle.suspended) {
@@ -3928,6 +3944,7 @@ private fun BedScene(
                 projectObjects = snapshot,
                 layOnFaceObjectId = layOnFaceObjectId,
                 layOnFaceCandidateFacets = layOnFaceCandidateFacets,
+                filamentColors = filamentColors,
             )
         }
     }
@@ -4038,6 +4055,7 @@ private fun BedScene(
         if (useDepthTestedPrepare) {
             DepthTestedPrepareModelScene(
                 projectObjects = projectObjects,
+                filamentColors = filamentColors,
                 placements = modelPlacements,
                 selectedObjectId = selectedObjectId,
                 bedSizeX = bedSizeX,
@@ -5015,7 +5033,7 @@ private fun BedScene(
                         val bucket = role * GcodeLayerPreview.MAX_TOOL_COUNT + tool
                         val path = bandPaths[bucket] ?: return@repeat
                         val baseColor = if (previewColorMode == PreviewColorMode.FILAMENT) {
-                            filamentSlotColor(tool)
+                            filamentSlotColor(tool, filamentColors)
                         } else {
                             style.color
                         }
@@ -5220,7 +5238,11 @@ private fun BedScene(
                         path,
                         lerp(
                             Color(0xFF11130F),
-                            projectVolumeColor(bucket.volumeRole, bucket.filamentSlot),
+                            projectVolumeColor(
+                                bucket.volumeRole,
+                                bucket.filamentSlot,
+                                filamentColors,
+                            ),
                             light.coerceIn(0f, 1f),
                         )
                             .copy(
@@ -6162,6 +6184,7 @@ private fun SeamPaintPalette(
 @Composable
 private fun MultiColorPaintPalette(
     filaments: List<FilamentProfile>,
+    filamentColors: List<Int>,
     selectedSlot: Int?,
     onSlotSelected: (Int?) -> Unit,
     brushRadiusDp: Float,
@@ -6204,7 +6227,7 @@ private fun MultiColorPaintPalette(
                         },
                         colors = ButtonDefaults.textButtonColors(
                             containerColor = if (selectedSlot == index) {
-                                filamentSlotColor(index).copy(alpha = 0.35f)
+                                filamentSlotColor(index, filamentColors).copy(alpha = 0.35f)
                             } else {
                                 Color.Transparent
                             },
@@ -6213,7 +6236,7 @@ private fun MultiColorPaintPalette(
                     ) {
                         Surface(
                             modifier = Modifier.size(14.dp),
-                            color = filamentSlotColor(index),
+                            color = filamentSlotColor(index, filamentColors),
                             shape = RoundedCornerShape(50),
                         ) {}
                         Spacer(Modifier.width(6.dp))
@@ -6560,6 +6583,7 @@ private fun PreviewSheet(
     onToolpathDepthContrastChanged: (Float) -> Unit,
     visibleToolpathRoles: Set<Int>,
     previewColorMode: PreviewColorMode,
+    filamentColors: List<Int>,
     onPreviewColorModeChanged: (PreviewColorMode) -> Unit,
     onToolpathRoleVisibilityChanged: (Int, Boolean) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
@@ -6623,6 +6647,7 @@ private fun PreviewSheet(
                     if (preview != null) {
                         PreviewControls(
                             preview = preview,
+                            filamentColors = filamentColors,
                             toolpathOpacity = toolpathOpacity,
                             onToolpathOpacityChanged = onToolpathOpacityChanged,
                             toolpathDepthContrast = toolpathDepthContrast,
@@ -6722,6 +6747,7 @@ private fun PreviewSummaryHeader(
 @OptIn(ExperimentalMaterial3Api::class)
 internal fun PreviewControls(
     preview: GcodeLayerPreview,
+    filamentColors: List<Int> = DefaultFilamentColors,
     toolpathOpacity: Float,
     onToolpathOpacityChanged: (Float) -> Unit,
     toolpathDepthContrast: Float,
@@ -6950,7 +6976,7 @@ internal fun PreviewControls(
                             ) {
                                 Surface(
                                     modifier = Modifier.size(width = 18.dp, height = 6.dp),
-                                    color = filamentSlotColor(tool),
+                                    color = filamentSlotColor(tool, filamentColors),
                                     shape = RoundedCornerShape(50),
                                 ) {}
                                 Spacer(Modifier.width(7.dp))

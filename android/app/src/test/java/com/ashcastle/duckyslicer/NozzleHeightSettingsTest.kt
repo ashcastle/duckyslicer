@@ -26,7 +26,7 @@ class NozzleHeightSettingsTest {
         assertEquals(4.76f, restoredPrinter.nozzleHeight)
 
         val project = SliceOptions().selectPrinter(printer).toProjectJson()
-        assertEquals(98, project.getInt("formatVersion"))
+        assertEquals(99, project.getInt("formatVersion"))
         val restored = requireNotNull(project.toProjectSliceOptionsOrNull())
         assertEquals(4.76f, restored.printerProfile.nozzleHeight)
         assertEquals(4.76f, restored.toNativeConfig().nozzleHeight)

@@ -133,8 +133,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "PrepareModelPreviewView.kt": (
             "PrepareModelTopologyKey( filamentSlot = volume.filamentSlot "
-            "withModelPreparationContext PrepareModelSceneBuilder.build(\n                    projectObjects, "
-            "PrepareModelSceneBuilder.build(\n                    emptyList() "
+            "withModelPreparationContext PrepareModelSceneBuilder.build( "
+            "projectObjects = projectObjects, projectObjects = emptyList(), "
+            "filamentColors = filamentColors, "
             "overlays.takeIf { sceneLoad.complete }.orEmpty() "
             "overlays: List<PrepareModelOverlayData> overlay.customVertices buffers.vertices "
             "customVertices.size / PREPARE_VERTEX_FLOATS "

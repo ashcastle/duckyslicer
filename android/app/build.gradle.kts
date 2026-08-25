@@ -82,6 +82,7 @@ val buildSlicerRuntime = tasks.register<Exec>("buildSlicerRuntime") {
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/nozzle-volume.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/prime-tower-chamfer.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/flush-multiplier.patch"))
+    inputs.file(repositoryRoot.resolve("native/slicer-runtime/filament-colors.patch"))
     inputs.dir(repositoryRoot.resolve("native/slicer-runtime/overlay"))
     inputs.file(repositoryRoot.resolve(".gitmodules"))
     inputs.property("androidNdkVersion", "28.2.13676358")

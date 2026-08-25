@@ -1364,6 +1364,7 @@ data class SliceOptions(
     val printerProfile: PrinterProfile = PrinterProfile.U1_04,
     val filamentProfile: FilamentProfile = FilamentProfile.PLA,
     val filamentSlots: List<FilamentProfile> = listOf(filamentProfile),
+    val filamentColors: List<Int> = defaultFilamentColors(filamentSlots.size.coerceAtLeast(1)),
     val quality: QualityProfile = QualityProfile.STANDARD,
     val bedSizeX: Float = printerProfile.bedSizeX,
     val bedSizeY: Float = printerProfile.bedSizeY,
@@ -1655,9 +1656,11 @@ data class SliceOptions(
     fun selectPrinter(profile: PrinterProfile): SliceOptions {
         val nozzleMatches = abs(quality.nozzleDiameter - profile.nozzleDiameter) < 0.05f
         val retainedFilaments = resolvedFilamentSlots().take(profile.extruderCount.coerceAtLeast(1))
+        val retainedColors = resolvedFilamentColors().take(retainedFilaments.size)
         val updated = copy(
             printerProfile = profile,
             filamentSlots = retainedFilaments,
+            filamentColors = retainedColors,
             bedSizeX = profile.bedSizeX,
             bedSizeY = profile.bedSizeY,
             bedOriginX = profile.bedOriginX,
@@ -1784,6 +1787,20 @@ data class SliceOptions(
         .take(printerProfile.extruderCount.coerceIn(1, MAX_FILAMENT_SLOTS))
         .ifEmpty { listOf(filamentProfile) }
 
+    fun resolvedFilamentColors(): List<Int> = filamentColors.resolvedFilamentColors(
+        resolvedFilamentSlots().size,
+    )
+
+    fun previewFilamentColors(): List<Int> = resolvedFilamentColors().previewFilamentColors()
+
+    fun updateFilamentColor(index: Int, color: Int): SliceOptions {
+        require(index in resolvedFilamentSlots().indices) { "Filament slot is unavailable" }
+        require(color in MIN_FILAMENT_RGB..MAX_FILAMENT_RGB) { "Filament color is invalid" }
+        return copy(
+            filamentColors = resolvedFilamentColors().toMutableList().apply { this[index] = color },
+        )
+    }
+
     fun updateFilamentSlot(index: Int, profile: FilamentProfile): SliceOptions {
         require(index in resolvedFilamentSlots().indices) { "Filament slot is unavailable" }
         if (index == 0) return selectFilament(profile)
@@ -1805,7 +1822,10 @@ data class SliceOptions(
             "Filament slots must use the same diameter"
         }
         return FilamentSlotAssignment(
-            options = copy(filamentSlots = current + profile)
+            options = copy(
+                filamentSlots = current + profile,
+                filamentColors = resolvedFilamentColors() + defaultFilamentColor(current.size),
+            )
                 .boundedToFilamentSlots(current.size + 1),
             slot = current.size,
         )
@@ -1819,19 +1839,26 @@ data class SliceOptions(
         require(profile.hasCompatibleDiameter(filamentProfile)) {
             "Filament slots must use the same diameter"
         }
-        return copy(filamentSlots = current + profile)
+        return copy(
+            filamentSlots = current + profile,
+            filamentColors = resolvedFilamentColors() + defaultFilamentColor(current.size),
+        )
             .boundedToFilamentSlots(current.size + 1)
     }
 
     fun removeLastFilamentSlot(): SliceOptions {
         val current = resolvedFilamentSlots()
         require(current.size > 1) { "The primary filament slot cannot be removed" }
-        return copy(filamentSlots = current.dropLast(1)).boundedToFilamentSlots(current.size - 1)
+        return copy(
+            filamentSlots = current.dropLast(1),
+            filamentColors = resolvedFilamentColors().dropLast(1),
+        ).boundedToFilamentSlots(current.size - 1)
     }
 
     private fun boundedToFilamentSlots(slotCount: Int): SliceOptions {
         val maximum = slotCount.coerceIn(1, MAX_FILAMENT_SLOTS)
         return copy(
+            filamentColors = resolvedFilamentColors().take(maximum),
             supportFilament = supportFilament.coerceIn(0, maximum),
             supportInterfaceFilament = supportInterfaceFilament.coerceIn(0, maximum),
             featureFilaments = featureFilaments.boundedTo(maximum),
@@ -2349,6 +2376,7 @@ data class SliceOptions(
             filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
+            native.filamentColors = resolvedFilamentColors().toIntArray()
             native.firstLayerTravelAcceleration = firstLayerTravelAcceleration
             native.firstLayerTravelAccelerationPercent = firstLayerTravelAccelerationPercent
             native.supportFlowRatio = supportFlowRatio

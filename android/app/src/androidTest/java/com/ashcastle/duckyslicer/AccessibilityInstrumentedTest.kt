@@ -643,6 +643,41 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    @Suppress("DEPRECATION")
+    fun filamentProfileExposesAProjectColorPickerAndStickyApplyActions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val filamentProfile = context.getString(R.string.filament_profile)
+        val filamentColor = context.getString(R.string.filament_color)
+        val toolColor = context.getString(R.string.filament_color_for_tool, 1)
+        val firstColor = context.getString(R.string.filament_color_option, 1)
+        val secondColor = context.getString(R.string.filament_color_option, 2)
+        val revert = context.getString(R.string.revert_changes)
+        val apply = context.getString(R.string.apply_changes)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
+            tapCenter(waitForNode(filamentProfile) { it.isClickable })
+            val picker = scrollUntilClickable(filamentColor)
+            assertTrue("Filament color must be editable from the active slot profile", picker.isFocusable)
+            tapCenter(picker)
+
+            val pickerNodes = waitForNodes(setOf(toolColor, firstColor, secondColor))
+            assertTrue(pickerNodes.any { it.isHeading && it.effectiveLabel().contains(toolColor) })
+            assertTrue(
+                "The current project color must expose its selected state",
+                pickerNodes.any {
+                    it.isCheckable && it.isChecked &&
+                        it.effectiveLabel().contains(firstColor)
+                },
+            )
+            val alternative = pickerNodes.first { it.isClickable && it.effectiveLabel() == secondColor }
+            assertTrue(alternative.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+
+            val actions = waitForNodes(setOf(revert, apply))
+            assertTrue(actions.any { it.isClickable && it.effectiveLabel() == revert })
+            assertTrue(actions.any { it.isClickable && it.effectiveLabel() == apply })
+        }
+    }
+
+    @Test
     fun multiMaterialSupportUsesNamedFilamentPickersInsteadOfNumericSliders() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val slicingProfile = context.getString(R.string.slicing_profile)
@@ -823,19 +858,11 @@ class AccessibilityInstrumentedTest {
             )
             assertTrue(stageButton.performAction(AccessibilityNodeInfo.ACTION_CLICK))
 
-            val dirtyNodes = waitForNodes(setOf(revert, apply))
-            val revertButton = dirtyNodes.firstOrNull {
-                it.isClickable && it.effectiveLabel().contains(revert)
-            }
-            val applyButton = dirtyNodes.firstOrNull {
-                it.isClickable && it.effectiveLabel().contains(apply)
-            }
-            assertNotNull("A staged range must expose Revert", revertButton)
-            assertNotNull("A staged range must expose Apply", applyButton)
+            val revertButton = waitForNode(revert) { it.isClickable }
+            val applyButton = waitForNode(apply) { it.isClickable }
             assertTrue(
                 "Apply must retain the requested 70/30 visual priority",
-                checkNotNull(applyButton).screenBounds().width() >
-                    checkNotNull(revertButton).screenBounds().width() * 2,
+                applyButton.screenBounds().width() > revertButton.screenBounds().width() * 2,
             )
         }
     }

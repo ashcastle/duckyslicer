@@ -168,6 +168,7 @@ class SliceOptionsPersistenceTest {
             .selectBuildPlate(BuildPlateType.TEXTURED_PEI)
             .copy(
                 filamentSlots = listOf(primary, secondary),
+                filamentColors = listOf(0x123456, 0xABCDEF),
                 supportFilament = 1,
                 supportInterfaceFilament = 2,
                 featureFilaments = FeatureFilamentSettings(
@@ -254,6 +255,8 @@ class SliceOptionsPersistenceTest {
         val native = restored.toNativeConfig()
 
         assertEquals(listOf(primary.id, secondary.id), restored.resolvedFilamentSlots().map { it.id })
+        assertEquals(listOf(0x123456, 0xABCDEF), restored.resolvedFilamentColors())
+        assertEquals(listOf(0x123456, 0xABCDEF), native.filamentColors.toList())
         assertNull(restored.filamentProfile.retractLength)
         assertNull(restored.filamentProfile.zHopType)
         assertEquals(2, native.extruderCount)
@@ -540,6 +543,46 @@ class SliceOptionsPersistenceTest {
         )
         assertEquals(listOf(2.85f, 2.85f), updated.resolvedFilamentSlots().map { it.diameter })
         assertEquals(2.85f, updated.filamentDiameter)
+    }
+
+    @Test
+    fun filamentColorsFollowSlotLifecycleAndLegacyProjectsReceiveStableDefaults() {
+        val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(extruderCount = 3)
+        val base = SliceOptions().selectPrinter(printer)
+        val expanded = base
+            .addFilamentSlot(FilamentProfile.PETG)
+            .updateFilamentColor(0, 0x102030)
+            .updateFilamentColor(1, 0xA0B0C0)
+
+        assertEquals(listOf(0x102030, 0xA0B0C0), expanded.resolvedFilamentColors())
+        assertEquals(
+            listOf(0x102030, 0xA0B0C0, defaultFilamentColor(2)),
+            expanded.addFilamentSlot(FilamentProfile.ABS).resolvedFilamentColors(),
+        )
+        assertEquals(
+            listOf(0x102030),
+            expanded.removeLastFilamentSlot().resolvedFilamentColors(),
+        )
+
+        val legacy = expanded.toProjectJson().apply {
+            put("formatVersion", 98)
+            remove("filamentColors")
+        }
+        assertEquals(
+            defaultFilamentColors(2),
+            requireNotNull(legacy.toProjectSliceOptionsOrNull()).resolvedFilamentColors(),
+        )
+    }
+
+    @Test
+    fun invalidPersistedOrRuntimeFilamentColorsAreRejected() {
+        val stored = restoredSettingsFixture().toProjectJson().apply {
+            put("filamentColors", org.json.JSONArray().put(MAX_FILAMENT_RGB + 1))
+        }
+        assertNull(stored.toProjectSliceOptionsOrNull())
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            SliceOptions().copy(filamentColors = listOf(-1)).toNativeConfig()
+        }
     }
 
     @Test
@@ -1220,7 +1263,7 @@ class SliceOptionsPersistenceTest {
         assertNull(unsafe.toProjectSliceOptionsOrNull())
 
         val unknown = JSONObject(restoredSettingsFixture().toProjectJson().toString())
-            .put("formatVersion", 99)
+            .put("formatVersion", 100)
         assertNull(unknown.toProjectSliceOptionsOrNull())
     }
 

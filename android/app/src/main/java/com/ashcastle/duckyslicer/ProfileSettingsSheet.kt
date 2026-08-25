@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -1788,6 +1789,13 @@ private fun FilamentSettingsSheet(
                 )
             }
         }
+        FilamentColorSetting(
+            slot = selectedSlot,
+            color = options.resolvedFilamentColors()[selectedSlot],
+            onSelected = { color ->
+                onOptionsChanged(options.updateFilamentColor(selectedSlot, color))
+            },
+        )
         if (slots.size < options.printerProfile.extruderCount.coerceIn(1, MAX_FILAMENT_SLOTS)) {
             OutlinedButton(
                 onClick = {
@@ -2967,6 +2975,119 @@ private fun FilamentSettingsSheet(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun FilamentColorSetting(
+    slot: Int,
+    color: Int,
+    onSelected: (Int) -> Unit,
+) {
+    val label = stringResource(R.string.filament_color)
+    if (!settingMatchesQuery(label)) return
+    var pickerOpen by remember { mutableStateOf(false) }
+    Surface(
+        onClick = { pickerOpen = true },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+        color = Color.Transparent,
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                modifier = Modifier.size(28.dp),
+                color = Color(0xFF000000.toInt() or color),
+                shape = MaterialTheme.shapes.extraLarge,
+            ) {}
+            Column(
+                modifier = Modifier.weight(1f).padding(start = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(label, fontWeight = FontWeight.SemiBold)
+                Text(
+                    stringResource(R.string.filament_color_for_tool, slot + 1),
+                    color = Color(0xFFC8C9C2),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null)
+        }
+    }
+    if (pickerOpen) {
+        ModalBottomSheet(
+            onDismissRequest = { pickerOpen = false },
+            containerColor = Color(0xFF282925),
+            contentColor = Color(0xFFF4F4EE),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    stringResource(R.string.filament_color_for_tool, slot + 1),
+                    modifier = Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                (listOf(color) + DefaultFilamentColors)
+                    .distinct()
+                    .chunked(4)
+                    .forEach { rowColors ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            rowColors.forEach { choice ->
+                                val selectedChoice = choice == color
+                                val optionNumber = DefaultFilamentColors.indexOf(choice)
+                                    .takeIf { it >= 0 }
+                                    ?.plus(1)
+                                    ?: 1
+                                val optionLabel = stringResource(
+                                    R.string.filament_color_option,
+                                    optionNumber,
+                                )
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(58.dp)
+                                        .selectable(
+                                            selected = selectedChoice,
+                                            role = Role.RadioButton,
+                                            onClick = {
+                                                onSelected(choice)
+                                                pickerOpen = false
+                                            },
+                                        )
+                                        .semantics {
+                                            contentDescription = optionLabel
+                                        },
+                                    color = Color(0xFF000000.toInt() or choice),
+                                    shape = MaterialTheme.shapes.large,
+                                    tonalElevation = if (selectedChoice) 8.dp else 0.dp,
+                                ) {
+                                    if (selectedChoice) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().height(58.dp),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text("✓", color = Color.Black, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                            repeat(4 - rowColors.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SlicingSettingsSheet(
     options: SliceOptions,
     profiles: List<QualityProfile>,
@@ -3947,6 +4068,7 @@ private fun SlicingSettingsSheet(
                         FilamentSlotSetting(
                             label = stringResource(R.string.sparse_infill_filament),
                             filaments = options.resolvedFilamentSlots(),
+                            filamentColors = options.previewFilamentColors(),
                             selectedSlot = options.featureFilaments.sparseInfillFilament,
                             onSelected = {
                                 onOptionsChanged(
@@ -5390,6 +5512,7 @@ private fun SlicingSettingsSheet(
                     FilamentSlotSetting(
                         label = stringResource(R.string.support_filament),
                         filaments = options.resolvedFilamentSlots(),
+                        filamentColors = options.previewFilamentColors(),
                         selectedSlot = options.supportFilament,
                         defaultLabel = stringResource(R.string.filament_default),
                         onSelected = {
@@ -5403,6 +5526,7 @@ private fun SlicingSettingsSheet(
                         FilamentSlotSetting(
                             label = stringResource(R.string.support_interface_filament),
                             filaments = options.resolvedFilamentSlots(),
+                            filamentColors = options.previewFilamentColors(),
                             selectedSlot = options.supportInterfaceFilament,
                             defaultLabel = stringResource(R.string.filament_default),
                             onSelected = {
@@ -6296,6 +6420,7 @@ private fun SlicingSettingsSheet(
                         SettingsGroupTitle(stringResource(R.string.filament_changes))
                         DirectionalPurgeSetting(
                             filaments = options.resolvedFilamentSlots(),
+                            filamentColors = options.previewFilamentColors(),
                             multiMaterial = options.multiMaterial,
                             onChanged = {
                                 onOptionsChanged(options.copy(multiMaterial = it))
@@ -6306,6 +6431,7 @@ private fun SlicingSettingsSheet(
                     FilamentSlotSetting(
                         label = stringResource(R.string.wall_filament),
                         filaments = options.resolvedFilamentSlots(),
+                        filamentColors = options.previewFilamentColors(),
                         selectedSlot = options.featureFilaments.wallFilament,
                         onSelected = {
                             onOptionsChanged(
@@ -6320,6 +6446,7 @@ private fun SlicingSettingsSheet(
                     FilamentSlotSetting(
                         label = stringResource(R.string.solid_infill_filament),
                         filaments = options.resolvedFilamentSlots(),
+                        filamentColors = options.previewFilamentColors(),
                         selectedSlot = options.featureFilaments.solidInfillFilament,
                         onSelected = {
                             onOptionsChanged(
@@ -6334,6 +6461,7 @@ private fun SlicingSettingsSheet(
                     FilamentSlotSetting(
                         label = stringResource(R.string.wipe_tower_filament),
                         filaments = options.resolvedFilamentSlots(),
+                        filamentColors = options.previewFilamentColors(),
                         selectedSlot = options.featureFilaments.wipeTowerFilament,
                         defaultLabel = stringResource(R.string.filament_automatic),
                         onSelected = {
@@ -7879,6 +8007,7 @@ private fun <T> SettingChoices(
 @Composable
 private fun DirectionalPurgeSetting(
     filaments: List<FilamentProfile>,
+    filamentColors: List<Int>,
     multiMaterial: MultiMaterialSettings,
     onChanged: (MultiMaterialSettings) -> Unit,
 ) {
@@ -7904,6 +8033,7 @@ private fun DirectionalPurgeSetting(
         FilamentSlotSetting(
             label = fromLabel,
             filaments = filaments,
+            filamentColors = filamentColors,
             selectedSlot = fromSlot,
             onSelected = { selected ->
                 fromSlot = selected
@@ -7913,6 +8043,7 @@ private fun DirectionalPurgeSetting(
         FilamentSlotSetting(
             label = toLabel,
             filaments = filaments,
+            filamentColors = filamentColors,
             selectedSlot = toSlot,
             onSelected = { selected ->
                 toSlot = selected
@@ -7944,6 +8075,7 @@ private fun DirectionalPurgeSetting(
 private fun FilamentSlotSetting(
     label: String,
     filaments: List<FilamentProfile>,
+    filamentColors: List<Int> = DefaultFilamentColors,
     selectedSlot: Int,
     defaultLabel: String? = null,
     onSelected: (Int) -> Unit,
@@ -7970,7 +8102,7 @@ private fun FilamentSlotSetting(
             if (boundedSlot > 0) {
                 Surface(
                     modifier = Modifier.size(14.dp),
-                    color = filamentSlotColor(boundedSlot - 1),
+                    color = filamentSlotColor(boundedSlot - 1, filamentColors),
                     shape = MaterialTheme.shapes.extraSmall,
                 ) {}
             }
@@ -8025,7 +8157,7 @@ private fun FilamentSlotSetting(
                             slot,
                             profileLabel(filament),
                         ),
-                        color = filamentSlotColor(index),
+                        color = filamentSlotColor(index, filamentColors),
                         selected = boundedSlot == slot,
                         onClick = {
                             onSelected(slot)

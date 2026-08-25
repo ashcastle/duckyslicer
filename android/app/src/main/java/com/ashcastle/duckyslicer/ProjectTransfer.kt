@@ -322,6 +322,8 @@ internal fun SliceOptions.withMinimumFilamentSlots(requiredCount: Int): SliceOpt
     if (current.size >= targetCount) return this
     return copy(
         filamentSlots = current + List(targetCount - current.size) { filamentProfile },
+        filamentColors = resolvedFilamentColors() +
+            List(targetCount - current.size) { offset -> defaultFilamentColor(current.size + offset) },
     )
 }
 

@@ -26,7 +26,7 @@ class ToolpathNativePackingInstrumentedTest {
             maxZMm = 0.2f,
             opacity = 1f,
             depthContrast = 0.5f,
-            filamentColors = DefaultFilamentPreviewColors.toIntArray(),
+            filamentColors = DefaultFilamentColors.toIntArray(),
             colorByFilament = false,
             reverseForEarlyZ = false,
             renderAsLines = false,

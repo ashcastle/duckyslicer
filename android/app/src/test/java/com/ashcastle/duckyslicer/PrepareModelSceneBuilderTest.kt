@@ -44,9 +44,11 @@ class PrepareModelSceneBuilderTest {
             bedSizeY = 80f,
             requestedBedPolygon = rectangularBedPolygon(100f, 80f),
             requestedBedExcludeArea = listOf(0f, 0f, 18f, 0f, 18f, 28f, 0f, 28f),
+            filamentColors = listOf(0x112233, 0x445566, 0x778899, 0xAABBCC),
         )
 
         assertEquals(1, scene.meshes.size)
+        assertEquals(listOf(0x112233, 0x445566, 0x778899, 0xAABBCC), scene.filamentColors)
         val mesh = scene.meshes.single()
         assertEquals("object", mesh.objectId)
         assertEquals(3, mesh.filamentSlot)

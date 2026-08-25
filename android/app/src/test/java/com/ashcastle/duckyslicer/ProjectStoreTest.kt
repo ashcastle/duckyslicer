@@ -250,6 +250,7 @@ class ProjectStoreTest {
             listOf("M117 PRIMARY_END", "M117 SECONDARY_END"),
             restored.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::filamentEndGcode),
         )
+        assertEquals(listOf(0x2255AA, 0xEE8844), restored.sliceOptions?.resolvedFilamentColors())
         assertEquals(
             listOf(2.85f, 2.85f),
             restored.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::diameter),
@@ -638,5 +639,8 @@ internal fun multiFilamentSettingsFixture(): SliceOptions {
         internalBridgeFanSpeed = -1,
         supportInterfaceFanSpeed = 65,
     )
-    return options.copy(filamentSlots = listOf(options.filamentProfile, secondary))
+    return options.copy(
+        filamentSlots = listOf(options.filamentProfile, secondary),
+        filamentColors = listOf(0x2255AA, 0xEE8844),
+    )
 }

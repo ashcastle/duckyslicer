@@ -252,6 +252,7 @@ class ProjectArchiveTest {
                 listOf("M117 PRIMARY_END", "M117 SECONDARY_END"),
                 imported.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::filamentEndGcode),
             )
+            assertEquals(listOf(0x2255AA, 0xEE8844), imported.sliceOptions?.resolvedFilamentColors())
             assertEquals(
                 listOf(2.85f, 2.85f),
                 imported.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::diameter),

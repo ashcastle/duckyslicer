@@ -953,6 +953,9 @@
     <string name="filament_slots_summary">%1$d of %2$d filament slots</string>
     <string name="add_filament_slot">Add filament slot</string>
     <string name="remove_filament_slot">Remove T%1$d</string>
+    <string name="filament_color">Filament color</string>
+    <string name="filament_color_for_tool">T%1$d color</string>
+    <string name="filament_color_option">Color %1$d</string>
     <string name="object_filament">Object filament</string>
     <string name="filament_tool_summary">T%1$d · %2$s</string>
     <string name="filament_slot_unavailable">No filament slot is available for this printer.</string>

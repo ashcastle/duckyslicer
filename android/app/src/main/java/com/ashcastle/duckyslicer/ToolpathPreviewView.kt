@@ -36,25 +36,6 @@ internal enum class PreviewColorMode {
     FILAMENT,
 }
 
-internal val DefaultFilamentPreviewColors: List<Int> = listOf(
-    0xF6C945,
-    0x44D7FF,
-    0xFF62D0,
-    0x5EE6A8,
-    0xFF6B6B,
-    0xA78BFA,
-    0xFF9F43,
-    0xE7E7E2,
-    0x78D6C6,
-    0xE99873,
-    0x8FB8FF,
-    0xD6A6E8,
-    0xA8D477,
-    0xFFB86B,
-    0xB8B8B2,
-    0xFFFFFF,
-)
-
 private inline fun <T> traced(name: String, block: () -> T): T {
     Trace.beginSection(name)
     return try {
@@ -187,7 +168,7 @@ internal class ToolpathSurfaceView(
         depthContrast: Float,
         visibleRoles: Set<Int>,
         colorMode: PreviewColorMode = PreviewColorMode.FEATURE,
-        filamentColors: List<Int> = DefaultFilamentPreviewColors,
+        filamentColors: List<Int> = DefaultFilamentColors,
         detail: PreviewDetail,
     ) {
         updateSettledSurfaceDetail(
@@ -489,7 +470,7 @@ internal data class ToolpathScene(
     val detail: PreviewDetail,
     val visibleRoles: Set<Int> = (0 until GcodeLayerPreview.ROLE_COUNT).toSet(),
     val colorMode: PreviewColorMode = PreviewColorMode.FEATURE,
-    val filamentColors: List<Int> = DefaultFilamentPreviewColors,
+    val filamentColors: List<Int> = DefaultFilamentColors,
     val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
     val bedExcludeArea: List<Float> = listOf(0f, 0f),
     val bedOriginX: Float = 0f,

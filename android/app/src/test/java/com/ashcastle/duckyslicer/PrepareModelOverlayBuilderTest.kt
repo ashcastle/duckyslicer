@@ -86,6 +86,27 @@ class PrepareModelOverlayBuilderTest {
         assertEquals(null, overriddenOverlay.customVertices)
     }
 
+    @Test
+    fun multiColorOverlayUsesProjectFilamentColors() {
+        val customColors = DefaultFilamentColors.toMutableList().apply {
+            this[0] = 0x102030
+            this[1] = 0xA0B0C0
+        }
+        val overlays = PrepareModelOverlayBuilder.build(
+            projectObjects = listOf(objectWithExactMultiColor("841")),
+            layOnFaceObjectId = null,
+            layOnFaceCandidateFacets = emptyMap(),
+            filamentColors = customColors,
+        )
+
+        assertEquals(0x10 / 255f, overlays[0].fillColor.red, 0.0001f)
+        assertEquals(0x20 / 255f, overlays[0].fillColor.green, 0.0001f)
+        assertEquals(0x30 / 255f, overlays[0].fillColor.blue, 0.0001f)
+        assertEquals(0xA0 / 255f, overlays[1].fillColor.red, 0.0001f)
+        assertEquals(0xB0 / 255f, overlays[1].fillColor.green, 0.0001f)
+        assertEquals(0xC0 / 255f, overlays[1].fillColor.blue, 0.0001f)
+    }
+
     private fun objectWithExactMultiColor(value: String): ProjectObject {
         val model = ModelInfo(
             fileName = "exact.stl",

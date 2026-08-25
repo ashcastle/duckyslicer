@@ -31,7 +31,9 @@ internal object PrepareModelOverlayBuilder {
         projectObjects: List<ProjectObject>,
         layOnFaceObjectId: String?,
         layOnFaceCandidateFacets: Map<String, BooleanArray>,
+        filamentColors: List<Int> = DefaultFilamentColors,
     ): List<PrepareModelOverlayData> {
+        val resolvedColors = filamentColors.previewFilamentColors()
         if (
             layOnFaceObjectId == null && projectObjects.none { projectObject ->
                 projectObject.volumes.any { volume ->
@@ -63,7 +65,10 @@ internal object PrepareModelOverlayBuilder {
                         trianglesByStyle.add(PrepareOverlayStyle.LayOnFace, previewTriangleIndex)
                     }
                     volume.multiColorPaint.facets[sourceFacetIndex]?.let { slot ->
-                        trianglesByStyle.add(PrepareOverlayStyle.MultiColor(slot), previewTriangleIndex)
+                        trianglesByStyle.add(
+                            PrepareOverlayStyle.MultiColor(slot, resolvedColors[slot]),
+                            previewTriangleIndex,
+                        )
                     }
                     if (sourceFacetIndex !in volume.multiColorPaint.facets) {
                         volume.orcaFacetAnnotations.multiColor.triangles[sourceFacetIndex]?.let { value ->
@@ -71,7 +76,12 @@ internal object PrepareModelOverlayBuilder {
                                 value = value,
                                 styleForState = { state ->
                                     state.takeIf { it > 0 }
-                                        ?.let { PrepareOverlayStyle.MultiColor(it - 1) }
+                                        ?.let { slot ->
+                                            PrepareOverlayStyle.MultiColor(
+                                                slot - 1,
+                                                resolvedColors[slot - 1],
+                                            )
+                                        }
                                 },
                                 previewTriangles = volume.model.previewTriangles,
                                 previewTriangleIndex = previewTriangleIndex,
@@ -259,8 +269,8 @@ private sealed class PrepareOverlayStyle(
         lineColor = color(0xF6, 0xC9, 0x45, 0.86f),
     )
 
-    data class MultiColor(val slot: Int) : PrepareOverlayStyle(
-        fillColor = filamentColor(slot, 0.94f),
+    data class MultiColor(val slot: Int, val rgb: Int) : PrepareOverlayStyle(
+        fillColor = filamentColor(rgb, 0.94f),
         lineColor = color(0x00, 0x00, 0x00, 0.62f),
     )
 
@@ -285,10 +295,13 @@ private sealed class PrepareOverlayStyle(
     )
 
     companion object {
-        private fun filamentColor(slot: Int, alpha: Float): PrepareOverlayColor {
-            val color = filamentSlotColor(slot)
-            return PrepareOverlayColor(color.red, color.green, color.blue, alpha)
-        }
+        private fun filamentColor(rgb: Int, alpha: Float): PrepareOverlayColor =
+            PrepareOverlayColor(
+                red = ((rgb shr 16) and 0xFF) / 255f,
+                green = ((rgb shr 8) and 0xFF) / 255f,
+                blue = (rgb and 0xFF) / 255f,
+                alpha = alpha,
+            )
 
         private fun color(
             red: Int,

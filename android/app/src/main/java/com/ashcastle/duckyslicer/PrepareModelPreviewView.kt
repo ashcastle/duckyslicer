@@ -42,6 +42,7 @@ import kotlin.math.sqrt
 @Composable
 internal fun DepthTestedPrepareModelScene(
     projectObjects: List<ProjectObject>,
+    filamentColors: List<Int>,
     placements: Map<String, PrepareObjectPlacement>,
     selectedObjectId: String?,
     bedSizeX: Float,
@@ -72,30 +73,39 @@ internal fun DepthTestedPrepareModelScene(
             )
         }
     }
-    var sceneLoad by remember(topology, bedSizeX, bedSizeY, bedPolygon, bedExcludeArea) {
+    var sceneLoad by remember(
+        topology,
+        filamentColors,
+        bedSizeX,
+        bedSizeY,
+        bedPolygon,
+        bedExcludeArea,
+    ) {
         mutableStateOf(
             PrepareModelSceneLoad(
                 geometry = PrepareModelSceneBuilder.build(
-                    emptyList(),
-                    bedSizeX,
-                    bedSizeY,
-                    bedPolygon,
-                    bedExcludeArea,
+                    projectObjects = emptyList(),
+                    bedSizeX = bedSizeX,
+                    bedSizeY = bedSizeY,
+                    requestedBedPolygon = bedPolygon,
+                    requestedBedExcludeArea = bedExcludeArea,
+                    filamentColors = filamentColors,
                 ),
                 complete = projectObjects.isEmpty(),
                 detailNormalsReady = projectObjects.isEmpty(),
             ),
         )
     }
-    LaunchedEffect(topology, bedSizeX, bedSizeY, bedPolygon, bedExcludeArea) {
+    LaunchedEffect(topology, filamentColors, bedSizeX, bedSizeY, bedPolygon, bedExcludeArea) {
         if (projectObjects.isNotEmpty()) {
             val geometry = withModelPreparationContext {
                 val positions = PrepareModelSceneBuilder.build(
-                    projectObjects,
-                    bedSizeX,
-                    bedSizeY,
-                    bedPolygon,
-                    bedExcludeArea,
+                    projectObjects = projectObjects,
+                    bedSizeX = bedSizeX,
+                    bedSizeY = bedSizeY,
+                    requestedBedPolygon = bedPolygon,
+                    requestedBedExcludeArea = bedExcludeArea,
+                    filamentColors = filamentColors,
                 )
                 positions.withPrecomputedPrepareInteractionNormals { ensureActive() }
             }
@@ -235,6 +245,7 @@ internal data class PrepareModelSceneGeometry(
     val bedOutline: FloatArray,
     val bedExcludeOutline: FloatArray,
     val meshes: List<PrepareModelMeshData>,
+    val filamentColors: List<Int> = DefaultFilamentColors,
     val normalUploadCache: PrepareModelNormalUploadCache =
         PrepareModelNormalUploadCache.empty(),
 ) {
@@ -439,8 +450,8 @@ private fun boundedPrepareDetailMeshes(
     }
 }
 
-private fun prepareVolumeColor(mesh: PrepareModelMeshData) =
-    projectVolumeColor(mesh.role, mesh.filamentSlot)
+private fun prepareVolumeColor(mesh: PrepareModelMeshData, filamentColors: List<Int>) =
+    projectVolumeColor(mesh.role, mesh.filamentSlot, filamentColors)
 
 internal object PrepareModelSceneBuilder {
     fun build(
@@ -449,6 +460,7 @@ internal object PrepareModelSceneBuilder {
         bedSizeY: Float,
         requestedBedPolygon: List<Float>,
         requestedBedExcludeArea: List<Float> = listOf(0f, 0f),
+        filamentColors: List<Int> = DefaultFilamentColors,
         additionalDetailBudgetBytes: Long = MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES,
         lowDetailBudgetBytes: Long = MAX_PREPARE_LOW_DETAIL_GPU_BYTES,
     ): PrepareModelSceneGeometry {
@@ -528,6 +540,7 @@ internal object PrepareModelSceneBuilder {
         val lowMeshes = boundedPrepareLowMeshes(rawMeshes, lowDetailBudgetBytes)
         val meshes = boundedPrepareDetailMeshes(lowMeshes, additionalDetailBudgetBytes)
         return PrepareModelSceneGeometry(
+            filamentColors = filamentColors,
             bedSizeX = bedSizeX,
             bedSizeY = bedSizeY,
             bedFill = bedFill.toFloatArray(),
@@ -1512,7 +1525,7 @@ internal class PrepareModelRenderer(
             val mesh = frame.geometry.meshes[index]
             val objectState = frame.objects[mesh.objectId] ?: return@forEach
             applyObject(objectState, mesh.sourceCenter, frame.geometry)
-            val color = prepareVolumeColor(mesh)
+            val color = prepareVolumeColor(mesh, frame.geometry.filamentColors)
             GLES30.glUniform1i(
                 selectedLocation,
                 if (mesh.objectId == frame.selectedObjectId) 1 else 0,

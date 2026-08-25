@@ -3986,6 +3986,46 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun projectFilamentColorsReachOrcaGcodeWithoutLosingToolGeometry() {
+        val leftFile = interlockingVolumeModel("color-left", -20f, 0f)
+        val rightFile = interlockingVolumeModel("color-right", 0f, 20f)
+        val left = inspectModel(leftFile.absolutePath)
+        val right = inspectModel(rightFile.absolutePath)
+        val projectObject = ProjectObject(
+            id = "filament-color-object",
+            volumes = listOf(
+                ProjectVolume("filament-color-left", left, filamentSlot = 0),
+                ProjectVolume("filament-color-right", right, filamentSlot = 1),
+            ),
+        )
+        val options = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN.copy(extruderCount = 2))
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                filamentColors = listOf(0x123456, 0xABCDEF),
+                wipeTowerEnabled = false,
+            )
+        val outcome = OnDeviceSlicer.slice(listOf(projectObject), options)
+        try {
+            val gcode = outcome.output.readText()
+            val colorHeader = gcode.lineSequence()
+                .firstOrNull { it.startsWith("; filament_colour =") }
+                ?.replace(" ", "")
+            val preview = loadGcodePreview(outcome.output.absolutePath, 0, Int.MAX_VALUE)
+
+            assertEquals(";filament_colour=#123456;#ABCDEF", colorHeader)
+            assertTrue(preview.toolSegmentCounts[0] > 0)
+            assertTrue(preview.toolSegmentCounts[1] > 0)
+        } finally {
+            outcome.output.delete()
+            leftFile.delete()
+            rightFile.delete()
+        }
+    }
+
+    @Test
     fun filamentCutLongRetractionControlsRealToolChangeGcode() {
         val left = inspectModel(interlockingVolumeModel("cut-retraction-left", -20f, 0f).absolutePath)
         val right = inspectModel(interlockingVolumeModel("cut-retraction-right", 0f, 20f).absolutePath)

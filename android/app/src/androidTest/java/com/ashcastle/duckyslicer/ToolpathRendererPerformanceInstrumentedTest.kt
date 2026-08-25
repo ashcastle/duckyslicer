@@ -179,7 +179,7 @@ class ToolpathRendererPerformanceInstrumentedTest {
         val pathStride = 1
         return FloatArray(headerFloats + preview.segments.size + layerCount * pathStride).also { raw ->
             raw[0] = 17_491f
-            raw[1] = 2f
+            raw[1] = 3f
             raw[2] = preview.startLayer.toFloat()
             raw[3] = preview.endLayer.toFloat()
             raw[4] = preview.layerCount.toFloat()

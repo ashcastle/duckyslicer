@@ -277,6 +277,7 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
     val filaments = resolvedFilamentSlots().mapIndexed { index, profile ->
         if (index == 0) filament else profile
     }
+    val colors = resolvedFilamentColors()
     require(
         filaments.size in 1..printer.extruderCount.coerceIn(1, MAX_FILAMENT_SLOTS) &&
             filaments.all(ProfileValidation::filament) &&
@@ -291,6 +292,7 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         .put("filamentSlots", JSONArray().also { values ->
             filaments.forEach { values.put(it.toProfileJson()) }
         })
+        .put("filamentColors", JSONArray(colors))
         .put("slicing", slicing.toProfileJson())
 }
 
@@ -307,6 +309,17 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
             requireNotNull(values.getJSONObject(index).toFilamentProfileOrNull())
         }
     } ?: listOf(storedFilament)
+    val storedColors = if (formatVersion >= 99) {
+        val values = getJSONArray("filamentColors")
+        require(values.length() == storedFilaments.size)
+        List(values.length()) { index ->
+            values.getInt(index).also { color ->
+                require(color in MIN_FILAMENT_RGB..MAX_FILAMENT_RGB)
+            }
+        }
+    } else {
+        defaultFilamentColors(storedFilaments.size)
+    }
     val slicing = requireNotNull(getJSONObject("slicing").toQualityProfileOrNull())
     val filamentDiameter = getDouble("filamentDiameter").toFloat()
     val buildPlateType = if (formatVersion >= 61) {
@@ -344,13 +357,14 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
         printerProfile = printer,
         filamentProfile = filament,
         filamentSlots = filaments,
+        filamentColors = storedColors,
         quality = slicing,
         filamentDiameter = filamentDiameter,
         buildPlate = BuildPlateSettings.fromProfile(filament, buildPlateType),
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 98
+private const val SLICE_OPTIONS_FORMAT_VERSION = 99
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f
