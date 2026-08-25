@@ -1,6 +1,9 @@
 package com.ashcastle.duckyslicer
 
+import java.util.concurrent.CancellationException
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.sqrt
@@ -84,6 +87,50 @@ class PrepareSmoothNormalTest {
 
         assertEquals(vertices.size, buildPackedPrepareSmoothNormals(vertices).size)
         assertEquals(vertices.size.toLong() * 5L, prepareMeshGpuBytes(vertices))
+    }
+
+    @Test
+    fun backgroundCacheReleasesPackedNormalsAfterGpuHandoff() {
+        val vertices = floatArrayOf(
+            0f, 0f, 0f,
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+        )
+        val cache = PrepareModelNormalUploadCache.precompute(
+            listOf(
+                PrepareModelMeshData(
+                    objectId = "object",
+                    volumeId = "volume",
+                    filamentSlot = 0,
+                    role = ProjectVolumeRole.MODEL_PART,
+                    sourceCenter = FloatArray(3),
+                    vertices = vertices,
+                ),
+            ),
+        )
+
+        assertEquals(1, cache.pendingTopologyCountForTest())
+        assertEquals(vertices.size.toLong(), cache.pendingBytesForTest())
+        val precomputed = cache.take(vertices)
+        assertEquals(0, cache.pendingTopologyCountForTest())
+        assertEquals(0L, cache.pendingBytesForTest())
+        assertEquals(0, cache.fallbackGenerationCountForTest())
+
+        assertArrayEquals(precomputed, cache.take(vertices))
+        assertEquals(1, cache.fallbackGenerationCountForTest())
+    }
+
+    @Test
+    fun denseNormalGenerationObservesBackgroundCancellation() {
+        var checks = 0
+
+        assertThrows(CancellationException::class.java) {
+            buildPackedPrepareSmoothNormals(FloatArray(9 * 8_192)) {
+                checks += 1
+                if (checks == 3) throw CancellationException("replaced model")
+            }
+        }
+        assertTrue(checks >= 3)
     }
 
     private fun ByteArray.normalAt(vertexIndex: Int): FloatArray {

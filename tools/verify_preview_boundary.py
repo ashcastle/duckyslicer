@@ -298,7 +298,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     for marker in (
         "PrepareModelTopologyKey(",
         "filamentSlot = volume.filamentSlot",
-        "withContext(Dispatchers.Default)",
+        "withModelPreparationContext",
         "PrepareModelSceneBuilder.build(\n                    projectObjects,",
         "PrepareModelSceneBuilder.build(\n                    emptyList()",
         "overlays.takeIf { sceneLoad.complete }.orEmpty()",
@@ -322,10 +322,14 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "private val meshVertexBuffers = IdentityHashMap<FloatArray, Int>()",
         "private val meshNormalBuffers = IdentityHashMap<FloatArray, Int>()",
         "meshVertexBuffers.size + meshNormalBuffers.size",
-        "uploadNormalBuffer(buffers[bufferOffset + 1], vertices)",
+        "PrepareModelNormalUploadCache.precompute(",
+        "positions.withPrecomputedPrepareNormals { ensureActive() }",
+        "geometry.normalUploadCache.take(vertices)",
+        "private fun uploadNormalBuffer(id: Int, packedNormals: ByteArray)",
         "buildPackedPrepareSmoothNormals(vertices)",
-        "val positionRecords = LongArray(vertexCount)",
-        "}.apply { sort() }",
+        "val normalPositionHeads = IntArray(prepareNormalHashCapacity(vertexCount))",
+        "findPrepareNormalPositionSlot(",
+        "PREPARE_NORMAL_CANCELLATION_MASK",
         "prepareMeshGpuBytes(mesh.coarseVertices)",
         "in vec3 aNormal;",
         "out vec3 vNormal;",
@@ -593,6 +597,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "Recovered Prepare rendering must remain available",
         "repeatedPlacementsShareOneLazilyRequestedDetailTopology",
         "Four bed buffers plus one shared position/normal topology must be retained",
+        "geometry.normalUploadCache.pendingTopologyCountForTest()",
+        "geometry.normalUploadCache.fallbackGenerationCountForTest()",
     ):
         if marker not in prepare_tests:
             raise VerificationError(f"Prepare performance regression is missing: {marker}")

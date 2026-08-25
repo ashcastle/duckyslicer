@@ -84,6 +84,11 @@ class PrepareModelSceneBuilderTest {
         assertSame(scene.meshes[0].coarseVertices, scene.meshes[1].coarseVertices)
         assertSame(scene.meshes[0].detailVertices, scene.meshes[1].detailVertices)
         assertEquals(3, uniquePrepareVertexArrays(scene.meshes).size)
+        assertEquals(0, scene.normalUploadCache.pendingTopologyCountForTest())
+
+        val prepared = scene.withPrecomputedPrepareNormals()
+        assertEquals(3, prepared.normalUploadCache.pendingTopologyCountForTest())
+        assertEquals(0, prepared.normalUploadCache.fallbackGenerationCountForTest())
     }
 
     @Test

@@ -133,7 +133,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "PrepareModelPreviewView.kt": (
             "PrepareModelTopologyKey( filamentSlot = volume.filamentSlot "
-            "withContext(Dispatchers.Default) PrepareModelSceneBuilder.build(\n                    projectObjects, "
+            "withModelPreparationContext PrepareModelSceneBuilder.build(\n                    projectObjects, "
             "PrepareModelSceneBuilder.build(\n                    emptyList() "
             "overlays.takeIf { sceneLoad.complete }.orEmpty() "
             "overlays: List<PrepareModelOverlayData> overlay.customVertices buffers.vertices "
@@ -151,9 +151,14 @@ def valid_sources() -> dict[str, str]:
             "private val meshVertexBuffers = IdentityHashMap<FloatArray, Int>() "
             "private val meshNormalBuffers = IdentityHashMap<FloatArray, Int>() "
             "meshVertexBuffers.size + meshNormalBuffers.size "
-            "uploadNormalBuffer(buffers[bufferOffset + 1], vertices) "
-            "buildPackedPrepareSmoothNormals(vertices) val positionRecords = LongArray(vertexCount) "
-            "}.apply { sort() } prepareMeshGpuBytes(mesh.coarseVertices) "
+            "PrepareModelNormalUploadCache.precompute( "
+            "positions.withPrecomputedPrepareNormals { ensureActive() } "
+            "geometry.normalUploadCache.take(vertices) "
+            "private fun uploadNormalBuffer(id: Int, packedNormals: ByteArray) "
+            "buildPackedPrepareSmoothNormals(vertices) "
+            "val normalPositionHeads = IntArray(prepareNormalHashCapacity(vertexCount)) "
+            "findPrepareNormalPositionSlot( PREPARE_NORMAL_CANCELLATION_MASK "
+            "prepareMeshGpuBytes(mesh.coarseVertices) "
             "in vec3 aNormal; out vec3 vNormal; GLES30.GL_BYTE "
             "prepareSurfaceSize( texture.setDefaultBufferSize(target.width, target.height) "
             "resizeEglSurface(texture, target) EGL14.eglDestroySurface(eglDisplay, eglSurface) "
@@ -473,7 +478,9 @@ def valid_sources() -> dict[str, str]:
             "Repeated memory callbacks must be deduplicated until foreground recovery "
             "Recovered Prepare rendering must remain available "
             "repeatedPlacementsShareOneLazilyRequestedDetailTopology "
-            "Four bed buffers plus one shared position/normal topology must be retained"
+            "Four bed buffers plus one shared position/normal topology must be retained "
+            "geometry.normalUploadCache.pendingTopologyCountForTest() "
+            "geometry.normalUploadCache.fallbackGenerationCountForTest()"
         ),
         "PrepareModelPickingTest.kt": (
             "spatialIndexCullsArbitraryFacetOrderWithoutChangingExactHits "
@@ -778,7 +785,7 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
     def test_rejects_prepare_mesh_construction_on_the_main_thread(self) -> None:
         sources = valid_sources()
         sources["PrepareModelPreviewView.kt"] = sources["PrepareModelPreviewView.kt"].replace(
-            "withContext(Dispatchers.Default)", "run"
+            "withModelPreparationContext", "run"
         )
         with self.assertRaisesRegex(VerificationError, "Prepare model loading"):
             verify_preview_boundary(sources)

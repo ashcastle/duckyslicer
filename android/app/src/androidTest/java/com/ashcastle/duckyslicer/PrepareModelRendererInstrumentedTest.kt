@@ -477,7 +477,7 @@ class PrepareModelRendererInstrumentedTest {
                 440f,
                 440f,
                 rectangularBedPolygon(440f, 440f),
-            )
+            ).withPrecomputedPrepareNormals()
             val objectStates = mapOf(
                 projectObject.id to PrepareObjectDrawState(
                     projectObject.id,
@@ -500,6 +500,8 @@ class PrepareModelRendererInstrumentedTest {
             renderer.onDrawFrame(null)
             GLES30.glFinish()
             assertEquals(preview.size / 3, renderer.lastMeshVertexCountForTest())
+            assertEquals(2, geometry.normalUploadCache.pendingTopologyCountForTest())
+            assertEquals(0, geometry.normalUploadCache.fallbackGenerationCountForTest())
             assertEquals(
                 "The first useful frame retains four bed buffers and one position/normal pair",
                 6,
@@ -517,6 +519,8 @@ class PrepareModelRendererInstrumentedTest {
             renderer.onDrawFrame(null)
             GLES30.glFinish()
             assertEquals(detail.size / 3, renderer.lastMeshVertexCountForTest())
+            assertEquals(1, geometry.normalUploadCache.pendingTopologyCountForTest())
+            assertEquals(0, geometry.normalUploadCache.fallbackGenerationCountForTest())
             assertEquals(
                 "Idle refinement appends one detail position/normal pair without recreating the scene",
                 8,
@@ -535,6 +539,8 @@ class PrepareModelRendererInstrumentedTest {
             renderer.onDrawFrame(null)
             GLES30.glFinish()
             assertEquals(coarse.size / 3, renderer.lastMeshVertexCountForTest())
+            assertEquals(0, geometry.normalUploadCache.pendingTopologyCountForTest())
+            assertEquals(0, geometry.normalUploadCache.fallbackGenerationCountForTest())
             assertEquals(
                 "Gesture entry appends one connected coarse position/normal pair",
                 10,

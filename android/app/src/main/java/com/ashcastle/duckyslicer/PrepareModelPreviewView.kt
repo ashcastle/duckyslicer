@@ -31,9 +31,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ensureActive
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -89,14 +88,15 @@ internal fun DepthTestedPrepareModelScene(
     }
     LaunchedEffect(topology, bedSizeX, bedSizeY, bedPolygon, bedExcludeArea) {
         if (projectObjects.isNotEmpty()) {
-            val geometry = withContext(Dispatchers.Default) {
-                PrepareModelSceneBuilder.build(
+            val geometry = withModelPreparationContext {
+                val positions = PrepareModelSceneBuilder.build(
                     projectObjects,
                     bedSizeX,
                     bedSizeY,
                     bedPolygon,
                     bedExcludeArea,
                 )
+                positions.withPrecomputedPrepareNormals { ensureActive() }
             }
             sceneLoad = PrepareModelSceneLoad(geometry, complete = true)
         }
@@ -193,6 +193,8 @@ internal data class PrepareModelSceneGeometry(
     val bedOutline: FloatArray,
     val bedExcludeOutline: FloatArray,
     val meshes: List<PrepareModelMeshData>,
+    val normalUploadCache: PrepareModelNormalUploadCache =
+        PrepareModelNormalUploadCache.empty(),
 ) {
     /** Stable draw ordering avoids sorting every camera frame in high-volume projects. */
     val meshDrawOrder: IntArray = meshes.indices
@@ -213,6 +215,51 @@ internal fun uniquePrepareVertexArrays(meshes: List<PrepareModelMeshData>): List
 
 internal fun prepareMeshGpuBytes(vertices: FloatArray): Long =
     vertices.size.toLong() * PREPARE_GPU_BYTES_PER_POSITION_COMPONENT
+
+internal fun PrepareModelSceneGeometry.withPrecomputedPrepareNormals(
+    checkCancellation: () -> Unit = {},
+): PrepareModelSceneGeometry = copy(
+    normalUploadCache = PrepareModelNormalUploadCache.precompute(meshes, checkCancellation),
+)
+
+internal class PrepareModelNormalUploadCache private constructor(
+    private val pending: IdentityHashMap<FloatArray, ByteArray>,
+) {
+    private var fallbackGenerationCount = 0
+
+    @Synchronized
+    fun take(vertices: FloatArray): ByteArray = pending.remove(vertices)
+        ?: buildPackedPrepareSmoothNormals(vertices).also { fallbackGenerationCount += 1 }
+
+    @Synchronized
+    internal fun pendingTopologyCountForTest(): Int = pending.size
+
+    @Synchronized
+    internal fun pendingBytesForTest(): Long = pending.values.sumOf { it.size.toLong() }
+
+    @Synchronized
+    internal fun fallbackGenerationCountForTest(): Int = fallbackGenerationCount
+
+    companion object {
+        fun empty(): PrepareModelNormalUploadCache =
+            PrepareModelNormalUploadCache(IdentityHashMap())
+
+        fun precompute(
+            meshes: List<PrepareModelMeshData>,
+            checkCancellation: () -> Unit = {},
+        ): PrepareModelNormalUploadCache {
+            val pending = IdentityHashMap<FloatArray, ByteArray>()
+            uniquePrepareVertexArrays(meshes).forEach { vertices ->
+                checkCancellation()
+                pending[vertices] = buildPackedPrepareSmoothNormals(
+                    vertices,
+                    checkCancellation = checkCancellation,
+                )
+            }
+            return PrepareModelNormalUploadCache(pending)
+        }
+    }
+}
 
 private fun boundedPrepareLowMeshes(
     meshes: List<PrepareModelMeshData>,
@@ -1154,7 +1201,10 @@ internal class PrepareModelRenderer(
             missing.forEachIndexed { index, vertices ->
                 val bufferOffset = index * PREPARE_MESH_BUFFERS_PER_TOPOLOGY
                 uploadBuffer(buffers[bufferOffset], vertices)
-                uploadNormalBuffer(buffers[bufferOffset + 1], vertices)
+                uploadNormalBuffer(
+                    buffers[bufferOffset + 1],
+                    geometry.normalUploadCache.take(vertices),
+                )
             }
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
             if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
@@ -1192,8 +1242,7 @@ internal class PrepareModelRenderer(
         )
     }
 
-    private fun uploadNormalBuffer(id: Int, vertices: FloatArray) {
-        val packedNormals = buildPackedPrepareSmoothNormals(vertices)
+    private fun uploadNormalBuffer(id: Int, packedNormals: ByteArray) {
         val buffer = ByteBuffer.allocateDirect(packedNormals.size).apply {
             put(packedNormals)
             flip()
@@ -1608,17 +1657,19 @@ internal class PrepareModelRenderer(
 /**
  * Produces one signed-normalized byte normal per packed position component.
  * Faces meeting above the crease threshold share an area-weighted normal; sharper edges retain
- * their face normals. A compact sorted index avoids per-vertex map objects on dense mobile meshes,
- * and all temporary adjacency data is discarded immediately after GPU upload.
+ * their face normals. A primitive open-addressed index avoids sorting and per-vertex objects on
+ * dense mobile meshes, and all temporary adjacency data is discarded after GPU upload.
  */
 internal fun buildPackedPrepareSmoothNormals(
     vertices: FloatArray,
     creaseCosine: Float = PREPARE_SMOOTH_NORMAL_CREASE_COSINE,
+    checkCancellation: () -> Unit = {},
 ): ByteArray {
     require(vertices.size % PREPARE_TRIANGLE_FLOATS == 0)
     require(vertices.all(Float::isFinite))
     require(creaseCosine.isFinite() && creaseCosine in -1f..1f)
     if (vertices.isEmpty()) return ByteArray(0)
+    checkCancellation()
 
     val vertexCount = vertices.size / PREPARE_VERTEX_FLOATS
     val triangleCount = vertices.size / PREPARE_TRIANGLE_FLOATS
@@ -1626,6 +1677,7 @@ internal fun buildPackedPrepareSmoothNormals(
     val faceUnitNormals = FloatArray(triangleCount * PREPARE_NORMAL_COMPONENTS)
 
     repeat(triangleCount) { triangleIndex ->
+        if ((triangleIndex and PREPARE_NORMAL_CANCELLATION_MASK) == 0) checkCancellation()
         val offset = triangleIndex * PREPARE_TRIANGLE_FLOATS
         val edge1x = vertices[offset + 3] - vertices[offset]
         val edge1y = vertices[offset + 4] - vertices[offset + 1]
@@ -1650,81 +1702,53 @@ internal fun buildPackedPrepareSmoothNormals(
         }
     }
 
-    val positionRecords = LongArray(vertexCount) { vertexIndex ->
-        val offset = vertexIndex * PREPARE_VERTEX_FLOATS
-        val positionHash = prepareNormalPositionHash(
-            vertices[offset].prepareNormalBits(),
-            vertices[offset + 1].prepareNormalBits(),
-            vertices[offset + 2].prepareNormalBits(),
+    val previousAtPosition = IntArray(vertexCount) { -1 }
+    val normalPositionHeads = IntArray(prepareNormalHashCapacity(vertexCount))
+    repeat(vertexCount) { vertexIndex ->
+        if ((vertexIndex and PREPARE_NORMAL_CANCELLATION_MASK) == 0) checkCancellation()
+        val slot = findPrepareNormalPositionSlot(
+            vertices,
+            vertexIndex,
+            normalPositionHeads,
         )
-        (positionHash.toLong() shl Int.SIZE_BITS) or
-            (vertexIndex.toLong() and PREPARE_UNSIGNED_INT_MASK)
-    }.apply { sort() }
+        previousAtPosition[vertexIndex] = normalPositionHeads[slot] - 1
+        normalPositionHeads[slot] = vertexIndex + 1
+    }
 
     val packed = ByteArray(vertices.size)
-    var hashStart = 0
-    while (hashStart < positionRecords.size) {
-        val positionHash = positionRecords[hashStart] ushr Int.SIZE_BITS
-        var hashEnd = hashStart + 1
-        while (
-            hashEnd < positionRecords.size &&
-            positionRecords[hashEnd] ushr Int.SIZE_BITS == positionHash
-        ) {
-            hashEnd += 1
-        }
-        var positionStart = hashStart
-        while (positionStart < hashEnd) {
-            val referenceVertex = positionRecords[positionStart].prepareNormalVertexIndex()
-            var positionEnd = positionStart + 1
-            var candidate = positionEnd
-            while (candidate < hashEnd) {
-                val candidateVertex = positionRecords[candidate].prepareNormalVertexIndex()
-                if (vertices.haveSamePreparePosition(referenceVertex, candidateVertex)) {
-                    val displaced = positionRecords[positionEnd]
-                    positionRecords[positionEnd] = positionRecords[candidate]
-                    positionRecords[candidate] = displaced
-                    positionEnd += 1
-                }
-                candidate += 1
+    repeat(vertexCount) { vertexIndex ->
+        if ((vertexIndex and PREPARE_NORMAL_CANCELLATION_MASK) == 0) checkCancellation()
+        val faceOffset = vertexIndex / PREPARE_VERTICES_PER_TRIANGLE *
+            PREPARE_NORMAL_COMPONENTS
+        val slot = findPrepareNormalPositionSlot(vertices, vertexIndex, normalPositionHeads)
+        var sumX = 0f
+        var sumY = 0f
+        var sumZ = 0f
+        var adjacentVertex = normalPositionHeads[slot] - 1
+        while (adjacentVertex >= 0) {
+            val adjacentFaceOffset = adjacentVertex / PREPARE_VERTICES_PER_TRIANGLE *
+                PREPARE_NORMAL_COMPONENTS
+            val dot = faceUnitNormals[faceOffset] * faceUnitNormals[adjacentFaceOffset] +
+                faceUnitNormals[faceOffset + 1] * faceUnitNormals[adjacentFaceOffset + 1] +
+                faceUnitNormals[faceOffset + 2] * faceUnitNormals[adjacentFaceOffset + 2]
+            if (dot >= creaseCosine) {
+                sumX += faceAreaNormals[adjacentFaceOffset]
+                sumY += faceAreaNormals[adjacentFaceOffset + 1]
+                sumZ += faceAreaNormals[adjacentFaceOffset + 2]
             }
-            for (recordIndex in positionStart until positionEnd) {
-                val vertexIndex = positionRecords[recordIndex].prepareNormalVertexIndex()
-                val faceOffset = vertexIndex / PREPARE_VERTICES_PER_TRIANGLE *
-                    PREPARE_NORMAL_COMPONENTS
-                var sumX = 0f
-                var sumY = 0f
-                var sumZ = 0f
-                for (adjacentIndex in positionStart until positionEnd) {
-                    val adjacentVertex =
-                        positionRecords[adjacentIndex].prepareNormalVertexIndex()
-                    val adjacentFaceOffset = adjacentVertex / PREPARE_VERTICES_PER_TRIANGLE *
-                        PREPARE_NORMAL_COMPONENTS
-                    val dot = faceUnitNormals[faceOffset] * faceUnitNormals[adjacentFaceOffset] +
-                        faceUnitNormals[faceOffset + 1] *
-                        faceUnitNormals[adjacentFaceOffset + 1] +
-                        faceUnitNormals[faceOffset + 2] *
-                        faceUnitNormals[adjacentFaceOffset + 2]
-                    if (dot >= creaseCosine) {
-                        sumX += faceAreaNormals[adjacentFaceOffset]
-                        sumY += faceAreaNormals[adjacentFaceOffset + 1]
-                        sumZ += faceAreaNormals[adjacentFaceOffset + 2]
-                    }
-                }
-                var length = sqrt(sumX * sumX + sumY * sumY + sumZ * sumZ)
-                if (length <= PREPARE_NORMAL_EPSILON) {
-                    sumX = faceUnitNormals[faceOffset]
-                    sumY = faceUnitNormals[faceOffset + 1]
-                    sumZ = faceUnitNormals[faceOffset + 2]
-                    length = 1f
-                }
-                val vertexOffset = vertexIndex * PREPARE_VERTEX_FLOATS
-                packed[vertexOffset] = (sumX / length).toPackedNormalByte()
-                packed[vertexOffset + 1] = (sumY / length).toPackedNormalByte()
-                packed[vertexOffset + 2] = (sumZ / length).toPackedNormalByte()
-            }
-            positionStart = positionEnd
+            adjacentVertex = previousAtPosition[adjacentVertex]
         }
-        hashStart = hashEnd
+        var length = sqrt(sumX * sumX + sumY * sumY + sumZ * sumZ)
+        if (length <= PREPARE_NORMAL_EPSILON) {
+            sumX = faceUnitNormals[faceOffset]
+            sumY = faceUnitNormals[faceOffset + 1]
+            sumZ = faceUnitNormals[faceOffset + 2]
+            length = 1f
+        }
+        val vertexOffset = vertexIndex * PREPARE_VERTEX_FLOATS
+        packed[vertexOffset] = (sumX / length).toPackedNormalByte()
+        packed[vertexOffset + 1] = (sumY / length).toPackedNormalByte()
+        packed[vertexOffset + 2] = (sumZ / length).toPackedNormalByte()
     }
     return packed
 }
@@ -1738,7 +1762,31 @@ private fun prepareNormalPositionHash(x: Int, y: Int, z: Int): Int {
     return (hash xor z) * PREPARE_NORMAL_HASH_PRIME
 }
 
-private fun Long.prepareNormalVertexIndex(): Int = (this and PREPARE_UNSIGNED_INT_MASK).toInt()
+private fun prepareNormalHashCapacity(vertexCount: Int): Int {
+    val required = vertexCount.toLong() * 3L / 2L + 1L
+    var capacity = 1L
+    while (capacity < required) capacity = capacity shl 1
+    require(capacity <= Int.MAX_VALUE) { "Prepare normal topology is too large" }
+    return capacity.toInt()
+}
+
+private fun findPrepareNormalPositionSlot(
+    vertices: FloatArray,
+    vertexIndex: Int,
+    positionHeads: IntArray,
+): Int {
+    val offset = vertexIndex * PREPARE_VERTEX_FLOATS
+    var slot = prepareNormalPositionHash(
+        vertices[offset].prepareNormalBits(),
+        vertices[offset + 1].prepareNormalBits(),
+        vertices[offset + 2].prepareNormalBits(),
+    ) and (positionHeads.size - 1)
+    while (true) {
+        val headVertex = positionHeads[slot] - 1
+        if (headVertex < 0 || vertices.haveSamePreparePosition(vertexIndex, headVertex)) return slot
+        slot = (slot + 1) and (positionHeads.size - 1)
+    }
+}
 
 private fun FloatArray.haveSamePreparePosition(firstVertex: Int, secondVertex: Int): Boolean {
     val firstOffset = firstVertex * PREPARE_VERTEX_FLOATS
@@ -1787,7 +1835,7 @@ private const val PREPARE_MESH_BUFFERS_PER_TOPOLOGY = 2
 private const val PREPARE_NORMAL_EPSILON = 1e-12f
 private const val PREPARE_NORMAL_HASH_OFFSET = -0x7ee3623b
 private const val PREPARE_NORMAL_HASH_PRIME = 0x01000193
-private const val PREPARE_UNSIGNED_INT_MASK = 0xffff_ffffL
+private const val PREPARE_NORMAL_CANCELLATION_MASK = 4_095
 internal const val PREPARE_SMOOTH_NORMAL_CREASE_COSINE = 0.70710677f
 private const val PREPARE_BED_FILL_Z = -0.08f
 private const val PREPARE_BED_GRID_Z = -0.06f
