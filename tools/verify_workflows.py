@@ -203,6 +203,10 @@ def main() -> None:
             "hashFiles('native/slicer-runtime/versions.env', "
             "'native/slicer-runtime/build.sh') }}"
         ),
+        "native dependency cache has a validated fallback": (
+            "restore-keys: |\n"
+            "            android-native-dependencies-v2-${{ runner.os }}-"
+        ),
         "native compiler cache tool is checksum verified": (
             "sha256sum --check --strict"
         ),
