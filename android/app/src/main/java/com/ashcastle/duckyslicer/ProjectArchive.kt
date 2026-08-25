@@ -59,6 +59,7 @@ internal data class ArchivedProjectPlate(
     val objects: List<ArchivedProjectObject>,
     val selectedObjectId: String?,
     val sliceOptions: SliceOptions,
+    val layerPauseEvents: LayerPauseEvents,
 )
 
 internal data class StagedArchiveModel(
@@ -151,6 +152,7 @@ internal object ProjectArchiveCodec {
                                     "selectedObjectId",
                                     plate.selectedObjectId ?: JSONObject.NULL,
                                 )
+                                .put("layerPauseEvents", plate.layerPauseEvents.toProjectJson())
                                 .put(
                                     "sliceOptions",
                                     requireNotNull(plateOptions[plate.id]).toProjectJson(),
@@ -315,7 +317,12 @@ internal object ProjectArchiveCodec {
                 val options = value.getJSONObject("sliceOptions").toProjectSliceOptionsOrNull()
                     ?: throw ProjectArchiveException()
                 validatePlateFilaments(objects, options)
-                ArchivedProjectPlate(id, objects, selected, options)
+                val layerPauseEvents = if (schemaVersion >= 73) {
+                    value.getJSONArray("layerPauseEvents").toLayerPauseEvents()
+                } else {
+                    LayerPauseEvents()
+                }
+                ArchivedProjectPlate(id, objects, selected, options, layerPauseEvents)
             }
         } else {
             val objects = parseArchivedObjects(root.getJSONArray("objects"), schemaVersion, objectIds)
@@ -325,7 +332,15 @@ internal object ProjectArchiveCodec {
             val options = root.getJSONObject("sliceOptions").toProjectSliceOptionsOrNull()
                 ?: throw ProjectArchiveException()
             validatePlateFilaments(objects, options)
-            listOf(ArchivedProjectPlate(legacyProjectPlateId(), objects, selected, options))
+            listOf(
+                ArchivedProjectPlate(
+                    legacyProjectPlateId(),
+                    objects,
+                    selected,
+                    options,
+                    LayerPauseEvents(),
+                ),
+            )
         }
         require(plates.sumOf { it.objects.size } <= ProjectStore.MAX_PROJECT_OBJECTS)
         val selectedPlateId = if (schemaVersion >= 9) {
@@ -822,6 +837,6 @@ private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 72
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 73
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

@@ -43,6 +43,7 @@ class ProcessRecoveryHarnessActivity : ComponentActivity() {
                             perimeters = 6,
                             fillDensity = 0.50f,
                         ),
+                        LayerPauseEvents(),
                     ),
                 ) { "Process recovery slice could not start" }
                 val deadline = SystemClock.elapsedRealtime() + ACTIVE_TIMEOUT_MILLIS

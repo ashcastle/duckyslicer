@@ -1148,4 +1148,10 @@
     <string name="extruder_offset_y">Y offset</string>
     <string name="tool_change_retraction_length">Tool change retraction length</string>
     <string name="tool_change_retract_restart_extra">Tool change restart extra</string>
+    <string name="add_layer_pause">Pause at layer %1$d</string>
+    <string name="remove_layer_pause">Remove pause at layer %1$d</string>
+    <string name="saved_layer_pauses">%1$d saved pauses</string>
+    <string name="preview_changes_pending">Slice again before exporting or printing.</string>
+    <string name="layer_pause_height">Pause at %1$.2f mm</string>
+    <string name="remove_layer_pause_height">Remove pause at %1$.2f mm</string>
 </resources>

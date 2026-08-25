@@ -2823,6 +2823,7 @@ object OnDeviceSlicer {
     internal fun slice(
         objects: List<ProjectObject>,
         options: SliceOptions = SliceOptions(),
+        layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
         foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit = {},
@@ -3035,6 +3036,7 @@ object OnDeviceSlicer {
                     orcaSupportAnnotationFiles = orcaSupportAnnotationFiles,
                     orcaSeamAnnotationFiles = orcaSeamAnnotationFiles,
                     orcaMultiColorAnnotationFiles = orcaMultiColorAnnotationFiles,
+                    layerPauseEvents = layerPauseEvents,
                     foregroundSession = foregroundSession,
                     cancellationRequested = cancellationRequested,
                     onProgress = onProgress,

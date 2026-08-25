@@ -216,6 +216,23 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun previewLayerPauseActionHasAStableStatefulName() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val addLabel = context.getString(R.string.add_layer_pause, 300)
+        val removeLabel = context.getString(R.string.remove_layer_pause, 300)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PREVIEW).use {
+            val addNode = waitForNodes(setOf(addLabel)).single {
+                it.isClickable && it.effectiveLabel() == addLabel
+            }
+            assertTrue(addNode.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val removeNode = waitForNodes(setOf(removeLabel)).single {
+                it.isClickable && it.effectiveLabel() == removeLabel
+            }
+            assertTrue(removeNode.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        }
+    }
+
+    @Test
     fun profileSliderAndSwitchExposeTheirSettingNamesOnce() {
         launchHarness(AccessibilityHarnessActivity.SCREEN_PROFILE).use {
             val nodes = waitForNodes(setOf(TEST_SETTING_LABEL, TEST_SWITCH_LABEL))

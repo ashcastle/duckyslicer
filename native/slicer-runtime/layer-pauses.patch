@@ -1,0 +1,113 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -820,6 +820,7 @@ public:
+     std::string getVolumeName(int objIdx, int volIdx) const;
+     int  getVolumeExtruder(int objIdx, int volIdx) const;
+     bool setVolumeExtruder(int objIdx, int volIdx, int slot);
++    bool setLayerPauses(const std::vector<std::pair<float, std::string>>& pauses);
+ 
+ private:
+     struct Impl;
+diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_model.cpp
+--- a/app/src/main/cpp/src/sapil_model.cpp
++++ b/app/src/main/cpp/src/sapil_model.cpp
+@@ -21,6 +21,7 @@
+ #include "libslic3r/Format/OBJ.hpp"
+ #include "libslic3r/Format/STEP.hpp"
+ #include "libslic3r/BoundingBox.hpp"
++#include "libslic3r/CustomGCode.hpp"
+ #include "libslic3r/TriangleSelector.hpp"
+ #include "libslic3r/QuadricEdgeCollapse.hpp"
+ #include "libslic3r/Semver.hpp"
+@@ -1127,6 +1128,38 @@ void SlicerEngine::cancelPreviewMesh() {
+     SAPIL_LOGI("cancelPreviewMesh: signalled cancellation");
+ }
+ 
++bool SlicerEngine::setLayerPauses(
++        const std::vector<std::pair<float, std::string>>& pauses) {
++    if (!g_model_loaded || pauses.size() > 256) return false;
++
++    Slic3r::CustomGCode::Info info;
++    info.mode = Slic3r::CustomGCode::SingleExtruder;
++    info.gcodes.reserve(pauses.size());
++    float previous_z = 0.0f;
++    for (const auto& pause : pauses) {
++        const float print_z = pause.first;
++        if (!std::isfinite(print_z) || print_z < 0.001f || print_z > 10000.0f ||
++            print_z <= previous_z || pause.second.size() > 480) {
++            return false;
++        }
++        if (std::any_of(pause.second.begin(), pause.second.end(), [](unsigned char value) {
++                return value < 0x20 || value == 0x7f;
++            })) {
++            return false;
++        }
++        info.gcodes.emplace_back(Slic3r::CustomGCode::Item{
++            static_cast<double>(print_z),
++            Slic3r::CustomGCode::PausePrint,
++            1,
++            "",
++            pause.second,
++        });
++        previous_z = print_z;
++    }
++    g_model.plates_custom_gcodes[g_model.curr_plate_index] = std::move(info);
++    return true;
++}
++
+ void SlicerEngine::clearModel() {
+     const size_t old_object_count = g_model.objects.size();
+     const size_t old_preview_count = g_model_preview_extruders.size();
+diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slicer_wrapper.cpp
+--- a/app/src/main/cpp/src/slicer_wrapper.cpp
++++ b/app/src/main/cpp/src/slicer_wrapper.cpp
+@@ -538,4 +538,35 @@ Java_com_u1_slicer_NativeLibrary_nativeSetVolumeExtruder(
+     return (g_engine && g_engine->setVolumeExtruder(objIdx, volIdx, slot)) ? JNI_TRUE : JNI_FALSE;
+ }
+ 
++JNIEXPORT jboolean JNICALL
++Java_com_u1_slicer_NativeLibrary_nativeSetLayerPauses(
++        JNIEnv* env, jobject, jfloatArray jprint_z_values, jobjectArray jmessages) {
++    if (!g_engine || !jprint_z_values || !jmessages) return JNI_FALSE;
++    const jsize count = env->GetArrayLength(jprint_z_values);
++    if (count < 0 || count > 256 || env->GetArrayLength(jmessages) != count) return JNI_FALSE;
++
++    std::vector<jfloat> print_z_values(static_cast<size_t>(count));
++    if (count > 0) env->GetFloatArrayRegion(jprint_z_values, 0, count, print_z_values.data());
++    if (env->ExceptionCheck()) return JNI_FALSE;
++
++    std::vector<std::pair<float, std::string>> pauses;
++    pauses.reserve(static_cast<size_t>(count));
++    for (jsize index = 0; index < count; ++index) {
++        auto* value = static_cast<jstring>(env->GetObjectArrayElement(jmessages, index));
++        if (!value || env->ExceptionCheck()) {
++            if (value) env->DeleteLocalRef(value);
++            return JNI_FALSE;
++        }
++        const char* message = env->GetStringUTFChars(value, nullptr);
++        if (!message || env->ExceptionCheck()) {
++            env->DeleteLocalRef(value);
++            return JNI_FALSE;
++        }
++        pauses.emplace_back(print_z_values[static_cast<size_t>(index)], message);
++        env->ReleaseStringUTFChars(value, message);
++        env->DeleteLocalRef(value);
++    }
++    return g_engine->setLayerPauses(pauses) ? JNI_TRUE : JNI_FALSE;
++}
++
+ } // extern "C"
+diff --git a/app/src/main/java/com/u1/slicer/NativeLibrary.kt b/app/src/main/java/com/u1/slicer/NativeLibrary.kt
+--- a/app/src/main/java/com/u1/slicer/NativeLibrary.kt
++++ b/app/src/main/java/com/u1/slicer/NativeLibrary.kt
+@@ -337,6 +337,9 @@ class NativeLibrary {
+     /** Assign a 1-indexed extruder slot to one volume — used by the Parts panel. */
+     external fun nativeSetVolumeExtruder(objIdx: Int, volIdx: Int, slot: Int): Boolean
+ 
++    /** Replace Orca's current-plate pause events. Heights must be unique and ordered. */
++    external fun nativeSetLayerPauses(printZValues: FloatArray, messages: Array<String>): Boolean
++
+     // ---- Progress Callback (called from native code) ----
+     fun onSliceProgress(percentage: Int, stage: String) {
+         progressListener?.invoke(percentage, stage)

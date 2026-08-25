@@ -134,7 +134,20 @@ class ProjectArchiveTest {
                     ),
                 ),
             )
-            val snapshot = ProjectSnapshot(listOf(first, second), selectedObjectId = second.id)
+            val snapshot = ProjectSnapshot(listOf(first, second), selectedObjectId = second.id).let { project ->
+                project.copy(
+                    plates = project.plates.map { plate ->
+                        plate.copy(
+                            layerPauseEvents = LayerPauseEvents(
+                                listOf(
+                                    LayerPauseEvent(2.4f, "Inspect color"),
+                                    LayerPauseEvent(8.8f),
+                                ),
+                            ),
+                        )
+                    },
+                )
+            }
             val options = multiFilamentSettingsFixture()
 
             val firstArchive = ByteArrayOutputStream().also {
@@ -153,11 +166,11 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(72, manifest.getInt("schemaVersion"))
+            assertEquals(73, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
-                setOf("id", "selectedObjectId", "sliceOptions", "objects"),
+                setOf("id", "selectedObjectId", "layerPauseEvents", "sliceOptions", "objects"),
                 manifestPlate.keys().asSequence().toSet(),
             )
             assertEquals(
@@ -192,6 +205,10 @@ class ProjectArchiveTest {
             val imported = destination.importArchive(ByteArrayInputStream(firstArchive))
 
             assertEquals(second.id, imported.snapshot.selectedObjectId)
+            assertEquals(
+                snapshot.activePlate.layerPauseEvents,
+                imported.snapshot.activePlate.layerPauseEvents,
+            )
             assertEquals(2, imported.snapshot.objects.size)
             assertEquals(first.singleVolume.id, imported.snapshot.objects[0].singleVolume.id)
             assertEquals(second.volumes.map(ProjectVolume::id), imported.snapshot.objects[1].volumes.map(ProjectVolume::id))

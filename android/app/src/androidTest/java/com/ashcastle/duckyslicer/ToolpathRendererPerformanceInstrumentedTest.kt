@@ -175,11 +175,13 @@ class ToolpathRendererPerformanceInstrumentedTest {
 
     private fun denseNativePayload(segmentCount: Int, layerCount: Int): FloatArray {
         val preview = densePreview(segmentCount, layerCount)
-        val headerFloats = 19
+        val headerFloats = 20
         val pathStride = 1
-        return FloatArray(headerFloats + preview.segments.size + layerCount * pathStride).also { raw ->
+        return FloatArray(
+            headerFloats + layerCount + preview.segments.size + layerCount * pathStride,
+        ).also { raw ->
             raw[0] = 17_491f
-            raw[1] = 3f
+            raw[1] = 4f
             raw[2] = preview.startLayer.toFloat()
             raw[3] = preview.endLayer.toFloat()
             raw[4] = preview.layerCount.toFloat()
@@ -187,12 +189,14 @@ class ToolpathRendererPerformanceInstrumentedTest {
             raw[6] = preview.maxZMm
             raw[7] = segmentCount.toFloat()
             raw[8] = layerCount.toFloat()
+            raw[9] = layerCount.toFloat()
             preview.roleSegmentCounts.forEachIndexed { role, count ->
-                raw[9 + role] = count.toFloat()
+                raw[10 + role] = count.toFloat()
             }
-            preview.segments.copyInto(raw, destinationOffset = headerFloats)
+            repeat(layerCount) { layer -> raw[headerFloats + layer] = (layer + 1) * 0.2f }
+            preview.segments.copyInto(raw, destinationOffset = headerFloats + layerCount)
             val segmentsPerLayer = segmentCount / layerCount
-            var pathOffset = headerFloats + preview.segments.size
+            var pathOffset = headerFloats + layerCount + preview.segments.size
             repeat(layerCount) { layer ->
                 raw[pathOffset] = ((layer + 1) * segmentsPerLayer).toFloat()
                 pathOffset += pathStride

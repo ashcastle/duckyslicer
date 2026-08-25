@@ -13,8 +13,9 @@ class PreviewModelsTest {
     @Test
     fun nativePayloadKeepsMetadataSegmentsAndRolesWithoutJson() {
         val payload = floatArrayOf(
-            17_491f, 3f, 0f, 1f, 2f, 0.2f, 0.4f, 2f, 2f,
+            17_491f, 4f, 0f, 1f, 2f, 0.2f, 0.4f, 2f, 2f, 2f,
             1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 1f,
+            0.2f, 0.4f,
             1f, 2f, 3f, 4f, 0.2f, 0f, 0f,
             3f, 4f, 5f, 6f, 0.4f, 9f, 1f,
             1f, 2f,
@@ -25,7 +26,8 @@ class PreviewModelsTest {
         assertEquals(0, preview.startLayer)
         assertEquals(1, preview.endLayer)
         assertEquals(2, preview.layerCount)
-        assertArrayEquals(payload.copyOfRange(19, 33), preview.segments, 0f)
+        assertArrayEquals(payload.copyOfRange(22, 36), preview.segments, 0f)
+        assertArrayEquals(floatArrayOf(0.2f, 0.4f), preview.layerZValues, 0f)
         assertEquals(1, preview.toolSegmentCounts[0])
         assertEquals(1, preview.toolSegmentCounts[1])
         assertEquals(1, preview.roleSegmentCounts[0])
@@ -35,8 +37,9 @@ class PreviewModelsTest {
     @Test
     fun trustedDirectPayloadKeepsExactMetadataAndRejectsInvalidBuffers() {
         val payload = floatArrayOf(
-            17_491f, 3f, 0f, 1f, 2f, 0.2f, 0.4f, 2f, 2f,
+            17_491f, 4f, 0f, 1f, 2f, 0.2f, 0.4f, 2f, 2f, 2f,
             1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 1f,
+            0.2f, 0.4f,
             1f, 2f, 3f, 4f, 0.2f, 0f, 0f,
             3f, 4f, 5f, 6f, 0.4f, 9f, 1f,
             1f, 2f,
@@ -48,7 +51,7 @@ class PreviewModelsTest {
         val preview = GcodeLayerPreview.fromTrustedNative(direct, payload.size)
 
         assertEquals(2, preview.layerCount)
-        assertArrayEquals(payload.copyOfRange(19, 33), preview.segments, 0f)
+        assertArrayEquals(payload.copyOfRange(22, 36), preview.segments, 0f)
         assertEquals(1, preview.roleSegmentCounts[0])
         assertEquals(1, preview.roleSegmentCounts[9])
         assertThrows(IllegalStateException::class.java) {
@@ -75,32 +78,55 @@ class PreviewModelsTest {
     @Test
     fun nativePayloadRejectsNonFiniteCoordinatesAndInvalidRoles() {
         val valid = floatArrayOf(
-            17_491f, 3f, 0f, 0f, 1f, 0.2f, 0.2f, 1f, 1f,
+            17_491f, 4f, 0f, 0f, 1f, 0.2f, 0.2f, 1f, 1f, 1f,
             1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+            0.2f,
             1f, 2f, 3f, 4f, 0.2f, 0f, 0f,
             1f,
         )
         assertThrows(IllegalStateException::class.java) {
-            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[19] = Float.NaN })
+            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[21] = Float.NaN })
         }
         assertThrows(IllegalStateException::class.java) {
-            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[24] = 1.5f })
+            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[26] = 1.5f })
         }
         assertThrows(IllegalStateException::class.java) {
-            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[24] = 10f })
+            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[26] = 10f })
         }
         assertThrows(IllegalStateException::class.java) {
-            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[25] = 1.5f })
+            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[27] = 1.5f })
         }
         assertThrows(IllegalStateException::class.java) {
-            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[25] = 16f })
+            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[27] = 16f })
         }
         assertThrows(IllegalStateException::class.java) {
-            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[9] = 0f })
+            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[10] = 0f })
         }
         assertThrows(IllegalStateException::class.java) {
-            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[26] = 0f })
+            GcodeLayerPreview.fromNative(valid.copyOf().apply { this[28] = 0f })
         }
+    }
+
+    @Test
+    fun exactVisibleLayerHeightsCanBackProjectPauseEvents() {
+        val preview = GcodeLayerPreview(
+            startLayer = 4,
+            endLayer = 5,
+            layerCount = 10,
+            minZMm = 1.05f,
+            maxZMm = 1.25f,
+            segments = floatArrayOf(
+                0f, 0f, 1f, 0f, 1.05f, 0f, 0f,
+                1f, 0f, 1f, 1f, 1.05f, 0f, 0f,
+                0f, 0f, 0f, 1f, 1.25f, 0f, 0f,
+            ),
+            roleSegmentCounts = intArrayOf(3, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        )
+
+        assertEquals(1.05f, preview.printZForLayer(4))
+        assertEquals(1.25f, preview.printZForLayer(5))
+        assertEquals(null, preview.printZForLayer(3))
+        assertEquals(null, preview.printZForLayer(6))
     }
 
     @Test

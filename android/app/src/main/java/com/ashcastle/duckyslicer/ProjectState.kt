@@ -161,6 +161,7 @@ data class ProjectPlate(
     val id: String,
     val objects: List<ProjectObject> = emptyList(),
     val selectedObjectId: String? = null,
+    val layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
 ) {
     init {
         require(id.length in 1..ProjectStore.MAX_ID_LENGTH) { "Invalid project plate id" }
@@ -428,6 +429,30 @@ data class ProjectHistoryState(
 
     fun selectPlate(plateId: String): ProjectHistoryState =
         copy(current = current.selectPlate(plateId))
+
+    fun putLayerPause(event: LayerPauseEvent): ProjectHistoryState = record(
+        current.copy(
+            plates = current.plates.map { plate ->
+                if (plate.id == current.selectedPlateId) {
+                    plate.copy(layerPauseEvents = plate.layerPauseEvents.put(event))
+                } else {
+                    plate
+                }
+            },
+        ),
+    )
+
+    fun removeLayerPause(printZMm: Float): ProjectHistoryState = record(
+        current.copy(
+            plates = current.plates.map { plate ->
+                if (plate.id == current.selectedPlateId) {
+                    plate.copy(layerPauseEvents = plate.layerPauseEvents.remove(printZMm))
+                } else {
+                    plate
+                }
+            },
+        ),
+    )
 
     fun moveObjectToPlate(objectId: String, targetPlateId: String): ProjectHistoryState {
         val sourcePlateId = current.selectedPlateId

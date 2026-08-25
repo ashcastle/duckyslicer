@@ -42,6 +42,35 @@ class NativeEngineInstrumentedTest {
     )
 
     @Test
+    fun selectedPreviewLayerPauseUsesTheActivePrinterCommandThroughWorker() {
+        val model = fixtureModel()
+        val projectObject = ProjectObject("layer-pause", inspectModel(model.absolutePath))
+        val options = SliceOptions().selectPrinter(
+            PrinterProfile.CUSTOM_CARTESIAN.copy(
+                machinePauseGcode = "M25 ; DUCKY_LAYER_PAUSE",
+            ),
+        )
+        val baseline = OnDeviceSlicer.slice(listOf(projectObject), options)
+        val baselinePreview = loadGcodePreview(baseline.output.absolutePath, 0, Int.MAX_VALUE)
+        val selectedLayer = minOf(4, baselinePreview.layerCount - 1)
+        val selectedPrintZ = requireNotNull(baselinePreview.printZForLayer(selectedLayer))
+
+        val paused = OnDeviceSlicer.slice(
+            listOf(projectObject),
+            options,
+            layerPauseEvents = LayerPauseEvents(
+                listOf(LayerPauseEvent(selectedPrintZ, "Layer ${selectedLayer + 1}")),
+            ),
+        )
+
+        assertEquals(
+            "The selected printer pause command must be emitted exactly once",
+            1,
+            paused.output.readLines().count { it.trim() == "M25 ; DUCKY_LAYER_PAUSE" },
+        )
+    }
+
+    @Test
     fun automaticPreviewQualityResolvesToAConcreteDeviceTier() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val capabilities = previewDeviceCapabilities(context)

@@ -229,6 +229,7 @@ private fun PreviewAccessibilityHarness() {
     var depthContrast by remember { mutableFloatStateOf(0.75f) }
     var visibleRoles by remember { mutableStateOf((0 until 10).toSet()) }
     var colorMode by remember { mutableStateOf(PreviewColorMode.FEATURE) }
+    var pauseEvents by remember { mutableStateOf(LayerPauseEvents()) }
     PreviewControls(
         preview = GcodeLayerPreview(
             startLayer = 0,
@@ -236,9 +237,17 @@ private fun PreviewAccessibilityHarness() {
             layerCount = 300,
             minZMm = 0.25f,
             maxZMm = 60.05f,
-            segments = FloatArray(0),
-            roleSegmentCounts = IntArray(10),
+            segments = FloatArray(300 * GcodeLayerPreview.SEGMENT_STRIDE).apply {
+                repeat(300) { layer ->
+                    val offset = layer * GcodeLayerPreview.SEGMENT_STRIDE
+                    this[offset] = layer.toFloat()
+                    this[offset + 2] = layer + 1f
+                    this[offset + 4] = 0.25f + layer * 0.2f
+                }
+            },
+            roleSegmentCounts = intArrayOf(300, 0, 0, 0, 0, 0, 0, 0, 0, 0),
         ),
+        layerPauseEvents = pauseEvents,
         toolpathOpacity = opacity,
         onToolpathOpacityChanged = { opacity = it },
         toolpathDepthContrast = depthContrast,
@@ -250,6 +259,10 @@ private fun PreviewAccessibilityHarness() {
             visibleRoles = if (visible) visibleRoles + role else visibleRoles - role
         },
         onLayerRangeSelected = { _, _ -> },
+        onAddLayerPause = { _, printZMm ->
+            pauseEvents = pauseEvents.put(LayerPauseEvent(printZMm))
+        },
+        onRemoveLayerPause = { printZMm -> pauseEvents = pauseEvents.remove(printZMm) },
     )
 }
 
@@ -362,6 +375,7 @@ private fun WorkspaceAccessibilityHarness(
         selectedPlateId = selectedPlateId,
         projectObjects = activePlate.objects,
         selectedObjectId = activePlate.selectedObjectId,
+        layerPauseEvents = activePlate.layerPauseEvents,
         sliceOptions = SliceOptions(),
         profileCatalog = ProfileCatalog(),
         profileRecents = ProfileRecents(),
@@ -383,7 +397,9 @@ private fun WorkspaceAccessibilityHarness(
         appSettingsSaveFailed = false,
         supportReportExportState = SupportReportExportState(),
         sliceOutcome = sliceOutcome,
+        previewOutcome = sliceOutcome,
         layerPreview = null,
+        previewStale = false,
         importing = false,
         autoLaying = false,
         arranging = false,
@@ -551,6 +567,8 @@ private fun WorkspaceAccessibilityHarness(
         onSaveFilamentProfile = { _, _, _ -> },
         onSaveSlicingProfile = { _, _ -> },
         onLayerRangeSelected = { _, _ -> },
+        onAddLayerPause = { _, _ -> },
+        onRemoveLayerPause = {},
         onAppSettingsChanged = {},
         onSupportReportExport = {},
         onCancelSupportReportExport = {},

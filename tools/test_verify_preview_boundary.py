@@ -17,8 +17,9 @@ def valid_sources() -> dict[str, str]:
             "generation += 1L available.clear()"
         ),
         "PreviewModels.kt": (
-            "fun fromNative(raw: FloatArray?) PAYLOAD_MAGIC PAYLOAD_VERSION "
-            "HEADER_FLOATS = 9 + ROLE_COUNT PATH_STRIDE = 1 "
+            "fun fromNative(raw: FloatArray?) PAYLOAD_MAGIC PAYLOAD_VERSION PAYLOAD_VERSION = 4f "
+            "HEADER_FLOATS = 10 + ROLE_COUNT layerZValues: FloatArray "
+            "preview_layer_height_order_invalid PATH_STRIDE = 1 "
             "MAX_SEGMENTS = 120_000 preview_coordinate_invalid "
             "MAX_PAYLOAD_FLOATS preview_role_invalid fun fromTrustedNative(raw: FloatArray?) "
             "raw: ByteBuffer? usedFloats: Int "
@@ -630,8 +631,9 @@ def valid_sources() -> dict[str, str]:
         "lib.rs": (
             "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRangeInto "
             "output: JByteBuffer "
-            "PREVIEW_PAYLOAD_MAGIC PREVIEW_PAYLOAD_VERSION: f32 = 3.0 "
-            "PREVIEW_HEADER_FLOATS: usize = 9 + ToolpathRole::COUNT "
+            "PREVIEW_PAYLOAD_MAGIC PREVIEW_PAYLOAD_VERSION: f32 = 4.0 "
+            "PREVIEW_HEADER_FLOATS: usize = 10 + ToolpathRole::COUNT "
+            "layer_z_values: Vec<f32> "
             "PREVIEW_PATH_FLOATS: usize = 1 paths: Vec<PreviewPathRange> "
             "role_segment_counts[path.role as usize] "
             "MAX_PREVIEW_SEGMENTS: usize = 120_000 MAX_PREVIEW_LAYERS: usize = 1_000_000 "

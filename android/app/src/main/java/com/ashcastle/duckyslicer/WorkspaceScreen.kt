@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
@@ -458,6 +459,7 @@ internal fun WorkspaceScreen(
     selectedPlateId: String,
     projectObjects: List<ProjectObject>,
     selectedObjectId: String?,
+    layerPauseEvents: LayerPauseEvents,
     sliceOptions: SliceOptions,
     profileCatalog: ProfileCatalog,
     profileRecents: ProfileRecents,
@@ -479,7 +481,9 @@ internal fun WorkspaceScreen(
     appSettingsSaveFailed: Boolean,
     supportReportExportState: SupportReportExportState,
     sliceOutcome: SliceOutcome?,
+    previewOutcome: SliceOutcome?,
     layerPreview: GcodeLayerPreview?,
+    previewStale: Boolean,
     importing: Boolean,
     autoLaying: Boolean,
     arranging: Boolean,
@@ -558,6 +562,8 @@ internal fun WorkspaceScreen(
     onSaveFilamentProfile: (String, SliceOptions, Int) -> Unit,
     onSaveSlicingProfile: (String, SliceOptions) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
+    onAddLayerPause: (Int, Float) -> Unit,
+    onRemoveLayerPause: (Float) -> Unit,
     onAppSettingsChanged: (AppSettings) -> Unit,
     onSupportReportExport: (Uri) -> Unit,
     onCancelSupportReportExport: () -> Unit,
@@ -1057,8 +1063,9 @@ internal fun WorkspaceScreen(
                 )
 
                 WorkspaceTab.PREVIEW -> PreviewSheet(
-                    outcome = sliceOutcome,
+                    outcome = previewOutcome,
                     preview = layerPreview,
+                    stale = previewStale,
                     loading = previewLoading,
                     error = error,
                     expanded = previewControlsExpanded,
@@ -1074,6 +1081,7 @@ internal fun WorkspaceScreen(
                     visibleToolpathRoles = visibleToolpathRoles,
                     previewColorMode = previewColorMode,
                     filamentColors = filamentColors,
+                    layerPauseEvents = layerPauseEvents,
                     onPreviewColorModeChanged = { mode -> previewColorModeName = mode.name },
                     onToolpathRoleVisibilityChanged = { role, visible ->
                         visibleToolpathRoles = if (visible) {
@@ -1083,6 +1091,8 @@ internal fun WorkspaceScreen(
                         }
                     },
                     onLayerRangeSelected = onLayerRangeSelected,
+                    onAddLayerPause = onAddLayerPause,
+                    onRemoveLayerPause = onRemoveLayerPause,
                     onGoToSlice = { onTabSelected(WorkspaceTab.SLICE) },
                     modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
@@ -6573,6 +6583,7 @@ private fun SliceSheet(
 private fun PreviewSheet(
     outcome: SliceOutcome?,
     preview: GcodeLayerPreview?,
+    stale: Boolean,
     loading: Boolean,
     error: String?,
     expanded: Boolean,
@@ -6584,9 +6595,12 @@ private fun PreviewSheet(
     visibleToolpathRoles: Set<Int>,
     previewColorMode: PreviewColorMode,
     filamentColors: List<Int>,
+    layerPauseEvents: LayerPauseEvents,
     onPreviewColorModeChanged: (PreviewColorMode) -> Unit,
     onToolpathRoleVisibilityChanged: (Int, Boolean) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
+    onAddLayerPause: (Int, Float) -> Unit,
+    onRemoveLayerPause: (Float) -> Unit,
     onGoToSlice: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -6618,6 +6632,13 @@ private fun PreviewSheet(
                 loading = loading,
                 onToggle = { onExpandedChanged(!expanded) },
             )
+            if (stale) {
+                Text(
+                    stringResource(R.string.preview_changes_pending),
+                    color = Color(0xFFFFCC4D),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             if (SliceWarningCode.NOZZLE_HARDNESS in outcome.warnings) {
                 Text(
                     stringResource(R.string.nozzle_hardness_warning),
@@ -6648,6 +6669,7 @@ private fun PreviewSheet(
                         PreviewControls(
                             preview = preview,
                             filamentColors = filamentColors,
+                            layerPauseEvents = layerPauseEvents,
                             toolpathOpacity = toolpathOpacity,
                             onToolpathOpacityChanged = onToolpathOpacityChanged,
                             toolpathDepthContrast = toolpathDepthContrast,
@@ -6657,6 +6679,8 @@ private fun PreviewSheet(
                             onPreviewColorModeChanged = onPreviewColorModeChanged,
                             onToolpathRoleVisibilityChanged = onToolpathRoleVisibilityChanged,
                             onLayerRangeSelected = onLayerRangeSelected,
+                            onAddLayerPause = onAddLayerPause,
+                            onRemoveLayerPause = onRemoveLayerPause,
                         )
                     }
                 }
@@ -6748,6 +6772,7 @@ private fun PreviewSummaryHeader(
 internal fun PreviewControls(
     preview: GcodeLayerPreview,
     filamentColors: List<Int> = DefaultFilamentColors,
+    layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
     toolpathOpacity: Float,
     onToolpathOpacityChanged: (Float) -> Unit,
     toolpathDepthContrast: Float,
@@ -6757,6 +6782,8 @@ internal fun PreviewControls(
     onPreviewColorModeChanged: (PreviewColorMode) -> Unit,
     onToolpathRoleVisibilityChanged: (Int, Boolean) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
+    onAddLayerPause: (Int, Float) -> Unit = { _, _ -> },
+    onRemoveLayerPause: (Float) -> Unit = {},
 ) {
     val lastLayerIndex = (preview.layerCount - 1).coerceAtLeast(0)
     val safeStartLayer = preview.startLayer.coerceIn(0, lastLayerIndex)
@@ -6911,6 +6938,72 @@ internal fun PreviewControls(
                         }
                         .focusable(),
                 )
+            }
+        }
+        val selectedLayerIndex = selectedRange.endInclusive.roundToInt()
+        val selectedLayerZ = preview.printZForLayer(selectedLayerIndex)
+        val selectedPause = selectedLayerZ?.let(layerPauseEvents::eventAt)
+        Button(
+            onClick = {
+                selectedLayerZ?.let { printZ ->
+                    if (selectedPause == null) {
+                        onAddLayerPause(selectedLayerIndex, printZ)
+                    } else {
+                        onRemoveLayerPause(printZ)
+                    }
+                }
+            },
+            enabled = selectedLayerZ != null &&
+                (selectedPause != null || layerPauseEvents.values.size < LayerPauseEvents.MAX_EVENTS),
+            modifier = Modifier.fillMaxWidth(),
+            colors = if (selectedPause == null) primaryButtonColors() else ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF464743),
+                contentColor = Color(0xFFF4F4EE),
+            ),
+        ) {
+            Icon(
+                if (selectedPause == null) Icons.Default.PauseCircle else Icons.Default.DeleteOutline,
+                null,
+            )
+            Spacer(Modifier.width(7.dp))
+            Text(
+                stringResource(
+                    if (selectedPause == null) R.string.add_layer_pause else R.string.remove_layer_pause,
+                    selectedLayerIndex + 1,
+                ),
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        if (layerPauseEvents.values.isNotEmpty()) {
+            Text(
+                stringResource(R.string.saved_layer_pauses, layerPauseEvents.values.size),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            layerPauseEvents.values.forEach { event ->
+                val removeDescription = stringResource(
+                    R.string.remove_layer_pause_height,
+                    event.printZMm,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.layer_pause_height, event.printZMm),
+                        modifier = Modifier.weight(1f),
+                        color = Color(0xFFF4F4EE),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    IconButton(
+                        onClick = { onRemoveLayerPause(event.printZMm) },
+                        modifier = Modifier.semantics {
+                            contentDescription = removeDescription
+                        },
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, null)
+                    }
+                }
             }
         }
         Row(

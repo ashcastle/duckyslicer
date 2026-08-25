@@ -22,7 +22,7 @@ def valid_sources() -> dict[str, str]:
                 "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
                 'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
                 "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-                "PROJECT_ARCHIVE_SCHEMA_VERSION = 72",
+                "PROJECT_ARCHIVE_SCHEMA_VERSION = 73",
                 'ArchivedProjectPlate ArchivedProjectVolume put("role", volume.role.name) '
                 'put("config", volume.config.toJson()) ProjectVolumeRole.valueOf '
                 "ProjectVolumeConfig.fromJson",
@@ -46,6 +46,9 @@ def valid_sources() -> dict[str, str]:
                 'put("heightRangeModifiers", heightRangeModifiers.toProjectJson())',
                 "schemaVersion >= 68",
                 'getJSONArray("heightRangeModifiers").toHeightRangeModifiers()',
+                'put("layerPauseEvents", plate.layerPauseEvents.toProjectJson())',
+                "schemaVersion >= 73",
+                'getJSONArray("layerPauseEvents").toLayerPauseEvents()',
                 "checkCancellation: () -> Unit = {}",
                 "copyArchiveBytes(input, archive, model.length(), checkCancellation)",
                 "val copied = copyArchiveBytes(",
@@ -80,8 +83,10 @@ def valid_sources() -> dict[str, str]:
                 "checkCancellation: () -> Unit = {}",
                 "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
                 "beginCommit: () -> Unit = {} beginCommit()",
-                'SCHEMA_VERSION = 74 schemaVersion >= 70 '
+                'SCHEMA_VERSION = 75 schemaVersion >= 70 schemaVersion >= 75 '
                 'put("heightRangeModifiers", heightRangeModifiers.toProjectJson()) '
+                'put("layerPauseEvents", plate.layerPauseEvents.toProjectJson()) '
+                'getJSONArray("layerPauseEvents").toLayerPauseEvents() '
                 'put("role", role.name) put("config", config.toJson())',
             )
         ),

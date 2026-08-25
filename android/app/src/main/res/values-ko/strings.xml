@@ -1148,4 +1148,10 @@
     <string name="extruder_offset_y">Y 오프셋</string>
     <string name="tool_change_retraction_length">툴 교체 리트랙션 길이</string>
     <string name="tool_change_retract_restart_extra">툴 교체 재시작 추가량</string>
+    <string name="add_layer_pause">%1$d 레이어에서 일시정지</string>
+    <string name="remove_layer_pause">%1$d 레이어 일시정지 삭제</string>
+    <string name="saved_layer_pauses">저장된 일시정지 %1$d개</string>
+    <string name="preview_changes_pending">내보내거나 출력하기 전에 다시 슬라이스하세요.</string>
+    <string name="layer_pause_height">%1$.2f mm에서 일시정지</string>
+    <string name="remove_layer_pause_height">%1$.2f mm 일시정지 삭제</string>
 </resources>

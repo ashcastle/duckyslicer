@@ -43,6 +43,7 @@ data class PlateSliceInput(
     val plateId: String,
     val objects: List<ProjectObject>,
     val options: SliceOptions,
+    val layerPauseEvents: LayerPauseEvents,
 )
 
 internal fun ProjectSnapshot.sliceInput(
@@ -54,5 +55,6 @@ internal fun ProjectSnapshot.sliceInput(
         plateId = plate.id,
         objects = plate.objects,
         options = plateOptions[plate.id] ?: return null,
+        layerPauseEvents = plate.layerPauseEvents,
     )
 }

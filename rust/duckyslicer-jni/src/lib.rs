@@ -155,13 +155,14 @@ const MAX_PREVIEW_SEGMENTS: usize = 120_000;
 const PREVIEW_COMPACTION_THRESHOLD: usize = MAX_PREVIEW_SEGMENTS * 2;
 const MAX_PREVIEW_LAYERS: usize = 1_000_000;
 const PREVIEW_PAYLOAD_MAGIC: f32 = 17_491.0;
-const PREVIEW_PAYLOAD_VERSION: f32 = 3.0;
-const PREVIEW_HEADER_FLOATS: usize = 9 + ToolpathRole::COUNT;
+const PREVIEW_PAYLOAD_VERSION: f32 = 4.0;
+const PREVIEW_HEADER_FLOATS: usize = 10 + ToolpathRole::COUNT;
 const PREVIEW_PATH_FLOATS: usize = 1;
 const TOOLPATH_SEGMENT_FLOATS: usize = 7;
 const TOOLPATH_TOOL_COUNT: usize = 16;
-const PREVIEW_MAX_PAYLOAD_FLOATS: usize =
-    PREVIEW_HEADER_FLOATS + MAX_PREVIEW_SEGMENTS * (TOOLPATH_SEGMENT_FLOATS + PREVIEW_PATH_FLOATS);
+const PREVIEW_MAX_PAYLOAD_FLOATS: usize = PREVIEW_HEADER_FLOATS
+    + MAX_PREVIEW_LAYERS
+    + MAX_PREVIEW_SEGMENTS * (TOOLPATH_SEGMENT_FLOATS + PREVIEW_PATH_FLOATS);
 const PACKED_TOOLPATH_FLOATS: usize = 8;
 const TOOLPATH_ROLE_COUNT: usize = 10;
 const TOOLPATH_Z_OFFSET_MM: f32 = 0.024;
@@ -515,6 +516,7 @@ struct GcodeLayerPreview {
     layer_count: usize,
     min_z_mm: f32,
     max_z_mm: f32,
+    layer_z_values: Vec<f32>,
     segments: Vec<[f32; 7]>,
     paths: Vec<PreviewPathRange>,
 }
@@ -2234,6 +2236,7 @@ fn preview_gcode(
     let mut current_layer: Option<usize> = None;
     let mut layer_count = 0usize;
     let mut layer_z = 0.0f32;
+    let mut all_layer_z_values = Vec::<f32>::new();
     let mut min_requested_z: Option<f32> = None;
     let mut max_requested_z: Option<f32> = None;
     let mut x = 0.0f32;
@@ -2265,7 +2268,7 @@ fn preview_gcode(
         let line = std::str::from_utf8(&line_buffer)
             .map_err(|_| EngineError::Parse("G-code contains invalid UTF-8".to_owned()))?;
         let trimmed = line.trim_ascii();
-        if trimmed == ";LAYER_CHANGE" {
+        if matches!(trimmed, ";LAYER_CHANGE" | "; CHANGE_LAYER") {
             preview_paths.break_path();
             let next = current_layer
                 .map(|layer| layer.checked_add(1))
@@ -2281,12 +2284,21 @@ fn preview_gcode(
             );
             continue;
         }
-        if let Some(value) = trimmed.strip_prefix(";Z:") {
-            if let Ok(parsed) = value.parse::<f32>()
+        if let Some(value) = trimmed
+            .strip_prefix(";Z:")
+            .or_else(|| trimmed.strip_prefix("; Z_HEIGHT:"))
+        {
+            if let Ok(parsed) = value.trim_ascii().parse::<f32>()
                 && parsed.is_finite()
                 && parsed.abs() <= MAX_GCODE_COORDINATE_ABS_MM
             {
                 layer_z = parsed;
+                if let Some(layer) = current_layer {
+                    if all_layer_z_values.len() <= layer {
+                        all_layer_z_values.resize(layer + 1, f32::NAN);
+                    }
+                    all_layer_z_values[layer] = parsed;
+                }
                 if current_layer.is_some_and(|layer| (start_layer..=end_layer).contains(&layer)) {
                     min_requested_z =
                         Some(min_requested_z.map_or(parsed, |value| value.min(parsed)));
@@ -2441,13 +2453,26 @@ fn preview_gcode(
     }
 
     let last_layer = layer_count.saturating_sub(1);
+    let clamped_start_layer = start_layer.min(last_layer);
+    let clamped_end_layer = end_layer.min(last_layer);
+    if layer_count == 0
+        || all_layer_z_values.len() < layer_count
+        || all_layer_z_values[..layer_count]
+            .iter()
+            .any(|value| !value.is_finite())
+    {
+        return Err(EngineError::Parse(
+            "G-code preview is missing layer heights".to_owned(),
+        ));
+    }
     let completed_paths = preview_paths.finish();
     Ok(GcodeLayerPreview {
-        start_layer: start_layer.min(last_layer),
-        end_layer: end_layer.min(last_layer),
+        start_layer: clamped_start_layer,
+        end_layer: clamped_end_layer,
         layer_count,
         min_z_mm: min_requested_z.unwrap_or(0.0),
         max_z_mm: max_requested_z.unwrap_or(0.0),
+        layer_z_values: all_layer_z_values[clamped_start_layer..=clamped_end_layer].to_vec(),
         segments: completed_paths.segments,
         paths: completed_paths.paths,
     })
@@ -2458,6 +2483,7 @@ fn write_preview_payload(
     output: &mut [f32],
 ) -> Result<usize, EngineError> {
     if preview.layer_count > MAX_PREVIEW_LAYERS
+        || preview.layer_z_values.len() != preview.end_layer - preview.start_layer + 1
         || preview.segments.len() > MAX_PREVIEW_SEGMENTS
         || preview.paths.len() > preview.segments.len()
     {
@@ -2473,6 +2499,19 @@ fn write_preview_payload(
     {
         return Err(EngineError::Parse(
             "G-code preview has invalid height metadata".to_owned(),
+        ));
+    }
+    if preview
+        .layer_z_values
+        .iter()
+        .any(|value| !value.is_finite() || value.abs() > MAX_GCODE_COORDINATE_ABS_MM)
+        || preview
+            .layer_z_values
+            .windows(2)
+            .any(|values| values[0] >= values[1])
+    {
+        return Err(EngineError::Parse(
+            "G-code preview has invalid layer heights".to_owned(),
         ));
     }
     let mut role_segment_counts = [0usize; ToolpathRole::COUNT];
@@ -2526,6 +2565,7 @@ fn write_preview_payload(
                 .checked_mul(PREVIEW_PATH_FLOATS)
                 .and_then(|path_floats| count.checked_add(path_floats))
         })
+        .and_then(|count| count.checked_add(preview.layer_z_values.len()))
         .and_then(|count| count.checked_add(PREVIEW_HEADER_FLOATS))
         .ok_or_else(|| EngineError::Parse("G-code preview size overflow".to_owned()))?;
     if output.len() < payload_floats {
@@ -2544,12 +2584,16 @@ fn write_preview_payload(
         preview.max_z_mm,
         preview.segments.len() as f32,
         preview.paths.len() as f32,
+        preview.layer_z_values.len() as f32,
     ];
     output[write_index..write_index + header.len()].copy_from_slice(&header);
     write_index += header.len();
     let role_counts = role_segment_counts.map(|count| count as f32);
     output[write_index..write_index + role_counts.len()].copy_from_slice(&role_counts);
     write_index += role_counts.len();
+    output[write_index..write_index + preview.layer_z_values.len()]
+        .copy_from_slice(&preview.layer_z_values);
+    write_index += preview.layer_z_values.len();
     for segment in &preview.segments {
         output[write_index..write_index + segment.len()].copy_from_slice(segment);
         write_index += segment.len();
@@ -3461,6 +3505,8 @@ mod tests {
         assert_eq!(preview.end_layer, 1);
         assert_eq!(preview.min_z_mm, 0.2);
         assert_eq!(preview.max_z_mm, 0.4);
+        assert_eq!(preview.layer_z_values, vec![0.2, 0.4]);
+        assert_eq!(clamped.layer_z_values, vec![0.4]);
         assert_eq!(
             preview.segments,
             vec![
@@ -3476,23 +3522,52 @@ mod tests {
         let payload = preview_payload(preview).expect("encode binary preview payload");
         assert_eq!(
             payload.len(),
-            PREVIEW_HEADER_FLOATS + 4 * TOOLPATH_SEGMENT_FLOATS + 4 * PREVIEW_PATH_FLOATS
+            PREVIEW_HEADER_FLOATS + 2 + 4 * TOOLPATH_SEGMENT_FLOATS + 4 * PREVIEW_PATH_FLOATS
         );
         assert_eq!(payload[0], PREVIEW_PAYLOAD_MAGIC);
         assert_eq!(payload[1], PREVIEW_PAYLOAD_VERSION);
         assert_eq!(&payload[2..7], &[0.0, 1.0, 2.0, 0.2, 0.4]);
-        assert_eq!(&payload[7..9], &[4.0, 4.0]);
-        assert_eq!(payload[9], 1.0);
-        assert_eq!(payload[9 + ToolpathRole::BottomSurface as usize], 1.0);
+        assert_eq!(&payload[7..10], &[4.0, 4.0, 2.0]);
+        assert_eq!(payload[10], 1.0);
+        assert_eq!(payload[10 + ToolpathRole::BottomSurface as usize], 1.0);
         assert_eq!(
-            payload[PREVIEW_HEADER_FLOATS + 5],
+            &payload[PREVIEW_HEADER_FLOATS..PREVIEW_HEADER_FLOATS + 2],
+            &[0.2, 0.4]
+        );
+        assert_eq!(
+            payload[PREVIEW_HEADER_FLOATS + 2 + 5],
             ToolpathRole::OuterWall.code()
         );
         assert_eq!(
-            payload[PREVIEW_HEADER_FLOATS + TOOLPATH_SEGMENT_FLOATS + 5],
+            payload[PREVIEW_HEADER_FLOATS + 2 + TOOLPATH_SEGMENT_FLOATS + 5],
             ToolpathRole::BottomSurface.code()
         );
         assert_eq!(&payload[payload.len() - 4..], &[1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn gcode_preview_accepts_orca_bambu_layer_markers() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-bambu-preview-{}.gcode",
+            std::process::id(),
+        ));
+        let mut file = File::create(&path).expect("create Bambu G-code fixture");
+        writeln!(
+            file,
+            "M83\n; CHANGE_LAYER\n; Z_HEIGHT: 0.2\n; LAYER_HEIGHT: 0.2\nG1 X10 E1\n; CHANGE_LAYER\n; Z_HEIGHT: 0.48\n; LAYER_HEIGHT: 0.28\nG1 X20 E1"
+        )
+        .expect("write Bambu G-code fixture");
+        drop(file);
+
+        let preview = preview_gcode(path.to_str().expect("utf8 path"), 0, usize::MAX)
+            .expect("parse Orca Bambu layer markers");
+        std::fs::remove_file(path).expect("remove Bambu G-code fixture");
+
+        assert_eq!(preview.layer_count, 2);
+        assert_eq!(preview.layer_z_values, vec![0.2, 0.48]);
+        assert_eq!(preview.min_z_mm, 0.2);
+        assert_eq!(preview.max_z_mm, 0.48);
+        assert_eq!(preview.segments.len(), 2);
     }
 
     #[test]
@@ -3530,6 +3605,7 @@ mod tests {
             layer_count: 1,
             min_z_mm: 0.2,
             max_z_mm: 0.2,
+            layer_z_values: vec![0.2],
             segments: vec![[0.0, 0.0, 1.0, 0.0, 0.2, ToolpathRole::OuterWall.code(), 0.0]],
             paths: vec![PreviewPathRange {
                 start: 0,
@@ -3811,7 +3887,7 @@ mod tests {
         let mut file = File::create(&path).expect("create non-finite G-code fixture");
         writeln!(
             file,
-            "M83\n;LAYER_CHANGE\n;Z:NaN\nG1 XNaN Yinf E1\nG1 X10 Y10 E1"
+            "M83\n;LAYER_CHANGE\n;Z:0.2\nG1 XNaN Yinf E1\nG1 X10 Y10 E1"
         )
         .expect("write fixture");
         drop(file);
@@ -3820,11 +3896,12 @@ mod tests {
             .expect("parse bounded coordinates");
         std::fs::remove_file(path).expect("remove fixture");
 
-        assert_eq!(preview.min_z_mm, 0.0);
-        assert_eq!(preview.max_z_mm, 0.0);
+        assert_eq!(preview.min_z_mm, 0.2);
+        assert_eq!(preview.max_z_mm, 0.2);
+        assert_eq!(preview.layer_z_values, vec![0.2]);
         assert_eq!(
             preview.segments,
-            vec![[0.0, 0.0, 10.0, 10.0, 0.0, 8.0, 0.0]],
+            vec![[0.0, 0.0, 10.0, 10.0, 0.2, 8.0, 0.0]],
         );
     }
 

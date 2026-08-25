@@ -421,6 +421,7 @@ private fun DuckySlicerScreen(
     var pendingGcodeExport by rememberSaveable { mutableStateOf<PlateSliceResult?>(null) }
     var selectedTab by rememberSaveable { mutableStateOf(WorkspaceTab.SLICE) }
     var layerPreview by remember { mutableStateOf<GcodeLayerPreview?>(null) }
+    var stalePreviewResult by remember { mutableStateOf<PlateSliceResult?>(null) }
     val sliceOperationState by sliceOperationModel.state.collectAsStateWithLifecycle()
     val slicing = sliceOperationState.slicing
     val sliceCancellationRequested = sliceOperationState.cancellationRequested
@@ -523,6 +524,7 @@ private fun DuckySlicerScreen(
         sliceOperationModel.clearCompleted()
         plateSliceResults = plateSliceResults.clear(plateId)
         layerPreview = null
+        stalePreviewResult = null
         remoteOperationModel.invalidateUpload()
     }
 
@@ -531,6 +533,14 @@ private fun DuckySlicerScreen(
         plateSliceResults = PlateSliceResults()
         pendingGcodeExport = null
         layerPreview = null
+        stalePreviewResult = null
+        remoteOperationModel.invalidateUpload()
+    }
+
+    fun invalidateSliceAfterPreviewEdit() {
+        stalePreviewResult = plateSliceResults.resultFor(selectedPlateId) ?: stalePreviewResult
+        sliceOperationModel.clearCompleted()
+        plateSliceResults = plateSliceResults.clear(selectedPlateId)
         remoteOperationModel.invalidateUpload()
     }
 
@@ -727,6 +737,7 @@ private fun DuckySlicerScreen(
         }
         plateSliceResults = plateSliceResults.put(ownerPlateId, completed)
         if (ownerPlateId == selectedPlateId) {
+            stalePreviewResult = null
             sliceOperationState.preview?.let { layerPreview = it }
             selectedTab = WorkspaceTab.PREVIEW
         }
@@ -1282,10 +1293,16 @@ private fun DuckySlicerScreen(
         if (
             !slicing && !importing && !projectTransferBusy && !autoLaying && !arranging &&
             !splitting && !cutting && !previewLoading &&
-            sliceOperationModel.start(input.plateId, input.objects, input.options)
+            sliceOperationModel.start(
+                input.plateId,
+                input.objects,
+                input.options,
+                input.layerPauseEvents,
+            )
         ) {
             plateSliceResults = plateSliceResults.clear(input.plateId)
             layerPreview = null
+            stalePreviewResult = null
             remoteOperationModel.invalidateUpload()
             error = null
             notice = null
@@ -1338,6 +1355,7 @@ private fun DuckySlicerScreen(
         selectedPlateId = selectedPlateId,
         projectObjects = projectObjects,
         selectedObjectId = projectHistory.current.selectedObjectId,
+        layerPauseEvents = projectHistory.current.activePlate.layerPauseEvents,
         sliceOptions = sliceOptions,
         profileCatalog = profileCatalog,
         profileRecents = profileRecents,
@@ -1359,7 +1377,9 @@ private fun DuckySlicerScreen(
         appSettingsSaveFailed = appSettingsState.message == AppSettingsMessage.SAVE_FAILED,
         supportReportExportState = supportReportExportState,
         sliceOutcome = sliceOutcome,
+        previewOutcome = sliceOutcome ?: stalePreviewResult?.outcome,
         layerPreview = layerPreview,
+        previewStale = sliceOutcome == null && stalePreviewResult != null,
         importing = importing || projectFileBusy,
         autoLaying = autoLaying,
         arranging = arranging,
@@ -1440,6 +1460,7 @@ private fun DuckySlicerScreen(
                 if (projectTransferModel.updateHistory(current, next)) {
                     sliceOperationModel.clearCompleted()
                     layerPreview = null
+                    stalePreviewResult = null
                     remoteOperationModel.invalidateUpload()
                     notice = null
                     error = null
@@ -1456,6 +1477,7 @@ private fun DuckySlicerScreen(
                 if (projectTransferModel.updateHistory(current, next)) {
                     sliceOperationModel.clearCompleted()
                     layerPreview = null
+                    stalePreviewResult = null
                     remoteOperationModel.invalidateUpload()
                     selectedTab = WorkspaceTab.SLICE
                     notice = null
@@ -1475,6 +1497,7 @@ private fun DuckySlicerScreen(
                     plateSliceResults = plateSliceResults.clear(removedPlateId)
                     sliceOperationModel.clearCompleted()
                     layerPreview = null
+                    stalePreviewResult = null
                     remoteOperationModel.invalidateUpload()
                     selectedTab = WorkspaceTab.SLICE
                     notice = null
@@ -1567,6 +1590,7 @@ private fun DuckySlicerScreen(
                 plateSliceResults = plateSliceResults.clear(targetPlateId)
                 sliceOperationModel.clearCompleted()
                 layerPreview = null
+                stalePreviewResult = null
                 remoteOperationModel.invalidateUpload()
                 notice = null
                 error = null
@@ -1868,6 +1892,28 @@ private fun DuckySlicerScreen(
             }
         },
         onLayerRangeSelected = loadPreviewRange,
+        onAddLayerPause = { _, printZMm ->
+            val current = projectTransferModel.state.value.history
+            val next = current.putLayerPause(
+                LayerPauseEvent(
+                    printZMm = printZMm,
+                ),
+            )
+            if (next != current && projectTransferModel.updateHistory(current, next)) {
+                invalidateSliceAfterPreviewEdit()
+                notice = null
+                error = null
+            }
+        },
+        onRemoveLayerPause = { printZMm ->
+            val current = projectTransferModel.state.value.history
+            val next = current.removeLayerPause(printZMm)
+            if (next != current && projectTransferModel.updateHistory(current, next)) {
+                invalidateSliceAfterPreviewEdit()
+                notice = null
+                error = null
+            }
+        },
         onAppSettingsChanged = { next ->
             appSettingsModel.updateSettings(next)
         },

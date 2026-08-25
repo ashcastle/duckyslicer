@@ -178,6 +178,7 @@ internal class ProjectStore(
                             )
                         },
                         selectedObjectId = archivedPlate.selectedObjectId,
+                        layerPauseEvents = archivedPlate.layerPauseEvents,
                     )
                 },
             )
@@ -272,6 +273,11 @@ internal class ProjectStore(
                     id = plateId,
                     objects = objects,
                     selectedObjectId = requestedSelection,
+                    layerPauseEvents = if (schemaVersion >= 75) {
+                        value.getJSONArray("layerPauseEvents").toLayerPauseEvents()
+                    } else {
+                        LayerPauseEvents()
+                    },
                 )
             }
             val selectedPlateId = root.getString("selectedPlateId")
@@ -365,6 +371,7 @@ internal class ProjectStore(
                                     "selectedObjectId",
                                     plate.selectedObjectId ?: JSONObject.NULL,
                                 )
+                                .put("layerPauseEvents", plate.layerPauseEvents.toProjectJson())
                                 .put("sliceOptions", requireNotNull(plateOptions[plate.id]).toProjectJson())
                                 .put(
                                     "objects",
@@ -587,6 +594,9 @@ internal class ProjectStore(
                     ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
                 require(selected == null || selected in localIds)
                 require(value.getJSONObject("sliceOptions").toProjectSliceOptionsOrNull() != null)
+                if (schemaVersion >= 75) {
+                    value.getJSONArray("layerPauseEvents").toLayerPauseEvents()
+                }
             }
             val selectedPlateId = root.getString("selectedPlateId")
             require(selectedPlateId in plateIds)
@@ -1043,7 +1053,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 74
+        const val SCHEMA_VERSION = 75
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"

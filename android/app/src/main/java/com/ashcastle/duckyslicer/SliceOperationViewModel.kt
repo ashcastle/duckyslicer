@@ -49,7 +49,12 @@ internal class SliceOperationViewModel : ViewModel() {
         recoverForegroundSlice()
     }
 
-    fun start(plateId: String, objects: List<ProjectObject>, options: SliceOptions): Boolean {
+    fun start(
+        plateId: String,
+        objects: List<ProjectObject>,
+        options: SliceOptions,
+        layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
+    ): Boolean {
         if (objects.isEmpty() || mutableState.value.busy || operationJob.get()?.isActive == true) {
             return false
         }
@@ -67,6 +72,7 @@ internal class SliceOperationViewModel : ViewModel() {
             OnDeviceSlicer.slice(
                 objects,
                 options,
+                layerPauseEvents = layerPauseEvents,
                 foregroundSession = foregroundSession,
                 cancellationRequested = { cancellationRequested(foregroundSession) },
                 onProgress = onProgress,

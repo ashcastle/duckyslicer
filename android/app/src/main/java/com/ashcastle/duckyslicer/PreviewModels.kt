@@ -55,7 +55,27 @@ data class GcodeLayerPreview(
     val maxZMm: Float,
     val segments: FloatArray,
     val roleSegmentCounts: IntArray,
+    val layerZValues: FloatArray = FloatArray(0),
 ) {
+    private val visibleLayerZValues: FloatArray by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        val values = HashSet<Float>((endLayer - startLayer + 1).coerceAtLeast(0))
+        var offset = 0
+        while (offset < segments.size) {
+            values += segments[offset + 4]
+            offset += SEGMENT_STRIDE
+        }
+        values.toFloatArray().apply(FloatArray::sort)
+    }
+
+    fun printZForLayer(layerIndex: Int): Float? {
+        if (layerIndex !in startLayer..endLayer) return null
+        val localIndex = layerIndex - startLayer
+        val authoritative = layerZValues.takeIf { it.size == endLayer - startLayer + 1 }
+            ?: visibleLayerZValues
+        return authoritative.takeIf { it.size == endLayer - startLayer + 1 }
+            ?.getOrNull(localIndex)
+    }
+
     val toolSegmentCounts: IntArray by lazy(LazyThreadSafetyMode.PUBLICATION) {
         IntArray(MAX_TOOL_COUNT).also { counts ->
             var offset = 0
@@ -511,15 +531,22 @@ data class GcodeLayerPreview(
             val totalSegments = floats.exactInt(7, MAX_SEGMENTS)
             val pathCount = floats.exactInt(8, MAX_SEGMENTS)
             check(pathCount <= totalSegments) { "preview_path_count_invalid" }
+            val layerZCount = floats.exactInt(9, MAX_LAYER_COUNT)
+            check(layerZCount == endLayer - startLayer + 1) { "preview_layer_height_count_invalid" }
             val roleSegmentCounts = IntArray(ROLE_COUNT) { role ->
                 floats.exactInt(ROLE_COUNTS_OFFSET + role, MAX_SEGMENTS)
             }
             check(roleSegmentCounts.sum() == totalSegments) { "preview_role_count_invalid" }
-            val segmentEnd = HEADER_FLOATS + totalSegments * SEGMENT_STRIDE
+            val segmentStart = HEADER_FLOATS + layerZCount
+            val segmentEnd = segmentStart + totalSegments * SEGMENT_STRIDE
             val expectedPayloadFloats = segmentEnd + pathCount * PATH_STRIDE
             check(usedFloats == expectedPayloadFloats) { "preview_size_invalid" }
             val segments = FloatArray(totalSegments * SEGMENT_STRIDE)
+            val layerZValues = FloatArray(layerZCount)
             floats.position(HEADER_FLOATS)
+            floats.get(layerZValues)
+            checkValidLayerZValues(layerZValues)
+            floats.position(segmentStart)
             floats.get(segments)
 
             val pathBuilder = if (pathCount == 0) null else PrimitivePathBuilder(totalSegments)
@@ -536,7 +563,7 @@ data class GcodeLayerPreview(
                 val pathRole = roleValue.toInt()
                 check(pathRole in 0 until ROLE_COUNT) { "preview_path_role_invalid" }
                 val pathTool = floats.exactInt(
-                    HEADER_FLOATS + pathStart * SEGMENT_STRIDE + TOOL_OFFSET,
+                    segmentStart + pathStart * SEGMENT_STRIDE + TOOL_OFFSET,
                     MAX_TOOL_COUNT - 1,
                 )
                 var segmentIndex = pathStart
@@ -569,6 +596,7 @@ data class GcodeLayerPreview(
                 maxZMm = maxZMm,
                 segments = segments,
                 roleSegmentCounts = roleSegmentCounts,
+                layerZValues = layerZValues,
             ).also { preview ->
                 preview.cachedPathIndex = pathIndex
             }
@@ -599,16 +627,21 @@ data class GcodeLayerPreview(
             val totalSegments = raw.exactInt(7, MAX_SEGMENTS)
             val pathCount = raw.exactInt(8, MAX_SEGMENTS)
             check(pathCount <= totalSegments) { "preview_path_count_invalid" }
+            val layerZCount = raw.exactInt(9, MAX_LAYER_COUNT)
+            check(layerZCount == endLayer - startLayer + 1) { "preview_layer_height_count_invalid" }
             val roleSegmentCounts = IntArray(ROLE_COUNT) { role ->
                 raw.exactInt(ROLE_COUNTS_OFFSET + role, MAX_SEGMENTS)
             }
             check(roleSegmentCounts.sum() == totalSegments) { "preview_role_count_invalid" }
-            val segmentEnd = HEADER_FLOATS + totalSegments * SEGMENT_STRIDE
+            val segmentStart = HEADER_FLOATS + layerZCount
+            val segmentEnd = segmentStart + totalSegments * SEGMENT_STRIDE
             val expectedPayloadFloats = segmentEnd + pathCount * PATH_STRIDE
             check(raw.size <= MAX_PAYLOAD_FLOATS && raw.size == expectedPayloadFloats) {
                 "preview_size_invalid"
             }
-            val segments = raw.copyOfRange(HEADER_FLOATS, segmentEnd)
+            val layerZValues = raw.copyOfRange(HEADER_FLOATS, segmentStart)
+            checkValidLayerZValues(layerZValues)
+            val segments = raw.copyOfRange(segmentStart, segmentEnd)
             if (validateCoordinates) {
                 val verifiedRoleCounts = IntArray(ROLE_COUNT)
                 var offset = 0
@@ -681,21 +714,34 @@ data class GcodeLayerPreview(
                 maxZMm = maxZMm,
                 segments = segments,
                 roleSegmentCounts = roleSegmentCounts,
+                layerZValues = layerZValues,
             ).also { preview ->
                 preview.cachedPathIndex = pathIndex
             }
         }
 
         internal const val MAX_SEGMENTS = 120_000
-        private const val HEADER_FLOATS = 9 + ROLE_COUNT
-        private const val ROLE_COUNTS_OFFSET = 9
+        private fun checkValidLayerZValues(values: FloatArray) {
+            check(values.all { it.isFinite() && kotlin.math.abs(it) <= MAX_COORDINATE_ABS_MM }) {
+                "preview_layer_height_invalid"
+            }
+            var index = 1
+            while (index < values.size) {
+                check(values[index - 1] < values[index]) { "preview_layer_height_order_invalid" }
+                index += 1
+            }
+        }
+
+        private const val HEADER_FLOATS = 10 + ROLE_COUNT
+        private const val ROLE_COUNTS_OFFSET = 10
         private const val PATH_STRIDE = 1
+        private const val MAX_LAYER_COUNT = 1_000_000
         internal const val MAX_PAYLOAD_FLOATS = HEADER_FLOATS +
+            MAX_LAYER_COUNT +
             MAX_SEGMENTS * (SEGMENT_STRIDE + PATH_STRIDE)
         internal const val MAX_PAYLOAD_BYTES = MAX_PAYLOAD_FLOATS * Float.SIZE_BYTES
         private const val PAYLOAD_MAGIC = 17_491f
-        private const val PAYLOAD_VERSION = 3f
-        private const val MAX_LAYER_COUNT = 1_000_000
+        private const val PAYLOAD_VERSION = 4f
         private const val MAX_COORDINATE_ABS_MM = 1_000_000f
     }
 }
