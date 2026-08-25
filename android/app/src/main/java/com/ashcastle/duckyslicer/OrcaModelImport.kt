@@ -236,9 +236,9 @@ private fun modelFormat(displayName: String?, mimeType: String?): OrcaModelForma
         extension == "stl" -> OrcaModelFormat.STL
         extension == "3mf" -> OrcaModelFormat.THREE_MF
         extension == "obj" -> OrcaModelFormat.OBJ
-        mimeType in STL_MIME_TYPES -> OrcaModelFormat.STL
-        mimeType in THREE_MF_MIME_TYPES -> OrcaModelFormat.THREE_MF
-        mimeType in OBJ_MIME_TYPES -> OrcaModelFormat.OBJ
+        mimeType in STL_MODEL_MIME_TYPES -> OrcaModelFormat.STL
+        mimeType in THREE_MF_MODEL_MIME_TYPES -> OrcaModelFormat.THREE_MF
+        mimeType in OBJ_MODEL_MIME_TYPES -> OrcaModelFormat.OBJ
         else -> null
     }
 }
@@ -329,14 +329,14 @@ private fun importedTransforms(
     }
 }
 
-private val STL_MIME_TYPES = setOf(
+internal val STL_MODEL_MIME_TYPES = setOf(
     "model/stl",
     "application/sla",
     "application/vnd.ms-pki.stl",
 )
-private val THREE_MF_MIME_TYPES = setOf(
+internal val THREE_MF_MODEL_MIME_TYPES = setOf(
     "model/3mf",
     "application/vnd.ms-package.3dmanufacturing-3dmodel+xml",
     "application/vnd.ms-3mfdocument",
 )
-private val OBJ_MIME_TYPES = setOf("model/obj", "application/x-tgif")
+internal val OBJ_MODEL_MIME_TYPES = setOf("model/obj", "application/x-tgif")

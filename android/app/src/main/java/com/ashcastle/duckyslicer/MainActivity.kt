@@ -258,6 +258,7 @@ private const val MODEL_MAX_COORDINATE_ABS_MM = 1_000_000.0
 
 class MainActivity : ComponentActivity() {
     private lateinit var appSettingsModel: AppSettingsViewModel
+    private lateinit var externalModelModel: ExternalModelRequestViewModel
     private lateinit var externalProfileModel: ExternalProfileRequestViewModel
     private lateinit var externalProjectModel: ExternalProjectRequestViewModel
     private lateinit var profileLibraryModel: ProfileLibraryViewModel
@@ -272,10 +273,12 @@ class MainActivity : ComponentActivity() {
         val gcodeExportModel = ViewModelProvider(this)[GcodeExportViewModel::class.java]
         val supportReportExportModel =
             ViewModelProvider(this)[SupportReportExportViewModel::class.java]
+        externalModelModel = ViewModelProvider(this)[ExternalModelRequestViewModel::class.java]
         externalProfileModel = ViewModelProvider(this)[ExternalProfileRequestViewModel::class.java]
         externalProjectModel = ViewModelProvider(this)[ExternalProjectRequestViewModel::class.java]
         projectTransferModel = ViewModelProvider(this)[ProjectTransferViewModel::class.java]
         if (savedInstanceState == null) {
+            externalModelModel.enqueue(intent)
             externalProfileModel.enqueue(intent)
             externalProjectModel.enqueue(intent)
         }
@@ -285,6 +288,8 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             MaterialTheme(colorScheme = DuckyColors) {
+                val externalModelRequest by
+                    externalModelModel.request.collectAsStateWithLifecycle()
                 val externalProjectRequest by
                     externalProjectModel.request.collectAsStateWithLifecycle()
                 val externalProfileRequest by
@@ -297,6 +302,10 @@ class MainActivity : ComponentActivity() {
                     gcodeExportModel = gcodeExportModel,
                     supportReportExportModel = supportReportExportModel,
                     projectTransferModel = projectTransferModel,
+                    externalModelRequest = externalModelRequest,
+                    onExternalModelRequestStarted = externalModelModel::markStarted,
+                    onExternalModelRequestConsumed = externalModelModel::consume,
+                    onExternalModelRequestDiscarded = externalModelModel::discardUnstarted,
                     externalProfileRequest = externalProfileRequest,
                     onExternalProfileRequestStarted = externalProfileModel::markStarted,
                     onExternalProfileRequestConsumed = externalProfileModel::consume,
@@ -310,6 +319,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        externalModelModel.enqueue(intent)
         externalProfileModel.enqueue(intent)
         externalProjectModel.enqueue(intent)
     }
@@ -331,6 +341,10 @@ private fun DuckySlicerScreen(
     gcodeExportModel: GcodeExportViewModel,
     supportReportExportModel: SupportReportExportViewModel,
     projectTransferModel: ProjectTransferViewModel,
+    externalModelRequest: ExternalModelRequest?,
+    onExternalModelRequestStarted: (Long, Long) -> Boolean,
+    onExternalModelRequestConsumed: (Long, Long) -> Boolean,
+    onExternalModelRequestDiscarded: (Long) -> Boolean,
     externalProfileRequest: ExternalProfileRequest?,
     onExternalProfileRequestStarted: (Long, Long) -> Boolean,
     onExternalProfileRequestConsumed: (Long, Long) -> Boolean,
@@ -659,6 +673,14 @@ private fun DuckySlicerScreen(
                 notice = modelEditCanceledNotice
             }
         }
+        externalModelRequest
+            ?.takeIf { request ->
+                completion.kind == ProjectEditKind.MODEL_IMPORT &&
+                    request.startedOperationId == completion.id
+            }
+            ?.let { request ->
+                onExternalModelRequestConsumed(request.id, completion.id)
+            }
         projectTransferModel.consumeEditCompletion(completion.id)
     }
 
@@ -1039,6 +1061,43 @@ private fun DuckySlicerScreen(
             !previewLoading && projectTransferModel.importModels(uri)
         ) {
             error = null
+            notice = null
+        }
+    }
+
+    LaunchedEffect(
+        externalModelRequest?.id,
+        externalModelRequest?.startedOperationId,
+        projectRestored,
+        projectTransferBusy,
+        importing,
+        autoLaying,
+        arranging,
+        splitting,
+        cutting,
+        slicing,
+        previewLoading,
+        projectTransferState.editCompletion?.id,
+    ) {
+        val request = externalModelRequest ?: return@LaunchedEffect
+        if (request.startedOperationId != null) return@LaunchedEffect
+        if (
+            !projectRestored || projectTransferBusy || importing || autoLaying || arranging ||
+            splitting || cutting || slicing || previewLoading ||
+            projectTransferState.editCompletion != null
+        ) return@LaunchedEffect
+        if (projectTransferModel.importModels(request.uri)) {
+            val operation = projectTransferModel.state.value.activeEdit
+            if (
+                operation?.kind != ProjectEditKind.MODEL_IMPORT ||
+                !onExternalModelRequestStarted(request.id, operation.id)
+            ) {
+                projectTransferModel.cancelActiveEdit()
+            }
+            error = null
+            notice = null
+        } else if (onExternalModelRequestDiscarded(request.id)) {
+            error = modelReadError
             notice = null
         }
     }

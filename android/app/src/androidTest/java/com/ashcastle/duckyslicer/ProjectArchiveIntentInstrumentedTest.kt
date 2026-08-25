@@ -296,8 +296,9 @@ class ProjectArchiveIntentInstrumentedTest {
                 result.activityInfo.name == MainActivity::class.java.name
             },
         )
+        // It is unrelated to the project-archive parser, but it is now a supported model intent.
         assertTrue(
-            packageManager.queryIntentActivities(unrelated, 0).none { result ->
+            packageManager.queryIntentActivities(unrelated, 0).any { result ->
                 result.activityInfo.name == MainActivity::class.java.name
             },
         )
