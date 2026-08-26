@@ -34,20 +34,33 @@ class ProjectStoreTest {
                 uri = "content://documents/projects/DuckySlicer-project.duckyproject",
                 displayName = "DuckySlicer-project.duckyproject",
             )
+            val older = LinkedProjectDocument(
+                uri = "content://documents/projects/Older.duckyproject",
+                displayName = "Older.duckyproject",
+            )
 
-            store.save(snapshot, options, link, linkedDocumentDirty = true)
+            store.save(
+                snapshot,
+                options,
+                link,
+                linkedDocumentDirty = true,
+                recentDocuments = listOf(link, older),
+            )
 
             val restored = store.loadProject()
             val persisted = JSONObject(File(root, "current_project.json").readText())
             assertEquals(link, restored.linkedDocument)
             assertTrue(restored.linkedDocumentDirty)
+            assertEquals(listOf(link, older), restored.recentDocuments)
             assertEquals(link.uri, persisted.getJSONObject("linkedDocument").getString("uri"))
             assertTrue(persisted.getBoolean("linkedDocumentDirty"))
+            assertEquals(2, persisted.getJSONArray("recentDocuments").length())
 
             val output = ByteArrayOutputStream()
             store.exportArchive(snapshot, options, output)
             val archiveText = output.toString(Charsets.ISO_8859_1.name())
             assertFalse(archiveText.contains(link.uri))
+            assertFalse(archiveText.contains(older.uri))
         }
 
     @Test
@@ -229,11 +242,11 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(80, persisted.getInt("schemaVersion"))
+        assertEquals(81, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf(
                 "schemaVersion", "selectedPlateId", "linkedDocument",
-                "linkedDocumentDirty", "plates",
+                "linkedDocumentDirty", "recentDocuments", "plates",
             ),
             persisted.keys().asSequence().toSet(),
         )

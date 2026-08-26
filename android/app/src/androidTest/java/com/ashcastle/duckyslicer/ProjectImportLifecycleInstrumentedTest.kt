@@ -1,6 +1,7 @@
 package com.ashcastle.duckyslicer
 
 import android.app.Application
+import android.content.Intent
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
@@ -24,6 +25,76 @@ import org.junit.runner.RunWith
 class ProjectImportLifecycleInstrumentedTest {
     @get:Rule
     val blockingProviderProcess = BlockingProviderProcessRule()
+
+    @Test
+    fun recentProjectReopensThroughItsRetainedDocumentGrant() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val testContext = instrumentation.context
+        val resolver = context.contentResolver
+        val uri = BlockingImportProvider.URI
+        val grantFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        testContext.grantUriPermission(context.packageName, uri, grantFlags)
+        assertTrue(resolver.retainProjectDocumentWritePermission(uri))
+        val store = ViewModelStore()
+        var fixture: ImportFixture? = null
+        try {
+            val application = context.applicationContext as Application
+            val model = ViewModelProvider(
+                store,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[ProjectTransferViewModel::class.java]
+            waitUntil("project session did not restore") {
+                model.state.value.restored && !model.state.value.busy
+            }
+            fixture = reopenFixture(model.state.value.sliceOptions)
+            prepareProvider(BlockingImportProvider.METHOD_PREPARE_DIRECT, requireNotNull(fixture))
+            assertTrue(model.importProject(uri))
+            waitUntil("initial recent project import did not settle") {
+                model.state.value.completion != null
+            }
+            assertTrue(model.state.value.completion is ProjectTransferCompletion.Imported)
+            val document = checkNotNull(model.state.value.linkedDocument)
+            assertEquals(document, model.state.value.recentDocuments.first())
+            model.consumeCompletion(checkNotNull(model.state.value.completion).id)
+            assertTrue(model.newProject())
+            assertEquals(null, model.state.value.linkedDocument)
+            assertTrue(model.state.value.recentDocuments.any { it.uri == document.uri })
+
+            prepareProvider(BlockingImportProvider.METHOD_PREPARE_DIRECT, requireNotNull(fixture))
+            assertTrue(model.importRecentProject(document))
+            waitUntil("recent project did not settle") {
+                model.state.value.completion != null
+            }
+            assertTrue(model.state.value.completion is ProjectTransferCompletion.Imported)
+            assertEquals(document, model.state.value.linkedDocument)
+            assertEquals("incoming", model.state.value.history.current.selectedObjectId)
+            model.consumeCompletion(checkNotNull(model.state.value.completion).id)
+            assertTrue(model.newProject())
+            model.flushPersistence()
+            waitUntil("recent-project test cleanup was not persisted") {
+                model.state.value.sessionRevision == model.state.value.persistedRevision
+            }
+        } finally {
+            store.clear()
+            runCatching {
+                resolver.releasePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            testContext.revokeUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+            releaseProvider()
+            fixture?.delete()
+        }
+    }
 
     @Test
     fun projectImportCancellationSurvivesRecreationAndPreservesTheCurrentProject() {
@@ -181,6 +252,39 @@ class ProjectImportLifecycleInstrumentedTest {
         Random(83).nextBytes(payload)
         modelFile.writeBytes(payload)
         val archive = context.filesDir.resolve("project-import-${UUID.randomUUID()}.duckyproject")
+        archive.outputStream().use { output ->
+            source.exportArchive(
+                ProjectSnapshot(
+                    objects = listOf(ProjectObject("incoming", inspectedModel(modelFile))),
+                    selectedObjectId = "incoming",
+                ),
+                options,
+                output,
+            )
+        }
+        return ImportFixture(archive, sourceRoot)
+    }
+
+    private fun reopenFixture(options: SliceOptions): ImportFixture {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val sourceRoot = context.cacheDir.resolve("recent-project-${UUID.randomUUID()}")
+        val source = ProjectStore(sourceRoot, ::inspectedModel)
+        val modelFile = source.createModelDestination("incoming.stl").apply {
+            writeText(
+                """
+                solid recent_project
+                  facet normal 0 0 1
+                    outer loop
+                      vertex 0 0 0
+                      vertex 20 0 0
+                      vertex 0 20 0
+                    endloop
+                  endfacet
+                endsolid recent_project
+                """.trimIndent(),
+            )
+        }
+        val archive = context.filesDir.resolve("recent-project-${UUID.randomUUID()}.duckyproject")
         archive.outputStream().use { output ->
             source.exportArchive(
                 ProjectSnapshot(

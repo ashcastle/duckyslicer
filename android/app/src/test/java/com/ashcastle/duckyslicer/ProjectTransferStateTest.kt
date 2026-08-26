@@ -43,8 +43,42 @@ class ProjectTransferStateTest {
         assertEquals(link, linked.linkedDocument)
         assertFalse(linked.linkedDocumentDirty)
         assertEquals(5, linked.sessionRevision)
+        assertEquals(listOf(link), linked.recentDocuments)
         assertEquals(linked, linked.withLinkedDocument(link))
         assertEquals(6, linked.withLinkedDocument(null).sessionRevision)
+    }
+
+    @Test
+    fun recentProjectDocumentsArePromotedBoundedAndRemovedWithLostAccess() {
+        val documents = (1..MAX_RECENT_PROJECT_DOCUMENTS).map { index ->
+            LinkedProjectDocument(
+                "content://documents/projects/$index",
+                "Project $index.duckyproject",
+            )
+        }
+        val promoted = documents.withRecentProjectDocument(documents.last())
+        assertEquals(documents.last(), promoted.first())
+        assertEquals(MAX_RECENT_PROJECT_DOCUMENTS, promoted.size)
+
+        val newest = LinkedProjectDocument(
+            "content://documents/projects/new",
+            "Newest.duckyproject",
+        )
+        val state = ProjectTransferState(
+            restored = true,
+            linkedDocument = documents.first(),
+            linkedDocumentDirty = true,
+            recentDocuments = promoted,
+            sessionRevision = 8,
+        ).withLinkedDocument(newest)
+
+        assertEquals(newest, state.recentDocuments.first())
+        assertEquals(MAX_RECENT_PROJECT_DOCUMENTS, state.recentDocuments.size)
+        val unavailable = state.withUnavailableProjectDocument(newest.uri)
+        assertNull(unavailable.linkedDocument)
+        assertFalse(unavailable.linkedDocumentDirty)
+        assertFalse(unavailable.recentDocuments.any { it.uri == newest.uri })
+        assertEquals(state.sessionRevision + 1, unavailable.sessionRevision)
     }
 
     @Test

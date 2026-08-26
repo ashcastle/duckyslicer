@@ -101,11 +101,14 @@ def valid_sources() -> dict[str, str]:
                 "checkCancellation: () -> Unit = {}",
                 "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
                 "beginCommit: () -> Unit = {} beginCommit()",
-                'SCHEMA_VERSION = 80 schemaVersion >= 70 schemaVersion >= 75 '
+                'SCHEMA_VERSION = 81 schemaVersion >= 70 schemaVersion >= 75 '
                 'schemaVersion >= 76 schemaVersion >= 77 schemaVersion >= 78 '
-                'schemaVersion >= 79 schemaVersion >= 80 "linkedDocument", '
+                'schemaVersion >= 79 schemaVersion >= 80 schemaVersion >= 81 '
+                '"linkedDocument", '
                 '"linkedDocumentDirty", root.has("linkedDocument") '
                 'root.has("linkedDocumentDirty") '
+                '"recentDocuments", root.getJSONArray("recentDocuments") '
+                'MAX_RECENT_PROJECT_DOCUMENTS '
                 'normalizedLinkedProjectDocument '
                 'put("name", plate.name ?: JSONObject.NULL) normalizedProjectPlateName '
                 'put("heightRangeModifiers", heightRangeModifiers.toProjectJson()) '
@@ -124,7 +127,10 @@ def valid_sources() -> dict[str, str]:
             "persistedUriPermissions permission.isWritePermission "
             "linkedProjectDocument(uri: Uri) OpenableColumns.DISPLAY_NAME "
             "MAX_PROJECT_DOCUMENT_URI_LENGTH = 4_096 "
-            "MAX_PROJECT_DOCUMENT_NAME_LENGTH = 200"
+            "MAX_PROJECT_DOCUMENT_NAME_LENGTH = 200 "
+            "MAX_RECENT_PROJECT_DOCUMENTS = 5 withRecentProjectDocument "
+            "withoutRecentProjectDocument releasePersistableUriPermission "
+            "permission.isReadPermission"
         ),
         "ModelOpenRequest.kt": (
             "Intent.ACTION_VIEW Intent.ACTION_SEND ContentResolver.SCHEME_CONTENT "
@@ -181,6 +187,7 @@ def valid_sources() -> dict[str, str]:
                 "val plateOptions: Map<String, SliceOptions> "
                 "val linkedDocument: LinkedProjectDocument? "
                 "val linkedDocumentDirty: Boolean "
+                "val recentDocuments: List<LinkedProjectDocument> "
                 "val restored: Boolean val sessionRevision: Long "
                 "val persistedRevision: Long "
                 "val activeTransferId: Long? "
@@ -215,6 +222,9 @@ def valid_sources() -> dict[str, str]:
                 "fun saveLinkedProject( deleteFailedDocument = false "
                 "retainProjectDocumentWritePermission(uri) "
                 "withLinkedDocument(linkedDocument) "
+                "fun importRecentProject(document: LinkedProjectDocument) "
+                "withUnavailableProjectDocument(document.uri) "
+                "releaseEvictedProjectDocumentPermissions "
                 "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
                 "catch (failure: CancellationException) consumeCompletion",
                 "fun createAuxiliaryPrimitive( createOrcaAuxiliaryPrimitive( "
@@ -249,6 +259,8 @@ def valid_sources() -> dict[str, str]:
                 "projectTransferState.linkedDocumentDirty "
                 "replacementConfirmationRequired = requiresProjectReplacementConfirmation( "
                 "linkedDocumentDirty = projectTransferState.linkedDocumentDirty "
+                "projectTransferState.recentDocuments.filterNot "
+                "onOpenRecentProject = ::importRecentProject "
                 "projectTransferModel.saveLinkedProject( !started && !latest.busy "
                 "latest.completion == null && latest.editCompletion == null "
                 "onSaveProject = projectSaveAction(",
@@ -282,6 +294,7 @@ def valid_sources() -> dict[str, str]:
             "replacementConfirmationRequired = requiresProjectReplacementConfirmation( "
             "linkedDocumentDirty = linkedProjectDirty "
             "R.string.linked_project_file R.string.linked_project_unsaved "
+            "R.string.recent_projects onOpenRecentProject(document) "
             "R.string.project_save_options R.string.save_project_as "
             "onPlateSelected onAddPlate "
             "onDuplicatePlate onRemovePlate PlateSwitcher( canDuplicateSelectedPlate "
@@ -376,7 +389,9 @@ def valid_sources() -> dict[str, str]:
             "projectImportCancellationSurvivesRecreationAndPreservesTheCurrentProject "
             "projectImportCancellationInterruptsProviderOpen "
             "finalProjectOwnerClearStopsItsImportAndPreservesTheCurrentProject "
+            "recentProjectReopensThroughItsRetainedDocumentGrant "
             "BlockingImportProvider.METHOD_PREPARE "
+            "BlockingImportProvider.METHOD_PREPARE_DIRECT "
             "BlockingImportProvider.METHOD_PREPARE_OPEN_BLOCK "
             "retained.cancelProjectImport() store.clear() model.updateSession( "
             "unsavedOptions waitForStagingCleanup()"
@@ -389,11 +404,13 @@ def valid_sources() -> dict[str, str]:
         "BlockingImportProvider.java": (
             "openAssetFile( CancellationSignal signal "
             "signal.setOnCancelListener(target.release::countDown) signal.throwIfCanceled() "
-            "ParcelFileDescriptor.createPipe() Blocking import provider is read-only"
+            "ParcelFileDescriptor.createPipe() MODE_DIRECT ParcelFileDescriptor.dup( "
+            "Blocking import provider is read-only"
         ),
         "AccessibilityInstrumentedTest.kt": (
             "cancelProjectImportActionIsReachable cancelProjectExportActionIsReachable "
             "projectActionsAreVisibleAndOpeningConfirmsReplacement R.string.project_save_options "
+            "recentProjectIsFocusableAndUsesTheExistingReplacementWarning R.string.recent_projects "
             "dirtyEmptyLinkedProjectRequiresConfirmationBeforeOpenOrNew "
             "R.string.linked_project_unsaved R.string.replace_project_unsaved_body "
             "R.string.save_project_as Save project as must be reachable from the split action "
@@ -493,8 +510,10 @@ def valid_sources() -> dict[str, str]:
             "</activity></application></manifest>"
         ),
         "AndroidTestManifest.xml": (
-            '<manifest><application><provider android:authorities="'
-            'com.ashcastle.duckyslicer.test.blocking-import" />'
+            '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
+            '<application><provider android:authorities="'
+            'com.ashcastle.duckyslicer.test.blocking-import" '
+            'android:grantUriPermissions="true" />'
             '<provider android:authorities="com.ashcastle.duckyslicer.test.blocking-export" '
             'android:grantUriPermissions="true" /></application></manifest>'
         ),
@@ -521,7 +540,9 @@ def valid_sources() -> dict[str, str]:
             "it in Files. External opening accepts only a granted `content://` URI "
             "requires confirmation before the current project is replaced "
             "Save project as private app state never a resolved local path "
-            "is not written into the portable archive revokes the provider permission "
+            "is not written into the portable archive "
+            "up to five granted documents in a private recent list "
+            "returns the permission of an entry evicted "
             "bound to that exact import operation "
             "Activity recreation never opens the same request twice "
             "the URI is restored without an in-memory operation claim "

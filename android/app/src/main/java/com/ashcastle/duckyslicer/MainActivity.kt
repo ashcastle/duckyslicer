@@ -733,6 +733,7 @@ private fun DuckySlicerScreen(
     val profileDeleteError = resources.getString(R.string.profile_delete_error)
     val filamentSlotUnavailable = resources.getString(R.string.filament_slot_unavailable)
     val newProjectStartedNotice = resources.getString(R.string.new_project_started)
+    val recentProjectUnavailable = resources.getString(R.string.recent_project_unavailable)
     val savedDataUnavailable = resources.getString(R.string.saved_data_unavailable)
     val previewError = resources.getString(R.string.preview_error)
     val remoteSavedNotice = resources.getString(R.string.device_saved)
@@ -1325,6 +1326,22 @@ private fun DuckySlicerScreen(
         return false
     }
 
+    fun importRecentProject(document: LinkedProjectDocument) {
+        if (
+            projectRestored && !projectTransferBusy && !importing && !autoLaying &&
+            !arranging && !splitting && !cutting && !slicing && !previewLoading &&
+            projectTransferState.completion == null
+        ) {
+            if (projectTransferModel.importRecentProject(document)) {
+                error = null
+                notice = null
+            } else {
+                error = recentProjectUnavailable
+                notice = null
+            }
+        }
+    }
+
     val projectOpenPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -1586,6 +1603,9 @@ private fun DuckySlicerScreen(
         projectTransferCancellationRequested = projectTransferCancellationRequested,
         linkedProjectName = projectTransferState.linkedDocument?.displayName,
         linkedProjectDirty = projectTransferState.linkedDocumentDirty,
+        recentProjectDocuments = projectTransferState.recentDocuments.filterNot { document ->
+            document.uri == projectTransferState.linkedDocument?.uri
+        },
         slicing = slicing,
         sliceCancellationRequested = sliceCancellationRequested,
         sliceProgress = SliceProgress(sliceProgress, plateSliceBatchProgress),
@@ -1635,6 +1655,7 @@ private fun DuckySlicerScreen(
                 arrayOf(PROJECT_ARCHIVE_MIME_TYPE, "application/zip"),
             )
         },
+        onOpenRecentProject = ::importRecentProject,
         onSaveProject = projectSaveAction(projectTransferModel, projectSavePicker),
         onExportModel = {
             val sourceName = projectHistory.current.selectedObject

@@ -352,6 +352,23 @@ internal class ProjectStore(
             false
         }
         require(!linkedDocumentDirty || linkedDocument != null)
+        val recentDocuments = if (schemaVersion >= 81) {
+            val values = root.getJSONArray("recentDocuments")
+            require(values.length() <= MAX_RECENT_PROJECT_DOCUMENTS)
+            buildList<LinkedProjectDocument>(values.length()) {
+                repeat(values.length()) { index ->
+                    val value = values.getJSONObject(index)
+                    val document = normalizedLinkedProjectDocument(
+                        uri = value.getString("uri"),
+                        displayName = value.getString("displayName"),
+                    ) ?: error("Invalid recent project document")
+                    require(none { it.uri == document.uri })
+                    add(document)
+                }
+            }
+        } else {
+            emptyList()
+        }
         return StoredProject(
             document = StoredProjectDocument(
                 snapshot = snapshot,
@@ -359,6 +376,7 @@ internal class ProjectStore(
                 plateOptions = plateOptions,
                 linkedDocument = linkedDocument,
                 linkedDocumentDirty = linkedDocumentDirty,
+                recentDocuments = recentDocuments,
             ),
             declaredModels = declaredModels,
         )
@@ -376,10 +394,16 @@ internal class ProjectStore(
         plateOptions: Map<String, SliceOptions>,
         linkedDocument: LinkedProjectDocument? = null,
         linkedDocumentDirty: Boolean = false,
+        recentDocuments: List<LinkedProjectDocument> = emptyList(),
     ) {
         require(!linkedDocumentDirty || linkedDocument != null) {
             "An unlinked project cannot have unsaved document changes"
         }
+        require(
+            recentDocuments.size <= MAX_RECENT_PROJECT_DOCUMENTS &&
+                recentDocuments.map(LinkedProjectDocument::uri).toSet().size ==
+                recentDocuments.size
+        ) { "Recent project documents are invalid" }
         require(snapshot.allObjects.size <= MAX_PROJECT_OBJECTS) { "Project has too many objects" }
         require(snapshot.allObjects.map(ProjectObject::id).toSet().size == snapshot.allObjects.size) {
             "Project contains duplicate object ids"
@@ -420,6 +444,18 @@ internal class ProjectStore(
                 } ?: JSONObject.NULL,
             )
             .put("linkedDocumentDirty", linkedDocumentDirty)
+            .put(
+                "recentDocuments",
+                JSONArray().also { values ->
+                    recentDocuments.forEach { document ->
+                        values.put(
+                            JSONObject()
+                                .put("uri", document.uri)
+                                .put("displayName", document.displayName),
+                        )
+                    }
+                },
+            )
             .put(
                 "plates",
                 JSONArray().also { values ->
@@ -714,6 +750,19 @@ internal class ProjectStore(
         if (schemaVersion >= 80) {
             require(root.has("linkedDocumentDirty"))
             require(!root.getBoolean("linkedDocumentDirty") || !root.isNull("linkedDocument"))
+        }
+        if (schemaVersion >= 81) {
+            val values = root.getJSONArray("recentDocuments")
+            require(values.length() <= MAX_RECENT_PROJECT_DOCUMENTS)
+            val recentUris = HashSet<String>()
+            repeat(values.length()) { index ->
+                val value = values.getJSONObject(index)
+                val document = normalizedLinkedProjectDocument(
+                    uri = value.getString("uri"),
+                    displayName = value.getString("displayName"),
+                )
+                require(document != null && recentUris.add(document.uri))
+            }
         }
         root
     }.getOrNull()
@@ -1155,7 +1204,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 80
+        const val SCHEMA_VERSION = 81
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"
@@ -1189,6 +1238,7 @@ internal data class StoredProjectDocument(
     },
     val linkedDocument: LinkedProjectDocument? = null,
     val linkedDocumentDirty: Boolean = false,
+    val recentDocuments: List<LinkedProjectDocument> = emptyList(),
     val storageUnavailable: Boolean = false,
 ) {
     val activeSliceOptions: SliceOptions

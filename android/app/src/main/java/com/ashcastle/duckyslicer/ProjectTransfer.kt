@@ -122,6 +122,7 @@ internal data class ProjectTransferState(
     val plateOptions: Map<String, SliceOptions> = mapOf(legacyProjectPlateId() to sliceOptions),
     val linkedDocument: LinkedProjectDocument? = null,
     val linkedDocumentDirty: Boolean = false,
+    val recentDocuments: List<LinkedProjectDocument> = emptyList(),
     val restored: Boolean = false,
     val persistenceBlocked: Boolean = false,
     val persistenceMessage: ProjectPersistenceMessage? = null,
@@ -253,12 +254,34 @@ internal fun ProjectTransferState.withNewProject(): ProjectTransferState? {
 
 internal fun ProjectTransferState.withLinkedDocument(
     document: LinkedProjectDocument?,
-): ProjectTransferState = if (linkedDocument == document && !linkedDocumentDirty) {
-    this
-} else {
-    copy(
-        linkedDocument = document,
-        linkedDocumentDirty = false,
+): ProjectTransferState {
+    val nextRecentDocuments = document?.let(recentDocuments::withRecentProjectDocument)
+        ?: recentDocuments
+    return if (
+        linkedDocument == document && !linkedDocumentDirty &&
+        recentDocuments == nextRecentDocuments
+    ) {
+        this
+    } else {
+        copy(
+            linkedDocument = document,
+            linkedDocumentDirty = false,
+            recentDocuments = nextRecentDocuments,
+            sessionRevision = sessionRevision + 1,
+        )
+    }
+}
+
+internal fun ProjectTransferState.withUnavailableProjectDocument(
+    uri: String,
+): ProjectTransferState {
+    val nextLinkedDocument = linkedDocument?.takeUnless { it.uri == uri }
+    val nextRecentDocuments = recentDocuments.withoutRecentProjectDocument(uri)
+    if (nextLinkedDocument == linkedDocument && nextRecentDocuments == recentDocuments) return this
+    return copy(
+        linkedDocument = nextLinkedDocument,
+        linkedDocumentDirty = linkedDocumentDirty && nextLinkedDocument != null,
+        recentDocuments = nextRecentDocuments,
         sessionRevision = sessionRevision + 1,
     )
 }
@@ -391,24 +414,36 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             if (restored.storageUnavailable) {
                 supportEvents.record(SupportEvent.PROJECT_STORAGE_UNAVAILABLE)
             }
+            val resolver = application.contentResolver
             val linkedDocument = restored.linkedDocument?.takeIf { document ->
-                application.contentResolver.hasProjectDocumentWritePermission(document.contentUri)
+                resolver.hasProjectDocumentWritePermission(document.contentUri)
             }
             val droppedDocument = restored.linkedDocument != null && linkedDocument == null
+            val availableRecentDocuments = restored.recentDocuments.mapNotNull { document ->
+                document.takeIf { resolver.hasProjectDocumentWritePermission(it.contentUri) }
+                    ?.let { resolver.linkedProjectDocument(it.contentUri) }
+            }.fold(emptyList<LinkedProjectDocument>()) { documents, document ->
+                if (documents.any { it.uri == document.uri }) documents else documents + document
+            }.take(MAX_RECENT_PROJECT_DOCUMENTS)
+            val recentDocuments = linkedDocument
+                ?.let(availableRecentDocuments::withRecentProjectDocument)
+                ?: availableRecentDocuments
+            val recentDocumentsChanged = recentDocuments != restored.recentDocuments
             mutableState.value = ProjectTransferState(
                 history = ProjectHistoryState(current = restored.snapshot),
                 sliceOptions = restored.activeSliceOptions,
                 plateOptions = restored.plateOptions,
                 linkedDocument = linkedDocument,
                 linkedDocumentDirty = linkedDocument != null && restored.linkedDocumentDirty,
+                recentDocuments = recentDocuments,
                 restored = true,
                 persistenceBlocked = restored.storageUnavailable,
                 persistenceMessage = ProjectPersistenceMessage.STORAGE_UNAVAILABLE.takeIf {
                     restored.storageUnavailable
                 },
-                sessionRevision = if (droppedDocument) 1 else 0,
+                sessionRevision = if (droppedDocument || recentDocumentsChanged) 1 else 0,
             )
-            if (droppedDocument && !restored.storageUnavailable) {
+            if ((droppedDocument || recentDocumentsChanged) && !restored.storageUnavailable) {
                 synchronized(this@ProjectTransferViewModel) {
                     schedulePersistenceLocked(delayMillis = 0L)
                 }
@@ -1051,6 +1086,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                     ).withLinkedDocument(linkedDocument)
                     else -> settled
                 }
+                releaseEvictedProjectDocumentPermissions(current, updated)
                 mutableState.value = updated
                 if (
                     completion !is ProjectTransferCompletion.Imported ||
@@ -1061,6 +1097,22 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             }
         }
         return true
+    }
+
+    @Synchronized
+    fun importRecentProject(document: LinkedProjectDocument): Boolean {
+        val current = mutableState.value
+        if (current.recentDocuments.none { it.uri == document.uri }) return false
+        val resolver = getApplication<Application>().contentResolver
+        if (!resolver.hasProjectDocumentWritePermission(document.contentUri)) {
+            val updated = current.withUnavailableProjectDocument(document.uri)
+            if (updated != current) {
+                mutableState.value = updated
+                schedulePersistenceLocked(delayMillis = 0L)
+            }
+            return false
+        }
+        return importProject(document.contentUri)
     }
 
     @Synchronized
@@ -1140,11 +1192,13 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 }
                 val settled = mutableState.value.withCompletedTransfer(operation, completion)
                     ?: return@synchronized
-                mutableState.value = if (completion is ProjectTransferCompletion.Exported) {
+                val updated = if (completion is ProjectTransferCompletion.Exported) {
                     settled.withLinkedDocument(linkedDocument)
                 } else {
                     settled
                 }
+                releaseEvictedProjectDocumentPermissions(mutableState.value, updated)
+                mutableState.value = updated
                 schedulePersistenceLocked(allowPendingCompletion = true)
             }
         }
@@ -1160,7 +1214,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         val document = current.linkedDocument ?: return false
         val resolver = getApplication<Application>().contentResolver
         if (!resolver.hasProjectDocumentWritePermission(document.contentUri)) {
-            mutableState.value = current.withLinkedDocument(null)
+            mutableState.value = current.withUnavailableProjectDocument(document.uri)
             schedulePersistenceLocked(delayMillis = 0L)
             return false
         }
@@ -1566,6 +1620,20 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         return true
     }
 
+    private fun releaseEvictedProjectDocumentPermissions(
+        previous: ProjectTransferState,
+        updated: ProjectTransferState,
+    ) {
+        val retainedUris = updated.recentDocuments.mapTo(HashSet()) { it.uri }
+        updated.linkedDocument?.uri?.let(retainedUris::add)
+        previous.recentDocuments
+            .filterNot { it.uri in retainedUris }
+            .forEach { document ->
+                getApplication<Application>().contentResolver
+                    .releaseProjectDocumentPermission(document.contentUri)
+            }
+    }
+
     @Synchronized
     fun flushPersistence(): Boolean {
         val current = mutableState.value
@@ -1603,6 +1671,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                         document.plateOptions,
                         document.linkedDocument,
                         document.linkedDocumentDirty,
+                        document.recentDocuments,
                     )
                     if (obsoleteModelsAfterSave != null) {
                         runCatching { projectStore.deleteModelsReferencedBy(obsoleteModelsAfterSave) }
@@ -1679,6 +1748,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                         pending.plateOptions,
                         pending.linkedDocument,
                         pending.linkedDocumentDirty,
+                        pending.recentDocuments,
                     )
                 } catch (_: Exception) {
                     supportEvents.record(SupportEvent.PROJECT_SAVE_FAILED)

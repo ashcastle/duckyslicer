@@ -26,6 +26,7 @@ public final class BlockingImportProvider extends ContentProvider {
     );
     public static final Uri MODEL_URI = Uri.parse("content://" + AUTHORITY + "/blocked-model.stl");
     public static final String METHOD_PREPARE = "prepare";
+    public static final String METHOD_PREPARE_DIRECT = "prepare_direct";
     public static final String METHOD_PREPARE_OPEN_BLOCK = "prepare_open_block";
     public static final String METHOD_RELEASE = "release";
     public static final String METHOD_STATUS = "status";
@@ -37,6 +38,7 @@ public final class BlockingImportProvider extends ContentProvider {
     private static final long TIMEOUT_SECONDS = 120L;
     private static final int MODE_STREAM = 0;
     private static final int MODE_OPEN_BLOCK = 1;
+    private static final int MODE_DIRECT = 2;
     private static volatile Session current = new Session(MODE_STREAM, null);
 
     @Override
@@ -112,6 +114,10 @@ public final class BlockingImportProvider extends ContentProvider {
             reset(MODE_STREAM, duplicateSource(extras));
             return Bundle.EMPTY;
         }
+        if (METHOD_PREPARE_DIRECT.equals(method)) {
+            reset(MODE_DIRECT, duplicateSource(extras));
+            return Bundle.EMPTY;
+        }
         if (METHOD_PREPARE_OPEN_BLOCK.equals(method)) {
             reset(MODE_OPEN_BLOCK, duplicateSource(extras));
             return Bundle.EMPTY;
@@ -175,6 +181,19 @@ public final class BlockingImportProvider extends ContentProvider {
                 if (signal != null) {
                     signal.setOnCancelListener(null);
                 }
+            }
+        }
+        if (target.mode == MODE_DIRECT) {
+            try {
+                target.started = true;
+                target.completed = true;
+                target.bytes = Math.toIntExact(target.source.getStatSize());
+                ParcelFileDescriptor descriptor = ParcelFileDescriptor.dup(
+                        target.source.getFileDescriptor()
+                );
+                return new AssetFileDescriptor(descriptor, 0, target.source.getStatSize());
+            } catch (IOException error) {
+                throw new FileNotFoundException("Import source is unavailable");
             }
         }
         try {

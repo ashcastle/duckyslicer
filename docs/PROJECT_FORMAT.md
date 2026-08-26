@@ -62,8 +62,10 @@ requires confirmation before the current project is replaced.
 When an Android document provider grants persistent write access, DuckySlicer remembers
 that document in private app state. **Save** then updates the same document, while **Save project as**
 opens the system document picker for a new destination. The remembered link is a bounded
-`content://` URI and display name, never a resolved local path. It is not written into the portable archive,
-and it is cleared when a new project starts or Android revokes the provider permission.
+`content://` URI and display name, never a resolved local path. It is not written into the portable archive.
+Starting a new project clears the current link but keeps up to five granted documents in a private recent list.
+DuckySlicer removes entries whose Android permission is revoked and returns the permission of an entry evicted
+from that bounded list.
 
 ## Import boundary
 

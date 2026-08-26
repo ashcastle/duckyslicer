@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
@@ -518,6 +519,7 @@ internal fun WorkspaceScreen(
     projectTransferCancellationRequested: Boolean,
     linkedProjectName: String?,
     linkedProjectDirty: Boolean,
+    recentProjectDocuments: List<LinkedProjectDocument>,
     slicing: Boolean,
     sliceCancellationRequested: Boolean,
     sliceProgress: SliceProgress,
@@ -538,6 +540,7 @@ internal fun WorkspaceScreen(
     onEditAuxiliaryVolume: (OrcaAuxiliaryVolumeEditDraft) -> Unit,
     onNewProject: () -> Unit,
     onOpenProject: () -> Unit,
+    onOpenRecentProject: (LinkedProjectDocument) -> Unit,
     onSaveProject: (Boolean) -> Unit,
     onExportModel: () -> Unit,
     onExportSelectedStl: () -> Unit,
@@ -1224,6 +1227,7 @@ internal fun WorkspaceScreen(
                     cancellationRequested = projectTransferCancellationRequested,
                     linkedProjectName = linkedProjectName,
                     linkedProjectDirty = linkedProjectDirty,
+                    recentProjectDocuments = recentProjectDocuments,
                     onObjectSelected = onObjectSelected,
                     canDuplicateObject = projectPlates.sumOf { it.objects.size } <
                         ProjectStore.MAX_PROJECT_OBJECTS,
@@ -1234,6 +1238,7 @@ internal fun WorkspaceScreen(
                     onRemoveObject = onRemoveModel,
                     onNewProject = onNewProject,
                     onOpenProject = onOpenProject,
+                    onOpenRecentProject = onOpenRecentProject,
                     onSaveProject = onSaveProject,
                     onCancelProjectImport = onCancelProjectImport,
                     onCancelProjectExport = onCancelProjectExport,
@@ -7745,6 +7750,7 @@ private fun ProjectSheet(
     cancellationRequested: Boolean,
     linkedProjectName: String?,
     linkedProjectDirty: Boolean,
+    recentProjectDocuments: List<LinkedProjectDocument>,
     onObjectSelected: (String) -> Unit,
     canDuplicateObject: Boolean,
     onDuplicateObject: (String) -> Unit,
@@ -7754,12 +7760,14 @@ private fun ProjectSheet(
     onRemoveObject: (String) -> Unit,
     onNewProject: () -> Unit,
     onOpenProject: () -> Unit,
+    onOpenRecentProject: (LinkedProjectDocument) -> Unit,
     onSaveProject: (Boolean) -> Unit,
     onCancelProjectImport: () -> Unit,
     onCancelProjectExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var confirmReplacement by remember { mutableStateOf(false) }
+    var recentReplacement by remember { mutableStateOf<LinkedProjectDocument?>(null) }
     var confirmNewProject by remember { mutableStateOf(false) }
     var objectMenuId by remember { mutableStateOf<String?>(null) }
     var renameObjectId by remember { mutableStateOf<String?>(null) }
@@ -7769,7 +7777,10 @@ private fun ProjectSheet(
     var removeObjectId by remember { mutableStateOf<String?>(null) }
     var saveMenuExpanded by remember { mutableStateOf(false) }
     LaunchedEffect(busy, importing, exporting) {
-        if (busy || importing || exporting) saveMenuExpanded = false
+        if (busy || importing || exporting) {
+            saveMenuExpanded = false
+            recentReplacement = null
+        }
     }
     WorkspaceCard(modifier) {
         Text(
@@ -7795,6 +7806,42 @@ private fun ProjectSheet(
                     color = WorkspaceYellow,
                     fontWeight = FontWeight.SemiBold,
                 )
+            }
+        }
+        if (recentProjectDocuments.isNotEmpty()) {
+            Text(
+                stringResource(R.string.recent_projects),
+                modifier = Modifier.semantics { heading() },
+                fontWeight = FontWeight.SemiBold,
+            )
+            recentProjectDocuments.forEach { document ->
+                Surface(
+                    onClick = {
+                        if (replacementConfirmationRequired) {
+                            recentReplacement = document
+                        } else {
+                            onOpenRecentProject(document)
+                        }
+                    },
+                    enabled = !busy && !importing && !exporting,
+                    color = Color(0xFF343531),
+                    contentColor = Color(0xFFF4F4EE),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.History, contentDescription = null)
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            document.displayName,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
         }
         objects.forEach { projectObject ->
@@ -8021,6 +8068,17 @@ private fun ProjectSheet(
                 onOpenProject()
             },
             onDismiss = { confirmReplacement = false },
+        )
+    }
+    recentReplacement?.let { document ->
+        ProjectReplacementDialog(
+            linkedProjectName = linkedProjectName,
+            linkedProjectDirty = linkedProjectDirty,
+            onConfirm = {
+                recentReplacement = null
+                onOpenRecentProject(document)
+            },
+            onDismiss = { recentReplacement = null },
         )
     }
     if (confirmNewProject) {

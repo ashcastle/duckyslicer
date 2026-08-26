@@ -46,6 +46,16 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                         SCREEN_PROJECT_DIRTY_EMPTY -> WorkspaceAccessibilityHarness(
                             selectedTab = WorkspaceTab.PROJECT,
                         )
+                        SCREEN_PROJECT_RECENT -> WorkspaceAccessibilityHarness(
+                            selectedTab = WorkspaceTab.PROJECT,
+                            projectObjects = listOf(accessibilityProjectObject()),
+                            recentProjectDocuments = listOf(
+                                LinkedProjectDocument(
+                                    "content://accessibility/projects/recent",
+                                    "Recent duck.duckyproject",
+                                ),
+                            ),
+                        )
                         SCREEN_PROJECT_PLATES -> WorkspaceAccessibilityHarness(
                             selectedTab = WorkspaceTab.PROJECT,
                             projectObjects = listOf(accessibilityProjectObject()),
@@ -205,6 +215,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_SUPPORT_EXPORT = "support-export"
         const val SCREEN_PROJECT = "project"
         const val SCREEN_PROJECT_DIRTY_EMPTY = "project-dirty-empty"
+        const val SCREEN_PROJECT_RECENT = "project-recent"
         const val SCREEN_PROJECT_PLATES = "project-plates"
         const val SCREEN_PLATES = "plates"
         const val SCREEN_SLICE_ALL = "slice-all"
@@ -518,6 +529,7 @@ private fun WorkspaceAccessibilityHarness(
     profileTransferCancellationRequested: Boolean = false,
     plateCount: Int = 1,
     allPlatesHaveObjects: Boolean = false,
+    recentProjectDocuments: List<LinkedProjectDocument> = emptyList(),
     slicing: Boolean = false,
     sliceProgress: SliceProgress = SliceProgress(0),
     layOnFaceForcedFailure: Boolean = false,
@@ -597,6 +609,7 @@ private fun WorkspaceAccessibilityHarness(
             selectedTab == WorkspaceTab.PROJECT
         },
         linkedProjectDirty = selectedTab == WorkspaceTab.PROJECT,
+        recentProjectDocuments = recentProjectDocuments,
         slicing = slicing,
         sliceCancellationRequested = false,
         sliceProgress = sliceProgress,
@@ -620,6 +633,7 @@ private fun WorkspaceAccessibilityHarness(
             selectedPlateId = projectPlates.single().id
         },
         onOpenProject = {},
+        onOpenRecentProject = { harnessNotice = it.displayName },
         onSaveProject = {},
         onExportModel = {},
         onExportSelectedStl = {},

@@ -744,6 +744,8 @@
     <string name="start_new_project">Start new project</string>
     <string name="new_project_started">New project started.</string>
     <string name="open_project">Open project</string>
+    <string name="recent_projects">Recent projects</string>
+    <string name="recent_project_unavailable">This project is no longer available. Open it again from Files.</string>
     <string name="save_project">Save project</string>
     <string name="save_project_as">Save project as…</string>
     <string name="project_save_options">Project save options</string>

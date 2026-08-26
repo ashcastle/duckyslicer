@@ -232,7 +232,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
             "beginCommit: () -> Unit = {}",
             "beginCommit()",
-            "SCHEMA_VERSION = 80",
+            "SCHEMA_VERSION = 81",
             "schemaVersion >= 70",
             "schemaVersion >= 75",
             "schemaVersion >= 76",
@@ -240,10 +240,14 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "schemaVersion >= 78",
             "schemaVersion >= 79",
             "schemaVersion >= 80",
+            "schemaVersion >= 81",
             '"linkedDocument",',
             '"linkedDocumentDirty",',
             'root.has("linkedDocument")',
             'root.has("linkedDocumentDirty")',
+            '"recentDocuments",',
+            'root.getJSONArray("recentDocuments")',
+            "MAX_RECENT_PROJECT_DOCUMENTS",
             "normalizedLinkedProjectDocument",
             'put("name", plate.name ?: JSONObject.NULL)',
             "normalizedProjectPlateName",
@@ -272,6 +276,11 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "OpenableColumns.DISPLAY_NAME",
             "MAX_PROJECT_DOCUMENT_URI_LENGTH = 4_096",
             "MAX_PROJECT_DOCUMENT_NAME_LENGTH = 200",
+            "MAX_RECENT_PROJECT_DOCUMENTS = 5",
+            "withRecentProjectDocument",
+            "withoutRecentProjectDocument",
+            "releasePersistableUriPermission",
+            "permission.isReadPermission",
         ),
     )
     _require_markers(
@@ -384,6 +393,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "val plateOptions: Map<String, SliceOptions>",
             "val linkedDocument: LinkedProjectDocument?",
             "val linkedDocumentDirty: Boolean",
+            "val recentDocuments: List<LinkedProjectDocument>",
             "val restored: Boolean",
             "val sessionRevision: Long",
             "val persistedRevision: Long",
@@ -433,6 +443,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "deleteFailedDocument = false",
             "retainProjectDocumentWritePermission(uri)",
             "withLinkedDocument(linkedDocument)",
+            "fun importRecentProject(document: LinkedProjectDocument)",
+            "withUnavailableProjectDocument(document.uri)",
+            "releaseEvictedProjectDocumentPermissions",
             "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
             "catch (failure: CancellationException)",
             "consumeCompletion",
@@ -452,7 +465,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "private app state",
             "never a resolved local path",
             "is not written into the portable archive",
-            "revokes the provider permission",
+            "up to five granted documents in a private recent list",
+            "returns the permission of an entry evicted",
         ),
     )
     if "catch (_: Throwable)" in transfer or "catch (failure: Throwable)" in transfer:
@@ -719,6 +733,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "projectTransferState.linkedDocumentDirty",
             "replacementConfirmationRequired = requiresProjectReplacementConfirmation(",
             "linkedDocumentDirty = projectTransferState.linkedDocumentDirty",
+            "projectTransferState.recentDocuments.filterNot",
+            "onOpenRecentProject = ::importRecentProject",
             "projectTransferModel.saveLinkedProject(",
             "!started && !latest.busy",
             "latest.completion == null && latest.editCompletion == null",
@@ -786,6 +802,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "linkedDocumentDirty = linkedProjectDirty",
             "R.string.linked_project_file",
             "R.string.linked_project_unsaved",
+            "R.string.recent_projects",
+            "onOpenRecentProject(document)",
             "R.string.project_save_options",
             "R.string.save_project_as",
             "onPlateSelected",
@@ -988,7 +1006,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "projectImportCancellationSurvivesRecreationAndPreservesTheCurrentProject",
             "projectImportCancellationInterruptsProviderOpen",
             "finalProjectOwnerClearStopsItsImportAndPreservesTheCurrentProject",
+            "recentProjectReopensThroughItsRetainedDocumentGrant",
             "BlockingImportProvider.METHOD_PREPARE",
+            "BlockingImportProvider.METHOD_PREPARE_DIRECT",
             "BlockingImportProvider.METHOD_PREPARE_OPEN_BLOCK",
             "retained.cancelProjectImport()",
             "store.clear()",
@@ -1006,11 +1026,22 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "signal.setOnCancelListener(target.release::countDown)",
             "signal.throwIfCanceled()",
             "ParcelFileDescriptor.createPipe()",
+            "MODE_DIRECT",
+            "ParcelFileDescriptor.dup(",
             "Blocking import provider is read-only",
         ),
     )
-    if "com.ashcastle.duckyslicer.test.blocking-import" not in sources["AndroidTestManifest.xml"]:
-        raise VerificationError("AndroidTestManifest.xml is missing the blocking import provider")
+    test_manifest = ElementTree.fromstring(sources["AndroidTestManifest.xml"])
+    test_providers = {
+        provider.attrib.get(f"{ANDROID_NAMESPACE}authorities"): provider
+        for provider in test_manifest.findall("./application/provider")
+    }
+    import_provider = test_providers.get("com.ashcastle.duckyslicer.test.blocking-import")
+    if (
+        import_provider is None or
+        import_provider.attrib.get(f"{ANDROID_NAMESPACE}grantUriPermissions") != "true"
+    ):
+        raise VerificationError("AndroidTestManifest.xml is missing the grantable import provider")
     if (
         "com.ashcastle.duckyslicer.test.blocking-export" not in sources["AndroidTestManifest.xml"]
         or 'android:grantUriPermissions="true"' not in sources["AndroidTestManifest.xml"]
@@ -1059,6 +1090,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "cancelProjectImportActionIsReachable",
             "cancelProjectExportActionIsReachable",
             "projectActionsAreVisibleAndOpeningConfirmsReplacement",
+            "recentProjectIsFocusableAndUsesTheExistingReplacementWarning",
+            "R.string.recent_projects",
             "dirtyEmptyLinkedProjectRequiresConfirmationBeforeOpenOrNew",
             "R.string.project_save_options",
             "R.string.save_project_as",

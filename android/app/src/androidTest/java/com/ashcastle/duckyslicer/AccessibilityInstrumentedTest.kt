@@ -665,6 +665,36 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun recentProjectIsFocusableAndUsesTheExistingReplacementWarning() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val recentHeading = context.getString(R.string.recent_projects)
+        val recentName = "Recent duck.duckyproject"
+        val replaceTitle = context.getString(R.string.replace_project_title)
+        val replaceWarning = context.getString(
+            R.string.replace_project_unsaved_body,
+            "Linked-project.duckyproject",
+        )
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PROJECT_RECENT).use {
+            assertTrue(
+                "Recent projects must have a visible section heading",
+                waitForNodes(setOf(recentHeading)).any {
+                    it.effectiveLabel().contains(recentHeading)
+                },
+            )
+            val recent = scrollUntilClickable(recentName)
+            assertTrue("A recent project must be keyboard and switch-access focusable", recent.isFocusable)
+            assertTrue(recent.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(
+                "A recent project must not bypass the current-project replacement warning",
+                waitForNodes(setOf(replaceTitle, replaceWarning)).let { nodes ->
+                    nodes.any { it.effectiveLabel().contains(replaceTitle) } &&
+                        nodes.any { it.effectiveLabel().contains(replaceWarning) }
+                },
+            )
+        }
+    }
+
+    @Test
     fun dirtyEmptyLinkedProjectRequiresConfirmationBeforeOpenOrNew() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val newLabel = context.getString(R.string.new_project)

@@ -744,6 +744,8 @@
     <string name="start_new_project">새 프로젝트 시작</string>
     <string name="new_project_started">새 프로젝트를 시작했습니다.</string>
     <string name="open_project">프로젝트 열기</string>
+    <string name="recent_projects">최근 프로젝트</string>
+    <string name="recent_project_unavailable">이 프로젝트를 더 이상 열 수 없습니다. 파일에서 다시 열어 주세요.</string>
     <string name="save_project">프로젝트 저장</string>
     <string name="save_project_as">다른 이름으로 프로젝트 저장…</string>
     <string name="project_save_options">프로젝트 저장 옵션</string>

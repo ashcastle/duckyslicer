@@ -20,6 +20,16 @@ internal data class LinkedProjectDocument(
         get() = Uri.parse(uri)
 }
 
+internal fun List<LinkedProjectDocument>.withRecentProjectDocument(
+    document: LinkedProjectDocument,
+): List<LinkedProjectDocument> =
+    (listOf(document) + filterNot { it.uri == document.uri })
+        .take(MAX_RECENT_PROJECT_DOCUMENTS)
+
+internal fun List<LinkedProjectDocument>.withoutRecentProjectDocument(
+    uri: String,
+): List<LinkedProjectDocument> = filterNot { it.uri == uri }
+
 internal fun normalizedLinkedProjectDocument(
     uri: String,
     displayName: String,
@@ -62,6 +72,18 @@ internal fun ContentResolver.hasProjectDocumentWritePermission(uri: Uri): Boolea
     }
 }.getOrDefault(false)
 
+internal fun ContentResolver.releaseProjectDocumentPermission(uri: Uri): Boolean {
+    val permission = runCatching {
+        persistedUriPermissions.firstOrNull { it.uri == uri }
+    }.getOrNull() ?: return true
+    val flags =
+        (Intent.FLAG_GRANT_READ_URI_PERMISSION.takeIf { permission.isReadPermission } ?: 0) or
+            (Intent.FLAG_GRANT_WRITE_URI_PERMISSION.takeIf { permission.isWritePermission } ?: 0)
+    if (flags == 0) return true
+    return runCatching { releasePersistableUriPermission(uri, flags) }.isSuccess &&
+        !hasProjectDocumentWritePermission(uri)
+}
+
 internal fun ContentResolver.linkedProjectDocument(uri: Uri): LinkedProjectDocument? {
     if (!hasProjectDocumentWritePermission(uri)) return null
     val queriedName = runCatching {
@@ -80,4 +102,5 @@ internal fun ContentResolver.linkedProjectDocument(uri: Uri): LinkedProjectDocum
 
 private const val MAX_PROJECT_DOCUMENT_URI_LENGTH = 4_096
 private const val MAX_PROJECT_DOCUMENT_NAME_LENGTH = 200
+internal const val MAX_RECENT_PROJECT_DOCUMENTS = 5
 private const val DEFAULT_LINKED_PROJECT_NAME = "DuckySlicer-project.duckyproject"
