@@ -67,8 +67,11 @@ storage before the project metadata is atomically committed. A failed import lea
 current project unchanged and removes staged data.
 
 Import and export run in an Activity-retained operation so rotation does not interrupt
-the transfer. If Android terminates the process during extraction, the next app start
-removes only abandoned private staging directories with the exact generated UUID form.
+the transfer. An external-open request is bound to that exact import operation, so an
+Activity recreation never opens the same request twice. If Android terminates the process,
+the URI is restored without an in-memory operation claim; a non-empty durable workspace
+returns to replacement confirmation before retrying. On startup, the importer removes only
+abandoned private staging directories with the exact generated UUID form.
 
 The current bounds are:
 

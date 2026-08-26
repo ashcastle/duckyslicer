@@ -318,7 +318,9 @@ class MainActivity : ComponentActivity() {
                     onExternalProfileRequestStarted = externalProfileModel::markStarted,
                     onExternalProfileRequestConsumed = externalProfileModel::consume,
                     externalProjectRequest = externalProjectRequest,
+                    onExternalProjectRequestStarted = externalProjectModel::markStarted,
                     onExternalProjectRequestConsumed = externalProjectModel::consume,
+                    onExternalProjectRequestDiscarded = externalProjectModel::discardUnstarted,
                 )
             }
         }
@@ -357,7 +359,9 @@ private fun DuckySlicerScreen(
     onExternalProfileRequestStarted: (Long, Long) -> Boolean,
     onExternalProfileRequestConsumed: (Long, Long) -> Boolean,
     externalProjectRequest: ExternalProjectRequest?,
-    onExternalProjectRequestConsumed: (Long) -> Unit,
+    onExternalProjectRequestStarted: (Long, Long) -> Boolean,
+    onExternalProjectRequestConsumed: (Long, Long) -> Boolean,
+    onExternalProjectRequestDiscarded: (Long) -> Boolean,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -570,9 +574,6 @@ private fun DuckySlicerScreen(
                 externalProjectConfirmation = null
                 notice = projectOpenedNotice
                 error = null
-                if (externalProjectRequest?.uri == completion.uri) {
-                    onExternalProjectRequestConsumed(externalProjectRequest.id)
-                }
             }
             is ProjectTransferCompletion.Exported -> {
                 notice = if (completion.format != ProjectExportFormat.PROJECT_ARCHIVE) {
@@ -586,9 +587,6 @@ private fun DuckySlicerScreen(
                 if (completion.direction == ProjectTransferDirection.IMPORT) {
                     notice = projectImportCanceledNotice
                     externalProjectConfirmation = null
-                    if (externalProjectRequest?.uri == completion.uri) {
-                        onExternalProjectRequestConsumed(externalProjectRequest.id)
-                    }
                 } else {
                     notice = if (completion.format != ProjectExportFormat.PROJECT_ARCHIVE) {
                         modelExportCanceledNotice
@@ -602,9 +600,6 @@ private fun DuckySlicerScreen(
                 if (completion.direction == ProjectTransferDirection.IMPORT) {
                     supportEvents.record(SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED)
                     error = projectOpenError
-                    if (externalProjectRequest?.uri == completion.uri) {
-                        onExternalProjectRequestConsumed(externalProjectRequest.id)
-                    }
                 } else {
                     error = if (completion.format != ProjectExportFormat.PROJECT_ARCHIVE) {
                         modelExportError
@@ -616,6 +611,11 @@ private fun DuckySlicerScreen(
                 notice = null
             }
         }
+        externalProjectRequest
+            ?.takeIf { request -> request.startedOperationId == completion.id }
+            ?.let { request ->
+                onExternalProjectRequestConsumed(request.id, completion.id)
+            }
         projectTransferModel.consumeCompletion(completion.id)
     }
 
@@ -1146,6 +1146,7 @@ private fun DuckySlicerScreen(
 
     LaunchedEffect(
         externalProjectRequest?.id,
+        externalProjectRequest?.startedOperationId,
         projectRestored,
         projectHistory.current.allObjects.isNotEmpty(),
         projectTransferBusy,
@@ -1159,12 +1160,18 @@ private fun DuckySlicerScreen(
         previewLoading,
     ) {
         val request = externalProjectRequest ?: return@LaunchedEffect
+        if (request.startedOperationId != null) return@LaunchedEffect
         if (
             !projectRestored || projectTransferBusy || importing || autoLaying ||
             arranging || splitting || cutting || slicing || previewLoading || projectTransferState.completion != null
         ) return@LaunchedEffect
         if (projectHistory.current.allObjects.isEmpty()) {
-            importProject(request.uri)
+            startExternalProjectImport(
+                request,
+                projectTransferModel,
+                ::importProject,
+                onExternalProjectRequestStarted,
+            )
         } else {
             externalProjectConfirmation = request
         }
@@ -2075,14 +2082,35 @@ private fun DuckySlicerScreen(
         ProjectReplacementDialog(
             onConfirm = {
                 externalProjectConfirmation = null
-                importProject(request.uri)
+                startExternalProjectImport(
+                    request,
+                    projectTransferModel,
+                    ::importProject,
+                    onExternalProjectRequestStarted,
+                )
             },
             onDismiss = {
                 externalProjectConfirmation = null
-                onExternalProjectRequestConsumed(request.id)
+                onExternalProjectRequestDiscarded(request.id)
             },
         )
     }
+}
+
+internal fun startExternalProjectImport(
+    request: ExternalProjectRequest,
+    model: ProjectTransferViewModel,
+    importProject: (Uri) -> Boolean,
+    onStarted: (Long, Long) -> Boolean,
+): Boolean {
+    if (!importProject(request.uri)) return false
+    val state = model.state.value
+    val operationId = state.activeTransferId
+    val claimed = operationId != null &&
+        state.activeTransferDirection == ProjectTransferDirection.IMPORT &&
+        onStarted(request.id, operationId)
+    if (!claimed) model.cancelProjectImport()
+    return claimed
 }
 
 private class ProfileLibraryActions(

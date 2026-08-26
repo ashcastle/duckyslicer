@@ -13,6 +13,7 @@ import java.util.Locale
 internal data class ExternalProjectRequest(
     val id: Long,
     val uri: Uri,
+    val startedOperationId: Long? = null,
 )
 
 internal fun projectArchiveViewUriOrNull(intent: Intent): Uri? {
@@ -32,6 +33,13 @@ internal fun projectArchiveViewUriOrNull(intent: Intent): Uri? {
     }
 }
 
+/**
+ * Retains one externally opened project and binds it to exactly one import operation.
+ *
+ * A configuration change keeps the in-memory operation claim. Process restoration rebuilds
+ * only the URI request, so a possibly interrupted archive import returns to explicit replacement
+ * confirmation when the restored workspace is non-empty.
+ */
 internal class ExternalProjectRequestViewModel(
     private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -56,8 +64,30 @@ internal class ExternalProjectRequestViewModel(
         return true
     }
 
-    fun consume(requestId: Long) {
-        if (mutableRequest.value?.id != requestId) return
+    fun markStarted(requestId: Long, operationId: Long): Boolean {
+        val current = mutableRequest.value ?: return false
+        if (current.id != requestId || current.startedOperationId != null || operationId <= 0L) {
+            return false
+        }
+        mutableRequest.value = current.copy(startedOperationId = operationId)
+        return true
+    }
+
+    fun consume(requestId: Long, operationId: Long): Boolean {
+        val current = mutableRequest.value ?: return false
+        if (current.id != requestId || current.startedOperationId != operationId) return false
+        clear()
+        return true
+    }
+
+    fun discardUnstarted(requestId: Long): Boolean {
+        val current = mutableRequest.value ?: return false
+        if (current.id != requestId || current.startedOperationId != null) return false
+        clear()
+        return true
+    }
+
+    private fun clear() {
         savedStateHandle[KEY_REQUEST_URI] = null
         mutableRequest.value = null
     }

@@ -3,10 +3,13 @@ package com.ashcastle.duckyslicer
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -17,11 +20,45 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ProjectArchiveIntentInstrumentedTest {
+    @get:Rule
+    val blockingProviderProcess = BlockingProviderProcessRule()
+
+    @Test
+    fun externalProjectRequestBindsOneOperationAndRestoresAsRetryableAfterProcessLoss() {
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(BlockingImportProvider.URI, PROJECT_ARCHIVE_MIME_TYPE)
+        val savedState = SavedStateHandle()
+        val retained = ExternalProjectRequestViewModel(savedState)
+
+        assertTrue(retained.enqueue(intent))
+        val first = requireNotNull(retained.request.value)
+        assertTrue(retained.markStarted(first.id, 51L))
+        assertEquals(51L, retained.request.value?.startedOperationId)
+
+        assertTrue(retained.enqueue(intent))
+        val second = requireNotNull(retained.request.value)
+        assertTrue(second.id > first.id)
+        assertNull(second.startedOperationId)
+        assertFalse(retained.consume(first.id, 51L))
+        assertTrue(retained.markStarted(second.id, 52L))
+        assertFalse(retained.consume(second.id, 51L))
+        assertFalse(retained.discardUnstarted(second.id))
+
+        val restoredAfterProcessLoss = ExternalProjectRequestViewModel(savedState)
+        val restored = requireNotNull(restoredAfterProcessLoss.request.value)
+        assertEquals(second.id, restored.id)
+        assertEquals(second.uri, restored.uri)
+        assertNull(restored.startedOperationId)
+        assertTrue(restoredAfterProcessLoss.discardUnstarted(restored.id))
+        assertNull(restoredAfterProcessLoss.request.value)
+    }
+
     @Test
     fun multipleSelectedModelDocumentsCommitAsOneProjectEdit() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -375,6 +412,77 @@ class ProjectArchiveIntentInstrumentedTest {
     }
 
     @Test
+    fun projectViewIntentSurvivesRecreationAndImportsExactlyOnce() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val archive = createArchive(
+            objectId = "external-once",
+            displayName = "external-once.stl",
+            fillDensity = 0.33f,
+        )
+        projectRoot.deleteRecursively()
+        prepareBlockingProjectImport(archive)
+        try {
+            val intent = Intent(Intent.ACTION_VIEW)
+                .setPackage(context.packageName)
+                .setDataAndType(BlockingImportProvider.URI, PROJECT_ARCHIVE_MIME_TYPE)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            ActivityScenario.launch<MainActivity>(intent).use { scenario ->
+                lateinit var retainedProject: ProjectTransferViewModel
+                lateinit var retainedRequest: ExternalProjectRequestViewModel
+                scenario.onActivity { activity ->
+                    retainedProject = ViewModelProvider(activity)[ProjectTransferViewModel::class.java]
+                    retainedRequest =
+                        ViewModelProvider(activity)[ExternalProjectRequestViewModel::class.java]
+                }
+                waitForBlockingProjectImport { it.getBoolean(BlockingImportProvider.KEY_STARTED) }
+                val operationId = requireNotNull(retainedProject.state.value.activeTransferId)
+                assertEquals(
+                    ProjectTransferDirection.IMPORT,
+                    retainedProject.state.value.activeTransferDirection,
+                )
+                assertEquals(operationId, retainedRequest.request.value?.startedOperationId)
+
+                scenario.recreate()
+                scenario.onActivity { recreated ->
+                    assertSame(
+                        retainedProject,
+                        ViewModelProvider(recreated)[ProjectTransferViewModel::class.java],
+                    )
+                    assertSame(
+                        retainedRequest,
+                        ViewModelProvider(recreated)[ExternalProjectRequestViewModel::class.java],
+                    )
+                    assertEquals(operationId, retainedRequest.request.value?.startedOperationId)
+                }
+
+                releaseBlockingProjectImport()
+                val restored = waitForProject("external-once", "external-once.stl")
+                assertEquals(0.33f, restored.sliceOptions?.fillDensity)
+                waitUntil("completed external project request was not consumed") {
+                    retainedRequest.request.value == null
+                }
+                val status = waitForBlockingProjectImport {
+                    it.getBoolean(BlockingImportProvider.KEY_COMPLETED)
+                }
+                assertEquals(archive.length().toInt(), status.getInt(BlockingImportProvider.KEY_BYTES))
+
+                scenario.recreate()
+                assertNull(retainedRequest.request.value)
+                assertEquals(
+                    1,
+                    retainedProject.state.value.history.current.allObjects.size,
+                )
+            }
+        } finally {
+            releaseBlockingProjectImport()
+            archive.delete()
+            projectRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun compatibleZipIntentConfirmsBeforeReplacingTheCurrentProject() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -521,6 +629,43 @@ class ProjectArchiveIntentInstrumentedTest {
         )
     }
 
+    private fun prepareBlockingProjectImport(archive: File) {
+        ParcelFileDescriptor.open(archive, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
+            val extras = Bundle().apply {
+                putParcelable(BlockingImportProvider.KEY_SOURCE_DESCRIPTOR, descriptor)
+            }
+            InstrumentationRegistry.getInstrumentation().targetContext.contentResolver.call(
+                BlockingImportProvider.URI,
+                BlockingImportProvider.METHOD_PREPARE_OPEN_BLOCK,
+                null,
+                extras,
+            )
+        }
+    }
+
+    private fun releaseBlockingProjectImport() {
+        InstrumentationRegistry.getInstrumentation().targetContext.contentResolver.call(
+            BlockingImportProvider.URI,
+            BlockingImportProvider.METHOD_RELEASE,
+            null,
+            null,
+        )
+    }
+
+    private fun waitForBlockingProjectImport(predicate: (Bundle) -> Boolean): Bundle {
+        var status = Bundle.EMPTY
+        waitUntil("blocking project provider did not reach the expected state") {
+            status = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver.call(
+                BlockingImportProvider.URI,
+                BlockingImportProvider.METHOD_STATUS,
+                null,
+                null,
+            ) ?: Bundle.EMPTY
+            predicate(status)
+        }
+        return status
+    }
+
     private fun waitForProject(objectId: String, displayName: String): StoredProjectDocument {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         waitForNode(displayName)
@@ -656,6 +801,15 @@ class ProjectArchiveIntentInstrumentedTest {
             SystemClock.sleep(WAIT_POLL_MILLIS)
         } while (SystemClock.elapsedRealtime() < deadline)
         throw AssertionError("Timed out waiting for action: $label")
+    }
+
+    private fun waitUntil(message: String, condition: () -> Boolean) {
+        val deadline = SystemClock.elapsedRealtime() + WAIT_TIMEOUT_MILLIS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (condition()) return
+            SystemClock.sleep(WAIT_POLL_MILLIS)
+        }
+        throw AssertionError(message)
     }
 
     private fun currentNodes(): List<AccessibilityNodeInfo> {

@@ -128,7 +128,10 @@ def valid_sources() -> dict[str, str]:
                 "PROJECT_ARCHIVE_MIME_TYPE PROJECT_ARCHIVE_FILE_EXTENSION",
                 "PROJECT_ARCHIVE_COMPATIBLE_MIME_TYPES",
                 '"application/zip" "application/x-zip-compressed" "application/octet-stream"',
-                "SavedStateHandle StateFlow<ExternalProjectRequest?>",
+                "SavedStateHandle StateFlow<ExternalProjectRequest?> startedOperationId "
+                "fun markStarted(requestId: Long, operationId: Long): Boolean "
+                "current.startedOperationId != operationId "
+                "fun discardUnstarted(requestId: Long): Boolean",
             )
         ),
         "OrcaPrimitive.kt": (
@@ -206,6 +209,11 @@ def valid_sources() -> dict[str, str]:
                 "SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED",
                 "override fun onNewIntent(intent: Intent)",
                 "externalProjectModel.enqueue(intent)",
+                "onExternalProjectRequestStarted = externalProjectModel::markStarted "
+                "onExternalProjectRequestConsumed = externalProjectModel::consume "
+                "onExternalProjectRequestDiscarded = externalProjectModel::discardUnstarted "
+                "request.startedOperationId == completion.id startExternalProjectImport( "
+                "activeTransferDirection == ProjectTransferDirection.IMPORT",
                 "override fun onStop() projectTransferModel.flushPersistence()",
                 "ProjectTransferViewModel projectTransferState.completion ProjectReplacementDialog(",
                 "projectHistory = projectTransferState.history "
@@ -268,12 +276,15 @@ def valid_sources() -> dict[str, str]:
         ),
         "ProjectArchiveIntentInstrumentedTest.kt": (
             "customProjectIntentSurvivesRecreationRestoresAndSlices "
+            "externalProjectRequestBindsOneOperationAndRestoresAsRetryableAfterProcessLoss "
+            "projectViewIntentSurvivesRecreationAndImportsExactlyOnce "
             "unsavedProjectEditAndUndoSurviveImmediateActivityRecreation "
             "clearingRetainedOwnerFlushesProjectBeforeDebounce "
             "compatibleZipIntentConfirmsBeforeReplacingTheCurrentProject "
             "projectViewIntentRejectsNetworkAndUnrelatedBinaryUris "
             "Intent.ACTION_VIEW Intent.FLAG_GRANT_READ_URI_PERMISSION "
-            "scenario.recreate() OnDeviceSlicer.slice("
+            "scenario.recreate() BlockingImportProvider.URI "
+            "retainedRequest.request.value == null OnDeviceSlicer.slice("
         ),
         "ModelOpenIntentInstrumentedTest.kt": (
             "modelIntentsAcceptSupportedDocumentsAndRejectUnsafeOrUnrelatedUris "
@@ -429,7 +440,11 @@ def valid_sources() -> dict[str, str]:
             "A failed import leaves the current project unchanged and removes staged data "
             "it in Files. External opening accepts only a granted `content://` URI "
             "requires confirmation before the current project is replaced "
-            "the transfer. If Android terminates the process exact generated UUID form "
+            "bound to that exact import operation "
+            "Activity recreation never opens the same request twice "
+            "the URI is restored without an in-memory operation claim "
+            "returns to replacement confirmation before retrying "
+            "exact generated UUID form "
             "1 GiB total uncompressed content"
         ),
         "CONTRIBUTING.md": (
@@ -707,6 +722,33 @@ class VerifyProjectArchiveTest(unittest.TestCase):
         sources = valid_sources()
         sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
             "projectTransferModel.flushPersistence()", "leave debounce pending"
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_external_project_completion_without_operation_identity(self) -> None:
+        sources = valid_sources()
+        sources["ProjectOpenRequest.kt"] = sources["ProjectOpenRequest.kt"].replace(
+            "current.startedOperationId != operationId",
+            "accept completion from any operation",
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_external_project_request_not_bound_to_retained_import(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "onExternalProjectRequestStarted = externalProjectModel::markStarted",
+            "do not retain the project import owner",
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_project_format_without_external_open_lifecycle_contract(self) -> None:
+        sources = valid_sources()
+        sources["PROJECT_FORMAT.md"] = sources["PROJECT_FORMAT.md"].replace(
+            "Activity recreation never opens the same request twice",
+            "Activity recreation behavior is unspecified",
         )
         with self.assertRaisesRegex(VerificationError, "safeguards"):
             verify_project_archive(sources)
