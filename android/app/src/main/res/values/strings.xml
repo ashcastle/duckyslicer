@@ -764,9 +764,16 @@
     <string name="model_export_canceled">Model export stopped.</string>
     <string name="plate_number">Plate %1$d</string>
     <string name="plates">Plates</string>
+    <string name="plate_actions">Plate actions</string>
     <string name="add_plate">Add plate</string>
     <string name="duplicate_plate">Duplicate plate</string>
     <string name="plate_duplicated">Plate duplicated.</string>
+    <string name="rename_plate">Rename plate</string>
+    <string name="plate_name">Plate name</string>
+    <string name="plate_renamed">Plate renamed.</string>
+    <string name="move_plate_previous">Move plate earlier</string>
+    <string name="move_plate_next">Move plate later</string>
+    <string name="plate_moved">Plate moved.</string>
     <string name="remove_plate">Remove plate</string>
     <string name="remove_plate_title">Remove this plate?</string>
     <string name="remove_plate_message">The models and sliced result on this plate will be removed. You can use Undo to restore the plate.</string>

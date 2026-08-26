@@ -75,6 +75,16 @@ internal fun normalizedProjectObjectName(value: String): String? {
     }
 }
 
+internal fun normalizedProjectPlateName(value: String): String? {
+    val normalized = value.trim()
+    return normalized.takeIf {
+        it.length in 1..ProjectStore.MAX_PLATE_NAME_LENGTH &&
+            it != "." && it != ".." &&
+            it.none { character -> character.isISOControl() } &&
+            '/' !in it && '\\' !in it
+    }
+}
+
 data class ProjectObject(
     val id: String,
     val volumes: List<ProjectVolume>,
@@ -164,9 +174,13 @@ data class ProjectPlate(
     val layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
     val layerFilamentChanges: LayerFilamentChanges = LayerFilamentChanges(),
     val layerCustomGCodeEvents: LayerCustomGCodeEvents = LayerCustomGCodeEvents(),
+    val name: String? = null,
 ) {
     init {
         require(id.length in 1..ProjectStore.MAX_ID_LENGTH) { "Invalid project plate id" }
+        require(name == null || normalizedProjectPlateName(name) == name) {
+            "Invalid project plate name"
+        }
         require(objects.map(ProjectObject::id).toSet().size == objects.size) {
             "Project plate contains duplicate object ids"
         }
@@ -482,6 +496,31 @@ data class ProjectHistoryState(
         val remaining = current.plates.toMutableList().apply { removeAt(index) }
         val nextSelection = remaining[minOf(index, remaining.lastIndex)].id
         return record(current.copy(plates = remaining, selectedPlateId = nextSelection))
+    }
+
+    fun renameSelectedPlate(requestedName: String): ProjectHistoryState {
+        val name = requireNotNull(normalizedProjectPlateName(requestedName)) {
+            "Project plate name is invalid"
+        }
+        val index = current.plates.indexOfFirst { it.id == current.selectedPlateId }
+        if (index < 0 || current.plates[index].name == name) return this
+        return record(
+            current.copy(
+                plates = current.plates.toMutableList().apply {
+                    this[index] = this[index].copy(name = name)
+                },
+            ),
+        )
+    }
+
+    fun moveSelectedPlateTo(targetIndex: Int): ProjectHistoryState {
+        require(targetIndex in current.plates.indices) { "Project plate position is invalid" }
+        val sourceIndex = current.plates.indexOfFirst { it.id == current.selectedPlateId }
+        if (sourceIndex < 0 || sourceIndex == targetIndex) return this
+        val reordered = current.plates.toMutableList()
+        val selected = reordered.removeAt(sourceIndex)
+        reordered.add(targetIndex, selected)
+        return record(current.copy(plates = reordered))
     }
 
     fun selectPlate(plateId: String): ProjectHistoryState =

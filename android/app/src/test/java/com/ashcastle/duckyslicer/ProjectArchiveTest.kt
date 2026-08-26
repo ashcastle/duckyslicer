@@ -172,12 +172,12 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(75, manifest.getInt("schemaVersion"))
+            assertEquals(76, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
                 setOf(
-                    "id", "selectedObjectId", "layerPauseEvents",
+                    "id", "name", "selectedObjectId", "layerPauseEvents",
                     "layerFilamentChanges", "layerCustomGCodeEvents", "sliceOptions", "objects",
                 ),
                 manifestPlate.keys().asSequence().toSet(),
@@ -464,6 +464,7 @@ class ProjectArchiveTest {
                         id = "plate-one",
                         objects = listOf(ProjectObject("first-object", inspectedModel(firstModel))),
                         selectedObjectId = "first-object",
+                        name = "Outer shell",
                     ),
                     ProjectPlate(
                         id = "plate-two",
@@ -485,12 +486,15 @@ class ProjectArchiveTest {
             )
             assertEquals("plate-two", manifest.getString("selectedPlateId"))
             assertEquals(2, manifest.getJSONArray("plates").length())
+            assertEquals("Outer shell", manifest.getJSONArray("plates").getJSONObject(0).getString("name"))
+            assertTrue(manifest.getJSONArray("plates").getJSONObject(1).isNull("name"))
 
             val imported = ProjectStore(destinationRoot, ::inspectedModel)
                 .importArchive(ByteArrayInputStream(archive))
 
             assertEquals("plate-two", imported.snapshot.selectedPlateId)
             assertEquals(listOf("plate-one", "plate-two"), imported.snapshot.plates.map(ProjectPlate::id))
+            assertEquals(listOf("Outer shell", null), imported.snapshot.plates.map(ProjectPlate::name))
             assertEquals(
                 listOf("first-object", "second-object"),
                 imported.snapshot.allObjects.map(ProjectObject::id),

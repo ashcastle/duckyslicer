@@ -22,7 +22,7 @@ def valid_sources() -> dict[str, str]:
                 "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
                 'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
                 "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-                "PROJECT_ARCHIVE_SCHEMA_VERSION = 75",
+                "PROJECT_ARCHIVE_SCHEMA_VERSION = 76",
                 'ArchivedProjectPlate ArchivedProjectVolume put("role", volume.role.name) '
                 'put("config", volume.config.toJson()) ProjectVolumeRole.valueOf '
                 "ProjectVolumeConfig.fromJson",
@@ -53,6 +53,8 @@ def valid_sources() -> dict[str, str]:
                 'getJSONArray("layerFilamentChanges").toLayerFilamentChanges()',
                 '"layerCustomGCodeEvents", schemaVersion >= 75 '
                 'getJSONArray("layerCustomGCodeEvents").toLayerCustomGCodeEvents()',
+                'put("name", plate.name ?: JSONObject.NULL) '
+                'schemaVersion >= 76 && !value.isNull("name") checkedArchivePlateName',
                 "checkCancellation: () -> Unit = {}",
                 "copyArchiveBytes(input, archive, model.length(), checkCancellation)",
                 "val copied = copyArchiveBytes(",
@@ -99,8 +101,9 @@ def valid_sources() -> dict[str, str]:
                 "checkCancellation: () -> Unit = {}",
                 "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
                 "beginCommit: () -> Unit = {} beginCommit()",
-                'SCHEMA_VERSION = 77 schemaVersion >= 70 schemaVersion >= 75 '
-                'schemaVersion >= 76 schemaVersion >= 77 '
+                'SCHEMA_VERSION = 78 schemaVersion >= 70 schemaVersion >= 75 '
+                'schemaVersion >= 76 schemaVersion >= 77 schemaVersion >= 78 '
+                'put("name", plate.name ?: JSONObject.NULL) normalizedProjectPlateName '
                 'put("heightRangeModifiers", heightRangeModifiers.toProjectJson()) '
                 'put("layerPauseEvents", plate.layerPauseEvents.toProjectJson()) '
                 'getJSONArray("layerPauseEvents").toLayerPauseEvents() '
@@ -234,7 +237,9 @@ def valid_sources() -> dict[str, str]:
                 "fun editAuxiliaryVolume( onEditAuxiliaryVolume = ::editAuxiliaryVolume "
                 "ProjectEditKind.AUXILIARY_VOLUME",
                 "onDuplicatePlate = { val sourceVolumeCount = source.objects.sumOf { it.volumes.size } "
-                "duplicateSelectedPlate( notice = resources.getString(R.string.plate_duplicated)",
+                "duplicateSelectedPlate( notice = resources.getString(R.string.plate_duplicated) "
+                "onRenamePlate = { name -> renameSelectedPlate(name) "
+                "onMovePlate = { targetIndex -> moveSelectedPlateTo(targetIndex)",
             )
             ),
             "ProjectEditCompletionEffect.kt": (
@@ -246,7 +251,9 @@ def valid_sources() -> dict[str, str]:
         "WorkspaceScreen.kt": (
             "ProjectSheet( onOpenProject onSaveProject onPlateSelected onAddPlate "
             "onDuplicatePlate onRemovePlate PlateSwitcher( canDuplicateSelectedPlate "
-            "R.string.duplicate_plate R.string.plates "
+            "onRenamePlate onMovePlate R.string.duplicate_plate R.string.rename_plate "
+            "R.string.move_plate_previous R.string.move_plate_next R.string.plates "
+            "R.string.plate_actions "
             'stateDescription = "${selectedIndex + 1}/${plates.size}" confirmReplacement '
             "R.string.replace_project_title R.string.replace_project_body "
             "projectImporting: Boolean projectTransferCancellationRequested: Boolean "
@@ -343,6 +350,7 @@ def valid_sources() -> dict[str, str]:
             "cancelProjectImportActionIsReachable cancelProjectExportActionIsReachable "
             "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions "
             "plateSwitcherDuplicatesTheSelectedPlateAndSelectsTheCopy R.string.duplicate_plate "
+            "plateSwitcherRenamesAndReordersTheSelectedPlate R.string.rename_plate "
             "auxiliaryShapePickerExposesRolesPlacementAndModifierDensity "
             "auxiliaryVolumeManagerExposesExistingRegionsRemovalAndAdd "
             "auxiliaryVolumeEditorExposesScalePlacementDensityAndApply "
@@ -449,8 +457,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "SUPPORT.md": "`.duckyproject` model geometry include saved printer addresses, access keys, or G-code",
         "PROJECT_FORMAT.md": (
-            "manifest.json models/000.stl schema version `75` "
-            "Schema 1 through 75 projects remain readable brim chamfer policy up to 16 plates "
+            "manifest.json models/000.stl schema version `76` "
+            "Schema 1 through 75 projects remain readable optional display name "
+            "brim chamfer policy up to 16 plates "
             "parameter modifier support blocker support enforcer "
             "plate-local objects and settings stable, bounded `volumes` list "
             "up to 64 volumes per object independent X, Y, and Z scale "

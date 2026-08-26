@@ -978,4 +978,41 @@ class ProjectStateTest {
             normalizedProjectObjectName("x".repeat(ProjectStore.MAX_DISPLAY_NAME_LENGTH + 1)),
         )
     }
+
+    @Test
+    fun plateNamesAndOrderAreUndoableWithoutChangingPlateIdentity() {
+        var state = ProjectHistoryState()
+            .addPlate("second")
+            .addPlate("third")
+
+        state = state.renameSelectedPlate("  Detail parts  ")
+        assertEquals("Detail parts", state.current.activePlate.name)
+
+        state = state.moveSelectedPlateTo(0)
+        assertEquals(listOf("third", legacyProjectPlateId(), "second"), state.current.plates.map { it.id })
+        assertEquals("third", state.current.selectedPlateId)
+        assertEquals("Detail parts", state.current.activePlate.name)
+
+        state = state.undo()
+        assertEquals(listOf(legacyProjectPlateId(), "second", "third"), state.current.plates.map { it.id })
+        assertEquals("Detail parts", state.current.activePlate.name)
+        state = state.undo()
+        assertEquals(null, state.current.activePlate.name)
+        state = state.redo().redo()
+        assertEquals("Detail parts", state.current.plates.first().name)
+    }
+
+    @Test
+    fun plateNamesRejectBlankPathsControlsAndOversizedValues() {
+        assertEquals("Detail parts", normalizedProjectPlateName(" Detail parts "))
+        assertEquals(null, normalizedProjectPlateName("   "))
+        assertEquals(null, normalizedProjectPlateName(".."))
+        assertEquals(null, normalizedProjectPlateName("folder/plate"))
+        assertEquals(null, normalizedProjectPlateName("folder\\plate"))
+        assertEquals(null, normalizedProjectPlateName("plate\nname"))
+        assertEquals(
+            null,
+            normalizedProjectPlateName("x".repeat(ProjectStore.MAX_PLATE_NAME_LENGTH + 1)),
+        )
+    }
 }

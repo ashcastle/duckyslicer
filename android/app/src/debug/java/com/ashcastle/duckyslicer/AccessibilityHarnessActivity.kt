@@ -635,6 +635,19 @@ private fun WorkspaceAccessibilityHarness(
             projectPlates = duplicated.plates
             selectedPlateId = duplicated.selectedPlateId
         },
+        onRenamePlate = { name ->
+            projectPlates = projectPlates.map { plate ->
+                if (plate.id == selectedPlateId) plate.copy(name = name) else plate
+            }
+        },
+        onMovePlate = { targetIndex ->
+            val sourceIndex = projectPlates.indexOfFirst { it.id == selectedPlateId }
+            if (sourceIndex >= 0 && targetIndex in projectPlates.indices) {
+                projectPlates = projectPlates.toMutableList().apply {
+                    add(targetIndex, removeAt(sourceIndex))
+                }
+            }
+        },
         onRemovePlate = {
             if (projectPlates.size > 1) {
                 val selectedIndex = projectPlates.indexOfFirst { it.id == selectedPlateId }

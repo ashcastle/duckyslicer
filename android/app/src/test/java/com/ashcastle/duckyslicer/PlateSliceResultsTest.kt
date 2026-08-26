@@ -46,7 +46,12 @@ class PlateSliceResultsTest {
         val snapshot = ProjectSnapshot(
             selectedPlateId = "second-plate",
             plates = listOf(
-                ProjectPlate("first-plate", listOf(firstObject), firstObject.id),
+                ProjectPlate(
+                    "first-plate",
+                    listOf(firstObject),
+                    firstObject.id,
+                    name = "Main body v0.2",
+                ),
                 ProjectPlate(
                     id = "second-plate",
                     objects = listOf(secondObject),
@@ -87,7 +92,12 @@ class PlateSliceResultsTest {
         val snapshot = ProjectSnapshot(
             selectedPlateId = "second-plate",
             plates = listOf(
-                ProjectPlate("first-plate", listOf(firstObject), firstObject.id),
+                ProjectPlate(
+                    "first-plate",
+                    listOf(firstObject),
+                    firstObject.id,
+                    name = "Main body v0.2",
+                ),
                 ProjectPlate("empty-plate"),
                 ProjectPlate("second-plate", listOf(secondObject), secondObject.id),
             ),
@@ -101,7 +111,7 @@ class PlateSliceResultsTest {
         val batch = requireNotNull(results.completeExportBatch(snapshot))
 
         assertEquals(
-            listOf("plate-01-model.gcode", "plate-03-model.gcode"),
+            listOf("plate-01-Main body v0.2-model.gcode", "plate-03-model.gcode"),
             batch.entries.map(GcodeExportEntry::displayName),
         )
         assertEquals(listOf(first, second), batch.entries.map(GcodeExportEntry::outcome))

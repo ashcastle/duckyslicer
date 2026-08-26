@@ -204,7 +204,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(77, persisted.getInt("schemaVersion"))
+        assertEquals(78, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -212,7 +212,7 @@ class ProjectStoreTest {
         val persistedPlate = persisted.getJSONArray("plates").getJSONObject(0)
         assertEquals(
             setOf(
-                "id", "selectedObjectId", "layerPauseEvents",
+                "id", "name", "selectedObjectId", "layerPauseEvents",
                 "layerFilamentChanges", "layerCustomGCodeEvents", "sliceOptions", "objects",
             ),
             persistedPlate.keys().asSequence().toSet(),
@@ -431,6 +431,7 @@ class ProjectStoreTest {
                     id = "plate-a",
                     objects = listOf(ProjectObject("object-a", inspectedModel(firstModel))),
                     selectedObjectId = "object-a",
+                    name = "Prototype",
                 ),
                 ProjectPlate(
                     id = "plate-b",
@@ -445,6 +446,7 @@ class ProjectStoreTest {
 
         assertEquals("plate-b", restored.snapshot.selectedPlateId)
         assertEquals(listOf("plate-a", "plate-b"), restored.snapshot.plates.map(ProjectPlate::id))
+        assertEquals(listOf("Prototype", null), restored.snapshot.plates.map(ProjectPlate::name))
         assertEquals(listOf("object-a"), restored.snapshot.plates[0].objects.map(ProjectObject::id))
         assertEquals(listOf("object-b"), restored.snapshot.plates[1].objects.map(ProjectObject::id))
         assertEquals(

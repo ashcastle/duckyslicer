@@ -181,6 +181,7 @@ internal class ProjectStore(
                         layerPauseEvents = archivedPlate.layerPauseEvents,
                         layerFilamentChanges = archivedPlate.layerFilamentChanges,
                         layerCustomGCodeEvents = archivedPlate.layerCustomGCodeEvents,
+                        name = archivedPlate.name,
                     )
                 },
             )
@@ -297,6 +298,12 @@ internal class ProjectStore(
                     } else {
                         LayerCustomGCodeEvents()
                     },
+                    name = if (schemaVersion >= 78 && !value.isNull("name")) {
+                        normalizedProjectPlateName(value.getString("name"))
+                            ?: error("Invalid project plate name")
+                    } else {
+                        null
+                    },
                 )
             }
             val selectedPlateId = root.getString("selectedPlateId")
@@ -386,6 +393,7 @@ internal class ProjectStore(
                         values.put(
                             JSONObject()
                                 .put("id", plate.id)
+                                .put("name", plate.name ?: JSONObject.NULL)
                                 .put(
                                     "selectedObjectId",
                                     plate.selectedObjectId ?: JSONObject.NULL,
@@ -637,6 +645,9 @@ internal class ProjectStore(
                 }
                 if (schemaVersion >= 77) {
                     value.getJSONArray("layerCustomGCodeEvents").toLayerCustomGCodeEvents()
+                }
+                if (schemaVersion >= 78 && !value.isNull("name")) {
+                    require(normalizedProjectPlateName(value.getString("name")) != null)
                 }
             }
             val selectedPlateId = root.getString("selectedPlateId")
@@ -1094,7 +1105,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 77
+        const val SCHEMA_VERSION = 78
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"
@@ -1107,6 +1118,7 @@ internal class ProjectStore(
         const val MAX_ID_LENGTH = 128
         const val MAX_FILE_NAME_LENGTH = 240
         const val MAX_DISPLAY_NAME_LENGTH = 200
+        const val MAX_PLATE_NAME_LENGTH = 80
         const val MAX_OFFSET_MM = 10_000f
         const val MAX_ROTATION_DEG = 100_000f
         const val MIN_SCALE = 0.05f

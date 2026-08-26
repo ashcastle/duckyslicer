@@ -62,6 +62,7 @@ internal data class ArchivedProjectPlate(
     val layerPauseEvents: LayerPauseEvents,
     val layerFilamentChanges: LayerFilamentChanges,
     val layerCustomGCodeEvents: LayerCustomGCodeEvents,
+    val name: String?,
 )
 
 internal data class StagedArchiveModel(
@@ -150,6 +151,7 @@ internal object ProjectArchiveCodec {
                         plates.put(
                             JSONObject()
                                 .put("id", checkedArchiveId(plate.id))
+                                .put("name", plate.name ?: JSONObject.NULL)
                                 .put(
                                     "selectedObjectId",
                                     plate.selectedObjectId ?: JSONObject.NULL,
@@ -355,6 +357,11 @@ internal object ProjectArchiveCodec {
                     layerPauseEvents,
                     layerFilamentChanges,
                     layerCustomGCodeEvents,
+                    if (schemaVersion >= 76 && !value.isNull("name")) {
+                        checkedArchivePlateName(value.getString("name"))
+                    } else {
+                        null
+                    },
                 )
             }
         } else {
@@ -374,6 +381,7 @@ internal object ProjectArchiveCodec {
                     LayerPauseEvents(),
                     LayerFilamentChanges(),
                     LayerCustomGCodeEvents(),
+                    null,
                 ),
             )
         }
@@ -776,6 +784,9 @@ private fun checkedArchiveDisplayName(value: String): String = value
     }
     ?: throw ProjectArchiveException()
 
+private fun checkedArchivePlateName(value: String): String =
+    normalizedProjectPlateName(value) ?: throw ProjectArchiveException()
+
 private fun archiveModelEntry(index: Int): String {
     require(index in 0 until ProjectStore.MAX_PROJECT_OBJECTS)
     return "models/${index.toString().padStart(3, '0')}.stl"
@@ -872,6 +883,6 @@ private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 75
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 76
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

@@ -85,15 +85,35 @@ internal fun PlateSliceResults.completeExportBatch(
         val plate = indexedPlate.value
         val result = resultFor(plate.id) ?: return null
         GcodeExportEntry(
-            displayName = plateGcodeFileName(indexedPlate.index + 1, result.outcome.suggestedName),
+            displayName = plateGcodeFileName(
+                indexedPlate.index + 1,
+                result.outcome.suggestedName,
+                plate.name,
+            ),
             outcome = result.outcome,
         )
     }
     return GcodeExportBatch(entries)
 }
 
-internal fun plateGcodeFileName(plateNumber: Int, suggestedName: String): String {
+internal fun plateGcodeFileName(
+    plateNumber: Int,
+    suggestedName: String,
+    plateName: String? = null,
+): String {
     require(plateNumber in 1..MAX_PROJECT_PLATES) { "Invalid plate number" }
     val base = safeGcodeFileName(suggestedName).removeSuffix(".gcode")
-    return safeGcodeFileName("plate-${plateNumber.toString().padStart(2, '0')}-$base")
+    val name = plateName?.let(::normalizedProjectPlateName)
+        ?.let(::safeGcodeFileName)
+        ?.removeSuffix(".gcode")
+        ?.takeIf(String::isNotBlank)
+    val prefix = buildString {
+        append("plate-")
+        append(plateNumber.toString().padStart(2, '0'))
+        name?.let {
+            append('-')
+            append(it)
+        }
+    }
+    return safeGcodeFileName("$prefix-$base")
 }

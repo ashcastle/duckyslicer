@@ -1428,6 +1428,34 @@ private fun DuckySlicerScreen(
                 error = null
             }
         },
+        onRenamePlate = { name ->
+            if (
+                !projectTransferBusy && !slicing && !previewLoading && !exportingGcode &&
+                !remoteBusy
+            ) {
+                val current = projectTransferModel.state.value.history
+                val next = current.renameSelectedPlate(name)
+                if (projectTransferModel.updateHistory(current, next)) {
+                    notice = resources.getString(R.string.plate_renamed)
+                    error = null
+                }
+            }
+        },
+        onMovePlate = { targetIndex ->
+            if (
+                !projectTransferBusy && !slicing && !previewLoading && !exportingGcode &&
+                !remoteBusy
+            ) {
+                val current = projectTransferModel.state.value.history
+                if (targetIndex in current.current.plates.indices) {
+                    val next = current.moveSelectedPlateTo(targetIndex)
+                    if (projectTransferModel.updateHistory(current, next)) {
+                        notice = resources.getString(R.string.plate_moved)
+                        error = null
+                    }
+                }
+            }
+        },
         onRemovePlate = {
             if (
                 !projectTransferBusy && !slicing && !previewLoading && !exportingGcode &&

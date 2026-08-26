@@ -108,6 +108,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -540,6 +541,8 @@ internal fun WorkspaceScreen(
     onPlateSelected: (String) -> Unit,
     onAddPlate: () -> Unit,
     onDuplicatePlate: () -> Unit,
+    onRenamePlate: (String) -> Unit,
+    onMovePlate: (Int) -> Unit,
     onRemovePlate: () -> Unit,
     onObjectSelected: (String?) -> Unit,
     onModelTransformChanged: (ModelTransform) -> Unit,
@@ -895,6 +898,8 @@ internal fun WorkspaceScreen(
                     onSelected = onPlateSelected,
                     onAdd = onAddPlate,
                     onDuplicate = onDuplicatePlate,
+                    onRename = onRenamePlate,
+                    onMove = onMovePlate,
                     onRemove = { plateRemovalRequested = true },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
                 )
@@ -3283,11 +3288,20 @@ private fun PlateSwitcher(
     onSelected: (String) -> Unit,
     onAdd: () -> Unit,
     onDuplicate: () -> Unit,
+    onRename: (String) -> Unit,
+    onMove: (Int) -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val selectedIndex = plates.indexOfFirst { it.id == selectedPlateId }.coerceAtLeast(0)
+    val selectedPlate = plates.getOrNull(selectedIndex)
     val platesLabel = stringResource(R.string.plates)
+    val selectedPlateLabel = selectedPlate?.name ?: stringResource(R.string.plate_number, selectedIndex + 1)
+    var renameRequested by rememberSaveable(selectedPlateId) { mutableStateOf(false) }
+    var actionsExpanded by remember { mutableStateOf(false) }
+    var renameValue by rememberSaveable(selectedPlateId) {
+        mutableStateOf(selectedPlate?.name.orEmpty())
+    }
     Surface(
         modifier = modifier
             .fillMaxWidth(0.92f)
@@ -3309,34 +3323,36 @@ private fun PlateSwitcher(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             plates.forEachIndexed { index, plate ->
-                val selected = plate.id == selectedPlateId
-                val bringIntoViewRequester = remember(plate.id) { BringIntoViewRequester() }
-                LaunchedEffect(selected) {
-                    if (selected) bringIntoViewRequester.bringIntoView()
-                }
-                TextButton(
-                    onClick = { onSelected(plate.id) },
-                    enabled = enabled,
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .bringIntoViewRequester(bringIntoViewRequester)
-                        .semantics {
-                            this.selected = selected
-                            stateDescription = if (selected) {
-                                "${index + 1}/${plates.size}"
-                            } else {
-                                "${index + 1}"
-                            }
-                        },
-                    colors = ButtonDefaults.textButtonColors(
-                        containerColor = if (selected) WorkspaceYellow else Color.Transparent,
-                        contentColor = if (selected) WorkspaceBlack else Color(0xFFF4F4EE),
-                    ),
-                ) {
-                    Text(
-                        stringResource(R.string.plate_number, index + 1),
-                        maxLines = 1,
-                    )
+                key(plate.id) {
+                    val selected = plate.id == selectedPlateId
+                    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+                    LaunchedEffect(selected) {
+                        if (selected) bringIntoViewRequester.bringIntoView()
+                    }
+                    TextButton(
+                        onClick = { onSelected(plate.id) },
+                        enabled = enabled,
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .bringIntoViewRequester(bringIntoViewRequester)
+                            .semantics {
+                                this.selected = selected
+                                stateDescription = if (selected) {
+                                    "${index + 1}/${plates.size}"
+                                } else {
+                                    "${index + 1}"
+                                }
+                            },
+                        colors = ButtonDefaults.textButtonColors(
+                            containerColor = if (selected) WorkspaceYellow else Color.Transparent,
+                            contentColor = if (selected) WorkspaceBlack else Color(0xFFF4F4EE),
+                        ),
+                    ) {
+                        Text(
+                            plate.name ?: stringResource(R.string.plate_number, index + 1),
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
             IconButton(
@@ -3351,17 +3367,96 @@ private fun PlateSwitcher(
             ) {
                 Icon(Icons.Default.ContentCopy, stringResource(R.string.duplicate_plate))
             }
-            IconButton(
-                onClick = onRemove,
-                enabled = enabled && plates.size > 1,
-            ) {
-                Icon(
-                    Icons.Default.DeleteOutline,
-                    stringResource(R.string.remove_plate),
-                    tint = if (enabled && plates.size > 1) Color(0xFFFF8A80) else Color.Unspecified,
-                )
+            Box {
+                IconButton(
+                    onClick = { actionsExpanded = true },
+                    enabled = enabled && selectedPlate != null,
+                ) {
+                    Icon(Icons.Default.MoreVert, stringResource(R.string.plate_actions))
+                }
+                DropdownMenu(
+                    expanded = actionsExpanded,
+                    onDismissRequest = { actionsExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.rename_plate)) },
+                        leadingIcon = { Icon(Icons.Default.Edit, null) },
+                        onClick = {
+                            actionsExpanded = false
+                            renameValue = selectedPlateLabel
+                            renameRequested = true
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.move_plate_previous)) },
+                        leadingIcon = {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null)
+                        },
+                        enabled = selectedIndex > 0,
+                        onClick = {
+                            actionsExpanded = false
+                            onMove(selectedIndex - 1)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.move_plate_next)) },
+                        leadingIcon = {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)
+                        },
+                        enabled = selectedIndex < plates.lastIndex,
+                        onClick = {
+                            actionsExpanded = false
+                            onMove(selectedIndex + 1)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                stringResource(R.string.remove_plate),
+                                color = if (plates.size > 1) Color(0xFFFF8A80) else Color.Unspecified,
+                            )
+                        },
+                        leadingIcon = { Icon(Icons.Default.DeleteOutline, null) },
+                        enabled = plates.size > 1,
+                        onClick = {
+                            actionsExpanded = false
+                            onRemove()
+                        },
+                    )
+                }
             }
         }
+    }
+    if (renameRequested && selectedPlate != null) {
+        val normalizedName = normalizedProjectPlateName(renameValue)
+        AlertDialog(
+            onDismissRequest = { renameRequested = false },
+            title = { Text(stringResource(R.string.rename_plate)) },
+            text = {
+                OutlinedTextField(
+                    value = renameValue,
+                    onValueChange = { renameValue = it.take(ProjectStore.MAX_PLATE_NAME_LENGTH + 1) },
+                    label = { Text(stringResource(R.string.plate_name)) },
+                    singleLine = true,
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { renameRequested = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        renameRequested = false
+                        onRename(requireNotNull(normalizedName))
+                    },
+                    enabled = normalizedName != null && normalizedName != selectedPlate.name,
+                ) {
+                    Text(stringResource(R.string.done))
+                }
+            },
+        )
     }
 }
 

@@ -756,24 +756,27 @@ class AccessibilityInstrumentedTest {
         val firstLabel = context.getString(R.string.plate_number, 1)
         val secondLabel = context.getString(R.string.plate_number, 2)
         val addLabel = context.getString(R.string.add_plate)
+        val actionsLabel = context.getString(R.string.plate_actions)
         val removeLabel = context.getString(R.string.remove_plate)
         val removeTitle = context.getString(R.string.remove_plate_title)
         launchHarness(AccessibilityHarnessActivity.SCREEN_PLATES).use {
-            val nodes = waitForNodes(setOf(firstLabel, secondLabel, addLabel, removeLabel))
+            val nodes = waitForNodes(setOf(firstLabel, secondLabel, addLabel, actionsLabel))
             val first = nodes.first { it.isClickable && it.effectiveLabel() == firstLabel }
             val second = nodes.first { it.isClickable && it.effectiveLabel() == secondLabel }
             val add = nodes.first { it.isClickable && it.effectiveLabel() == addLabel }
-            val remove = nodes.first { it.isClickable && it.effectiveLabel() == removeLabel }
+            val actions = nodes.first { it.isClickable && it.effectiveLabel() == actionsLabel }
             assertEquals("1/2", first.stateDescription?.toString())
             assertTrue(second.isFocusable)
             assertTrue(add.isFocusable)
-            assertTrue(remove.isFocusable)
+            assertTrue(actions.isFocusable)
 
             assertTrue(second.performAction(AccessibilityNodeInfo.ACTION_CLICK))
             waitForNode(secondLabel) {
                 it.isClickable && it.stateDescription?.toString() == "2/2"
             }
-            val selectedRemove = waitForNode(removeLabel) { it.isClickable }
+            val selectedActions = waitForNode(actionsLabel) { it.isClickable && it.isEnabled }
+            assertTrue(selectedActions.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val selectedRemove = waitForNode(removeLabel) { it.isClickable && it.isEnabled }
             assertTrue(selectedRemove.performAction(AccessibilityNodeInfo.ACTION_CLICK))
             assertTrue(
                 waitForNodes(setOf(removeTitle)).any {
@@ -802,6 +805,45 @@ class AccessibilityInstrumentedTest {
             waitForNode(platesLabel) {
                 it.stateDescription?.toString() == "3/3"
             }
+        }
+    }
+
+    @Test
+    fun plateSwitcherRenamesAndReordersTheSelectedPlate() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val renameLabel = context.getString(R.string.rename_plate)
+        val nameLabel = context.getString(R.string.plate_name)
+        val moveLaterLabel = context.getString(R.string.move_plate_next)
+        val actionsLabel = context.getString(R.string.plate_actions)
+        val platesLabel = context.getString(R.string.plates)
+        val customName = "Main body"
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PLATES).use {
+            val actions = waitForNode(actionsLabel) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == actionsLabel
+            }
+            assertTrue(actions.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val rename = waitForNode(renameLabel) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == renameLabel
+            }
+            assertTrue(rename.isFocusable)
+            assertTrue(rename.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            replaceEditableText(nameLabel, customName)
+            val done = waitForNode(context.getString(R.string.done)) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == context.getString(R.string.done)
+            }
+            assertTrue(done.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNode(customName) { it.isClickable && it.effectiveLabel() == customName }
+
+            val updatedActions = waitForNode(actionsLabel) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == actionsLabel
+            }
+            assertTrue(updatedActions.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val moveLater = waitForNode(moveLaterLabel) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == moveLaterLabel
+            }
+            assertTrue(moveLater.isFocusable)
+            assertTrue(moveLater.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNode(platesLabel) { it.stateDescription?.toString() == "2/2" }
         }
     }
 

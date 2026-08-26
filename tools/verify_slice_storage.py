@@ -187,7 +187,9 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "fun PlateSliceResults.completeExportBatch(",
         "snapshot.plates.withIndex()",
         "resultFor(plate.id) ?: return null",
-        "plateGcodeFileName(indexedPlate.index + 1",
+        "displayName = plateGcodeFileName(",
+        "indexedPlate.index + 1",
+        "plate.name",
     ):
         if marker not in plate_results:
             raise VerificationError(f"complete plate export selection is missing: {marker}")

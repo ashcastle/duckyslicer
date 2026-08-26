@@ -68,7 +68,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "PlateSliceResults.kt": (
             "fun PlateSliceResults.completeExportBatch( snapshot.plates.withIndex() "
-            "resultFor(plate.id) ?: return null plateGcodeFileName(indexedPlate.index + 1"
+            "resultFor(plate.id) ?: return null displayName = plateGcodeFileName( "
+            "indexedPlate.index + 1 plate.name"
         ),
         "RemoteDevice.kt": "SliceArtifactLease.acquire(gcode)",
         "SliceArtifactStoreTest.kt": (
