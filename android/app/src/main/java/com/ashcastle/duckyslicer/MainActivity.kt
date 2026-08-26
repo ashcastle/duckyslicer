@@ -426,6 +426,12 @@ private fun DuckySlicerScreen(
 
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
+    val acceptProfileSave: (Boolean) -> Unit = { started ->
+        if (!started) {
+            error = profileSaveError
+            notice = null
+        }
+    }
     var externalProjectConfirmation by remember { mutableStateOf<ExternalProjectRequest?>(null) }
     var plateSliceResults by rememberSaveable { mutableStateOf(PlateSliceResults()) }
     var pendingGcodeExport by rememberSaveable { mutableStateOf<PlateSliceResult?>(null) }
@@ -1943,41 +1949,60 @@ private fun DuckySlicerScreen(
         onCancelGcodeExport = gcodeExportModel::cancelActiveExport,
         onSliceOptionsChanged = ::applyOptions,
         onSavePrinterProfile = { name, options ->
-            if (
-                !profileLibraryModel.savePrinter(
+            acceptProfileSave(
+                profileLibraryModel.savePrinter(
                     name,
                     options,
                     projectTransferModel.state.value.sessionRevision,
-                )
-            ) {
-                error = profileSaveError
-                notice = null
-            }
+                ),
+            )
         },
         onSaveFilamentProfile = { name, options, slot ->
-            if (
-                !profileLibraryModel.saveFilament(
+            acceptProfileSave(
+                profileLibraryModel.saveFilament(
                     name,
                     options,
                     slot,
                     projectTransferModel.state.value.sessionRevision,
-                )
-            ) {
-                error = profileSaveError
-                notice = null
-            }
+                ),
+            )
         },
         onSaveSlicingProfile = { name, options ->
-            if (
-                !profileLibraryModel.saveSlicing(
+            acceptProfileSave(
+                profileLibraryModel.saveSlicing(
                     name,
                     options,
                     projectTransferModel.state.value.sessionRevision,
-                )
-            ) {
-                error = profileSaveError
-                notice = null
-            }
+                ),
+            )
+        },
+        onUpdatePrinterProfile = { profileId, options ->
+            acceptProfileSave(
+                profileLibraryModel.updatePrinter(
+                    profileId,
+                    options,
+                    projectTransferModel.state.value.sessionRevision,
+                ),
+            )
+        },
+        onUpdateFilamentProfile = { profileId, options, slot ->
+            acceptProfileSave(
+                profileLibraryModel.updateFilament(
+                    profileId,
+                    options,
+                    slot,
+                    projectTransferModel.state.value.sessionRevision,
+                ),
+            )
+        },
+        onUpdateSlicingProfile = { profileId, options ->
+            acceptProfileSave(
+                profileLibraryModel.updateSlicing(
+                    profileId,
+                    options,
+                    projectTransferModel.state.value.sessionRevision,
+                ),
+            )
         },
         onDeletePrinterProfile = { profileId ->
             if (!profileLibraryModel.deletePrinter(profileId)) {

@@ -710,6 +710,7 @@
     <string name="other_profiles">기타</string>
     <string name="no_profiles_found">일치하는 프로필이 없습니다</string>
     <string name="save_as_new_profile">새 프로필로 저장</string>
+    <string name="save_profile_changes">프로필 변경사항 저장</string>
     <string name="revert_changes">되돌리기</string>
     <string name="apply_changes">적용</string>
     <string name="profile_saved">프로필을 저장했습니다.</string>

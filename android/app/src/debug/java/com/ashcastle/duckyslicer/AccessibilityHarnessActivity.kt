@@ -224,6 +224,9 @@ private fun ProfileSettingsAccessibilityHarness() {
             onSavePrinter = { _, _ -> },
             onSaveFilament = { _, _, _ -> },
             onSaveSlicing = { _, _ -> },
+            onUpdatePrinter = { _, _ -> },
+            onUpdateFilament = { _, _, _ -> },
+            onUpdateSlicing = { _, _ -> },
             onDeletePrinter = { id ->
                 catalog = catalog.copy(printers = catalog.printers.filterNot { it.id == id })
             },
@@ -666,6 +669,9 @@ private fun WorkspaceAccessibilityHarness(
         onSavePrinterProfile = { _, _ -> },
         onSaveFilamentProfile = { _, _, _ -> },
         onSaveSlicingProfile = { _, _ -> },
+        onUpdatePrinterProfile = { _, _ -> },
+        onUpdateFilamentProfile = { _, _, _ -> },
+        onUpdateSlicingProfile = { _, _ -> },
         onDeletePrinterProfile = {},
         onDeleteFilamentProfile = {},
         onDeleteSlicingProfile = {},

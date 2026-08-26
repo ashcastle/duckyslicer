@@ -872,9 +872,18 @@ class AccessibilityInstrumentedTest {
         val delete = context.getString(R.string.delete_profile)
         val keep = context.getString(R.string.keep_profile)
         launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
-            tapCenter(waitForNode(printerProfile) { it.isClickable })
-            tapCenter(waitForNode(profileList) { it.isClickable })
-            tapCenter(waitForNode(myProfiles) { it.isClickable })
+            assertTrue(
+                waitForNode(printerProfile) { it.isClickable }
+                    .performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            )
+            assertTrue(
+                waitForNode(profileList) { it.isClickable }
+                    .performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            )
+            assertTrue(
+                waitForNode(myProfiles) { it.isClickable }
+                    .performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            )
 
             val deleteAction = waitForSingleNamedAction(deleteNamed)
             assertTrue("A user profile must expose one named delete action", deleteAction.isEnabled)
@@ -890,6 +899,43 @@ class AccessibilityInstrumentedTest {
                 "Built-in profiles must remain selectable after deleting a user profile",
                 currentNodes().any { node -> node.isCheckable && node.isClickable },
             )
+        }
+    }
+
+    @Test
+    fun userProfileEditorExposesInPlaceSaveWhileBuiltInsRemainProtected() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val printerProfile = context.getString(R.string.printer_profile)
+        val profileList = context.getString(R.string.profile_list)
+        val myProfiles = context.getString(R.string.my_profiles)
+        val saveChanges = context.getString(R.string.save_profile_changes)
+        val userProfile = "My accessibility printer"
+        launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
+            assertTrue(
+                waitForNode(printerProfile) { it.isClickable }
+                    .performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            )
+            assertTrue(
+                "Built-in profiles must not expose in-place persistence",
+                currentNodes().none { it.effectiveLabel() == saveChanges },
+            )
+
+            assertTrue(
+                waitForNode(profileList) { it.isClickable }
+                    .performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            )
+            assertTrue(
+                waitForNode(myProfiles) { it.isClickable }
+                    .performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            )
+            assertTrue(
+                waitForNode(userProfile) { it.isClickable && it.isCheckable }
+                    .performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            )
+
+            val update = waitForNode(saveChanges) { it.isClickable }
+            assertTrue("A user profile must expose an in-place save action", update.isEnabled)
+            assertTrue(update.isFocusable)
         }
     }
 

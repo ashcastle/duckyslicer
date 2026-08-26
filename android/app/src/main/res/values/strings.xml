@@ -710,6 +710,7 @@
     <string name="other_profiles">Other</string>
     <string name="no_profiles_found">No matching profiles</string>
     <string name="save_as_new_profile">Save as new profile</string>
+    <string name="save_profile_changes">Save profile changes</string>
     <string name="revert_changes">Revert</string>
     <string name="apply_changes">Apply</string>
     <string name="profile_saved">Profile saved.</string>

@@ -45,9 +45,21 @@ class ProfileStore private constructor(
     }
 
     @Synchronized
-    fun savePrinter(name: String, options: SliceOptions): PrinterProfile {
+    fun savePrinter(name: String, options: SliceOptions): PrinterProfile =
+        writePrinter(userId(), name, options, replace = false)
+
+    @Synchronized
+    fun updatePrinter(id: String, name: String, options: SliceOptions): PrinterProfile =
+        writePrinter(id, name, options, replace = true)
+
+    private fun writePrinter(
+        id: String,
+        name: String,
+        options: SliceOptions,
+        replace: Boolean,
+    ): PrinterProfile {
         val profile = PrinterProfile(
-            id = userId(),
+            id = id,
             name = requireName(name),
             bedSizeX = options.bedSizeX,
             bedSizeY = options.bedSizeY,
@@ -154,12 +166,29 @@ class ProfileStore private constructor(
             defaultFilamentProfiles = options.resolvedFilamentSlots().map(FilamentProfile::name),
         )
         require(ProfileValidation.printer(profile)) { "Printer profile contains unsafe values" }
-        append("printers", profile.toProfileJson())
+        writeProfile("printers", profile.id, profile.toProfileJson(), replace)
         return profile
     }
 
     @Synchronized
-    fun saveFilament(name: String, options: SliceOptions, slot: Int = 0): FilamentProfile {
+    fun saveFilament(name: String, options: SliceOptions, slot: Int = 0): FilamentProfile =
+        writeFilament(userId(), name, options, slot, replace = false)
+
+    @Synchronized
+    fun updateFilament(
+        id: String,
+        name: String,
+        options: SliceOptions,
+        slot: Int = 0,
+    ): FilamentProfile = writeFilament(id, name, options, slot, replace = true)
+
+    private fun writeFilament(
+        id: String,
+        name: String,
+        options: SliceOptions,
+        slot: Int,
+        replace: Boolean,
+    ): FilamentProfile {
         val selected = options.resolvedFilamentSlots().getOrElse(slot) {
             throw IllegalArgumentException("Filament slot is unavailable")
         }
@@ -210,7 +239,7 @@ class ProfileStore private constructor(
             selected
         }
         val profile = FilamentProfile(
-            id = userId(),
+            id = id,
             name = requireName(name),
             nativeName = effective.nativeName,
             nozzleTemp = effective.nozzleTemp,
@@ -307,14 +336,26 @@ class ProfileStore private constructor(
             completePrintExhaustFanSpeed = effective.completePrintExhaustFanSpeed,
         )
         require(ProfileValidation.filament(profile)) { "Filament profile contains unsafe values" }
-        append("filaments", profile.toProfileJson())
+        writeProfile("filaments", profile.id, profile.toProfileJson(), replace)
         return profile
     }
 
     @Synchronized
-    fun saveSlicing(name: String, options: SliceOptions): QualityProfile {
+    fun saveSlicing(name: String, options: SliceOptions): QualityProfile =
+        writeSlicing(userId(), name, options, replace = false)
+
+    @Synchronized
+    fun updateSlicing(id: String, name: String, options: SliceOptions): QualityProfile =
+        writeSlicing(id, name, options, replace = true)
+
+    private fun writeSlicing(
+        id: String,
+        name: String,
+        options: SliceOptions,
+        replace: Boolean,
+    ): QualityProfile {
         val profile = QualityProfile(
-            id = userId(),
+            id = id,
             name = requireName(name),
             layerHeightMm = options.layerHeight,
             firstLayerHeightMm = options.firstLayerHeight,
@@ -550,7 +591,7 @@ class ProfileStore private constructor(
             spiralFinishingFlowRatio = options.spiralFinishingFlowRatio,
         )
         require(ProfileValidation.slicing(profile)) { "Slicing profile contains unsafe values" }
-        append("slicing", profile.toProfileJson())
+        writeProfile("slicing", profile.id, profile.toProfileJson(), replace)
         return profile
     }
 
@@ -592,8 +633,31 @@ class ProfileStore private constructor(
         writeRoot(root)
     }
 
+    private fun writeProfile(
+        key: String,
+        id: String,
+        value: JSONObject,
+        replace: Boolean,
+    ) {
+        if (!replace) {
+            append(key, value)
+            return
+        }
+        require(id.isSafeStoredProfileId()) { "profile_id_invalid" }
+        val root = readRoot(forMutation = true)
+        val values = root.optJSONArray(key) ?: error("profile_not_found")
+        val matchingIndices = (0 until values.length()).filter { entryIndex ->
+            values.optJSONObject(entryIndex)?.optString("id") == id
+        }
+        check(matchingIndices.size == 1) { "profile_not_found" }
+        val index = matchingIndices.single()
+        values.put(index, value)
+        root.put("schemaVersion", USER_PROFILE_SCHEMA_VERSION)
+        writeRoot(root)
+    }
+
     private fun delete(key: String, id: String): Boolean {
-        if (id.isBlank() || id.length > 512 || id.any(Char::isISOControl)) return false
+        if (!id.isSafeStoredProfileId()) return false
         val root = readRoot(forMutation = true)
         val values = root.optJSONArray(key) ?: return false
         val index = (0 until values.length()).firstOrNull { entryIndex ->
@@ -658,6 +722,9 @@ class ProfileStore private constructor(
         )
     }
 }
+
+private fun String.isSafeStoredProfileId(): Boolean =
+    isNotBlank() && length <= 512 && none(Char::isISOControl)
 
 internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("id", id).put("name", name)

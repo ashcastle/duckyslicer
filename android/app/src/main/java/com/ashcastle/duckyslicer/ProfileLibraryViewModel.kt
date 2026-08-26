@@ -204,6 +204,31 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
             )
         }
 
+    fun updatePrinter(
+        profileId: String,
+        options: SliceOptions,
+        sessionRevision: Long,
+    ): Boolean = launchSave(
+        failureEvent = SupportEvent.PRINTER_PROFILE_SAVE_FAILED,
+        editableProfile = { catalog ->
+            catalog.printers.any { it.id == profileId && !it.builtIn }
+        },
+    ) { operationId, catalog ->
+        check(options.printerProfile.id == profileId) { "profile_selection_changed" }
+        val saved = profileStore.updatePrinter(profileId, options.printerProfile.name, options)
+        ProfileSaveResult(
+            catalog = catalog.copy(
+                printers = catalog.printers.replaceProfile(saved, PrinterProfile::id),
+            ),
+            completion = ProfileSaveCompletion.Printer(
+                operationId,
+                sessionRevision,
+                options,
+                saved,
+            ),
+        )
+    }
+
     fun saveFilament(
         name: String,
         options: SliceOptions,
@@ -214,6 +239,36 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
         val saved = profileStore.saveFilament(name, options, slot)
         ProfileSaveResult(
             catalog = catalog.copy(filaments = catalog.filaments + saved),
+            completion = ProfileSaveCompletion.Filament(
+                operationId,
+                sessionRevision,
+                options,
+                slot,
+                saved,
+            ),
+        )
+    }
+
+    fun updateFilament(
+        profileId: String,
+        options: SliceOptions,
+        slot: Int,
+        sessionRevision: Long,
+    ): Boolean = launchSave(
+        failureEvent = SupportEvent.FILAMENT_PROFILE_SAVE_FAILED,
+        editableProfile = { catalog ->
+            catalog.filaments.any { it.id == profileId && !it.builtIn }
+        },
+    ) { operationId, catalog ->
+        val current = options.resolvedFilamentSlots().getOrElse(slot) {
+            throw IllegalArgumentException("Filament slot is unavailable")
+        }
+        check(current.id == profileId) { "profile_selection_changed" }
+        val saved = profileStore.updateFilament(profileId, current.name, options, slot)
+        ProfileSaveResult(
+            catalog = catalog.copy(
+                filaments = catalog.filaments.replaceProfile(saved, FilamentProfile::id),
+            ),
             completion = ProfileSaveCompletion.Filament(
                 operationId,
                 sessionRevision,
@@ -237,6 +292,31 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
                 ),
             )
         }
+
+    fun updateSlicing(
+        profileId: String,
+        options: SliceOptions,
+        sessionRevision: Long,
+    ): Boolean = launchSave(
+        failureEvent = SupportEvent.SLICING_PROFILE_SAVE_FAILED,
+        editableProfile = { catalog ->
+            catalog.slicing.any { it.id == profileId && !it.builtIn }
+        },
+    ) { operationId, catalog ->
+        check(options.quality.id == profileId) { "profile_selection_changed" }
+        val saved = profileStore.updateSlicing(profileId, options.quality.name, options)
+        ProfileSaveResult(
+            catalog = catalog.copy(
+                slicing = catalog.slicing.replaceProfile(saved, QualityProfile::id),
+            ),
+            completion = ProfileSaveCompletion.Slicing(
+                operationId,
+                sessionRevision,
+                options,
+                saved,
+            ),
+        )
+    }
 
     fun deletePrinter(id: String): Boolean = launchDelete(ProfileKind.PRINTER, id) {
         profileStore.deletePrinter(id)
@@ -465,6 +545,7 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
     @Synchronized
     private fun launchSave(
         failureEvent: SupportEvent,
+        editableProfile: (ProfileCatalog) -> Boolean = { true },
         operation: (Long, ProfileCatalog) -> ProfileSaveResult,
     ): Boolean {
         val current = mutableState.value
@@ -472,6 +553,7 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
             current.busy || !current.catalogLoaded || current.completion != null ||
             current.deletionCompletion != null || current.transferCompletion != null
         ) return false
+        if (!editableProfile(current.catalog)) return false
         val operationId = ++nextOperationId
         mutableState.value = current.copy(
             busy = true,
@@ -702,3 +784,9 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
 
 private fun ProfileLibraryState.hasDirtyRecents(): Boolean =
     recentsLoaded && recentsRevision != persistedRecentsRevision
+
+private fun <T> List<T>.replaceProfile(saved: T, id: (T) -> String): List<T> {
+    val savedId = id(saved)
+    check(count { id(it) == savedId } == 1) { "profile_not_found" }
+    return map { profile -> if (id(profile) == savedId) saved else profile }
+}

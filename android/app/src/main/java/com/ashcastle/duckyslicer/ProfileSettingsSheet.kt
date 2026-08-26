@@ -154,6 +154,9 @@ internal fun ProfileSettings(
     onSavePrinter: (String, SliceOptions) -> Unit,
     onSaveFilament: (String, SliceOptions, Int) -> Unit,
     onSaveSlicing: (String, SliceOptions) -> Unit,
+    onUpdatePrinter: (String, SliceOptions) -> Unit,
+    onUpdateFilament: (String, SliceOptions, Int) -> Unit,
+    onUpdateSlicing: (String, SliceOptions) -> Unit,
     onDeletePrinter: (String) -> Unit,
     onDeleteFilament: (String) -> Unit,
     onDeleteSlicing: (String) -> Unit,
@@ -267,6 +270,10 @@ internal fun ProfileSettings(
                 onOptionsChanged(staged)
                 onSavePrinter(name, staged)
             },
+            onUpdate = { staged ->
+                onOptionsChanged(staged)
+                onUpdatePrinter(staged.printerProfile.id, staged)
+            },
             onDelete = onDeletePrinter,
             dirty = activeEditor.session.isDirty,
             onRevert = ::revertEditor,
@@ -285,6 +292,14 @@ internal fun ProfileSettings(
             onSave = { name, staged, slot ->
                 onOptionsChanged(staged)
                 onSaveFilament(name, staged, slot)
+            },
+            onUpdate = { staged, slot ->
+                onOptionsChanged(staged)
+                onUpdateFilament(
+                    staged.resolvedFilamentSlots()[slot].id,
+                    staged,
+                    slot,
+                )
             },
             onDelete = onDeleteFilament,
             dirty = activeEditor.session.isDirty,
@@ -307,6 +322,10 @@ internal fun ProfileSettings(
             onSave = { name, staged ->
                 onOptionsChanged(staged)
                 onSaveSlicing(name, staged)
+            },
+            onUpdate = { staged ->
+                onOptionsChanged(staged)
+                onUpdateSlicing(staged.quality.id, staged)
             },
             onDelete = onDeleteSlicing,
             dirty = activeEditor.session.isDirty,
@@ -351,6 +370,7 @@ private fun PrinterSettingsSheet(
     onProfileSelected: (PrinterProfile) -> Unit,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String, SliceOptions) -> Unit,
+    onUpdate: (SliceOptions) -> Unit,
     onDelete: (String) -> Unit,
     dirty: Boolean,
     onRevert: () -> Unit,
@@ -381,6 +401,11 @@ private fun PrinterSettingsSheet(
             CurrentProfileButton(
                 profile = profileLabel(options.printerProfile),
                 onClick = { profilesOpen = true },
+            )
+            UpdateProfileButton(
+                visible = !options.printerProfile.builtIn,
+                onUpdate = { onUpdate(options) },
+                onDismiss = onDismiss,
             )
         },
     ) {
@@ -1717,7 +1742,7 @@ private fun PrinterSettingsSheet(
             onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxJunctionDeviation = it)))
         },
     )
-        SaveProfileField(onSave = { name -> onSave(name, options) }, onDismiss = onDismiss)
+    SaveProfileField(onSave = { name -> onSave(name, options) }, onDismiss = onDismiss)
     }
     if (profilesOpen) {
         ProfileChooserSheet(
@@ -1749,6 +1774,7 @@ private fun FilamentSettingsSheet(
     recentIds: List<String>,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String, SliceOptions, Int) -> Unit,
+    onUpdate: (SliceOptions, Int) -> Unit,
     onDelete: (String) -> Unit,
     dirty: Boolean,
     onRevert: () -> Unit,
@@ -1790,6 +1816,11 @@ private fun FilamentSettingsSheet(
             CurrentProfileButton(
                 profile = profileLabel(activeProfile),
                 onClick = { profilesOpen = true },
+            )
+            UpdateProfileButton(
+                visible = !activeProfile.builtIn,
+                onUpdate = { onUpdate(options, selectedSlot) },
+                onDismiss = onDismiss,
             )
         },
     ) {
@@ -3152,6 +3183,7 @@ private fun SlicingSettingsSheet(
     recentIds: List<String>,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String, SliceOptions) -> Unit,
+    onUpdate: (SliceOptions) -> Unit,
     onDelete: (String) -> Unit,
     dirty: Boolean,
     onRevert: () -> Unit,
@@ -3174,6 +3206,11 @@ private fun SlicingSettingsSheet(
             CurrentProfileButton(
                 profile = profileLabel(options.quality),
                 onClick = { profilesOpen = true },
+            )
+            UpdateProfileButton(
+                visible = !options.quality.builtIn,
+                onUpdate = { onUpdate(options) },
+                onDismiss = onDismiss,
             )
         },
     ) {
@@ -8876,6 +8913,24 @@ private fun SaveProfileField(onSave: (String) -> Unit, onDismiss: () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(stringResource(R.string.save_as_new_profile))
+    }
+}
+
+@Composable
+private fun UpdateProfileButton(
+    visible: Boolean,
+    onUpdate: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (!visible || LocalSettingsQuery.current.isNotBlank()) return
+    Button(
+        onClick = {
+            onUpdate()
+            onDismiss()
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(stringResource(R.string.save_profile_changes))
     }
 }
 
