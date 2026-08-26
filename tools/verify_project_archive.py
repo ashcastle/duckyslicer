@@ -44,7 +44,10 @@ REQUIRED_STRINGS = {
     "project_export_error",
     "project_export_canceled",
     "plate_number",
+    "plates",
     "add_plate",
+    "duplicate_plate",
+    "plate_duplicated",
     "remove_plate",
     "remove_plate_title",
     "remove_plate_message",
@@ -99,6 +102,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "AndroidManifest.xml",
         "AndroidTestManifest.xml",
         "ProjectArchiveTest.kt",
+        "ProjectStateTest.kt",
         "ProjectVolumeSemanticsTest.kt",
         "ProjectTransferStateTest.kt",
         "ProjectArchiveIntentInstrumentedTest.kt",
@@ -421,6 +425,12 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "fun removeSelectedAuxiliaryVolume(",
             "fun replaceSelectedAuxiliaryVolume(",
             "ProjectVolumeRole.MODEL_PART",
+            "fun duplicateSelectedPlate(",
+            "Duplicate plate object identities are incomplete",
+            "current.allObjects.size + source.objects.size <= ProjectStore.MAX_PROJECT_OBJECTS",
+            "ProjectStore.MAX_PROJECT_VOLUMES",
+            "projectObject.rebaseVolumeIds(newObjectId)",
+            "selectedPlateId = newPlateId",
         ),
     )
 
@@ -656,6 +666,10 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "fun editAuxiliaryVolume(",
             "onEditAuxiliaryVolume = ::editAuxiliaryVolume",
             "ProjectEditKind.AUXILIARY_VOLUME",
+            "onDuplicatePlate = {",
+            "val sourceVolumeCount = source.objects.sumOf { it.volumes.size }",
+            "duplicateSelectedPlate(",
+            "notice = resources.getString(R.string.plate_duplicated)",
         ),
     )
     for forbidden in (
@@ -680,8 +694,13 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "onSaveProject",
             "onPlateSelected",
             "onAddPlate",
+            "onDuplicatePlate",
             "onRemovePlate",
             "PlateSwitcher(",
+            "canDuplicateSelectedPlate",
+            "R.string.duplicate_plate",
+            "R.string.plates",
+            "stateDescription = \"${selectedIndex + 1}/${plates.size}\"",
             "confirmReplacement",
             "R.string.replace_project_title",
             "R.string.replace_project_body",
@@ -805,6 +824,14 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         ),
     )
     _require_markers(
+        "ProjectStateTest.kt",
+        sources["ProjectStateTest.kt"],
+        (
+            "duplicatingAPlatePreservesItsCompleteContentWithFreshIdentities",
+            "duplicatingAPlateRejectsIncompleteCollidingAndOverCapacityIdentities",
+        ),
+    )
+    _require_markers(
         "ProjectTransferStateTest.kt",
         sources["ProjectTransferStateTest.kt"],
         (
@@ -814,6 +841,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "projectExportCancellationIsBoundToTheExactActiveTransfer",
             "projectImportCancellationIsBoundToTheExactActiveTransfer",
             "switchingPlatesRestoresEachPlatesIndependentSliceOptions",
+            "duplicatedPlateStartsWithTheSourcePlatesExactSliceOptions",
         ),
     )
     _require_markers(
@@ -909,6 +937,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "cancelProjectImportActionIsReachable",
             "cancelProjectExportActionIsReachable",
             "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions",
+            "plateSwitcherDuplicatesTheSelectedPlateAndSelectsTheCopy",
+            "R.string.duplicate_plate",
             "auxiliaryShapePickerExposesRolesPlacementAndModifierDensity",
             "auxiliaryVolumeManagerExposesExistingRegionsRemovalAndAdd",
             "auxiliaryVolumeEditorExposesScalePlacementDensityAndApply",
@@ -1003,6 +1033,9 @@ def read_sources() -> dict[str, str]:
         ),
         "ProjectArchiveTest.kt": (
             tests / "test/java/com/ashcastle/duckyslicer/ProjectArchiveTest.kt"
+        ).read_text(encoding="utf-8"),
+        "ProjectStateTest.kt": (
+            tests / "test/java/com/ashcastle/duckyslicer/ProjectStateTest.kt"
         ).read_text(encoding="utf-8"),
         "ProjectVolumeSemanticsTest.kt": (
             tests / "test/java/com/ashcastle/duckyslicer/ProjectVolumeSemanticsTest.kt"

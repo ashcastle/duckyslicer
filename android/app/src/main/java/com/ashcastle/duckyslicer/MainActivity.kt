@@ -342,6 +342,61 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private fun duplicateActivePlate(
+    projectTransferModel: ProjectTransferViewModel,
+    sliceOperationModel: SliceOperationViewModel,
+    remoteOperationModel: RemoteOperationViewModel,
+): Boolean {
+    val current = projectTransferModel.state.value.history
+    val snapshot = current.current
+    val source = snapshot.activePlate
+    val sourceVolumeCount = source.objects.sumOf { it.volumes.size }
+    if (
+        snapshot.plates.size >= MAX_PROJECT_PLATES ||
+        snapshot.allObjects.size + source.objects.size > ProjectStore.MAX_PROJECT_OBJECTS ||
+        snapshot.allObjects.sumOf { it.volumes.size } + sourceVolumeCount >
+        ProjectStore.MAX_PROJECT_VOLUMES
+    ) {
+        return false
+    }
+
+    val next = current.duplicateSelectedPlate(
+        newPlateId = UUID.randomUUID().toString(),
+        newObjectIds = List(source.objects.size) { UUID.randomUUID().toString() },
+    )
+    if (!projectTransferModel.updateHistory(current, next)) return false
+    sliceOperationModel.clearCompleted()
+    remoteOperationModel.invalidateUpload()
+    return true
+}
+
+private fun selectProjectPlate(
+    plateId: String,
+    projectTransferModel: ProjectTransferViewModel,
+    sliceOperationModel: SliceOperationViewModel,
+    remoteOperationModel: RemoteOperationViewModel,
+): Boolean {
+    val current = projectTransferModel.state.value.history
+    val next = current.selectPlate(plateId)
+    if (!projectTransferModel.updateHistory(current, next)) return false
+    sliceOperationModel.clearCompleted()
+    remoteOperationModel.invalidateUpload()
+    return true
+}
+
+private fun addEmptyProjectPlate(
+    projectTransferModel: ProjectTransferViewModel,
+    sliceOperationModel: SliceOperationViewModel,
+    remoteOperationModel: RemoteOperationViewModel,
+): Boolean {
+    val current = projectTransferModel.state.value.history
+    val next = current.addPlate(UUID.randomUUID().toString())
+    if (!projectTransferModel.updateHistory(current, next)) return false
+    sliceOperationModel.clearCompleted()
+    remoteOperationModel.invalidateUpload()
+    return true
+}
+
 @Composable
 private fun DuckySlicerScreen(
     sliceOperationModel: SliceOperationViewModel,
@@ -366,62 +421,53 @@ private fun DuckySlicerScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val resources = LocalResources.current
-    val modelReadError = stringResource(R.string.model_read_error)
-    val modelTooLargeError = stringResource(R.string.model_too_large_error)
-    val shapeError = stringResource(R.string.shape_error)
-    val regionUpdateError = stringResource(R.string.region_update_error)
-    val autoLayDone = stringResource(R.string.auto_lay_done)
-    val autoLayUnchanged = stringResource(R.string.auto_lay_unchanged)
-    val autoLayError = stringResource(R.string.auto_lay_error)
-    val layOnFaceDone = stringResource(R.string.lay_on_face_done)
-    val layOnFaceError = stringResource(R.string.lay_on_face_error)
-    val arrangeDone = stringResource(R.string.arrange_done)
-    val arrangeError = stringResource(R.string.arrange_error)
-    val splitNotPossible = stringResource(R.string.split_not_possible)
-    val splitError = stringResource(R.string.split_error)
-    val splitPartsNotPossible = stringResource(R.string.split_parts_not_possible)
-    val splitPartsError = stringResource(R.string.split_parts_error)
-    val cutNotPossible = stringResource(R.string.cut_not_possible)
-    val cutError = stringResource(R.string.cut_error)
-    val simplifyError = stringResource(R.string.simplify_error)
-    val sliceError = stringResource(R.string.slice_error)
-    val sliceCanceledNotice = stringResource(R.string.slice_canceled)
-    val modelEditCanceledNotice = stringResource(R.string.model_edit_canceled)
-    val saveError = stringResource(R.string.save_error)
-    val savedNotice = stringResource(R.string.gcode_saved)
-    val gcodeExportCanceledNotice = stringResource(R.string.gcode_export_canceled)
-    val profileSavedNotice = stringResource(R.string.profile_saved)
-    val profileSaveError = stringResource(R.string.profile_save_error)
-    val profileDeletedNotice = stringResource(R.string.profile_deleted)
-    val profileDeleteError = stringResource(R.string.profile_delete_error)
-    val filamentSlotUnavailable = stringResource(R.string.filament_slot_unavailable)
-    val projectSaveError = stringResource(R.string.project_save_error)
-    val newProjectStartedNotice = stringResource(R.string.new_project_started)
-    val projectOpenedNotice = stringResource(R.string.project_opened)
-    val projectSavedNotice = stringResource(R.string.project_saved)
-    val projectOpenError = stringResource(R.string.project_open_error)
-    val projectExportError = stringResource(R.string.project_export_error)
-    val projectImportCanceledNotice = stringResource(R.string.project_import_canceled)
-    val projectExportCanceledNotice = stringResource(R.string.project_export_canceled)
-    val modelExportedNotice = stringResource(R.string.model_exported)
-    val modelExportError = stringResource(R.string.model_export_error)
-    val modelExportCanceledNotice = stringResource(R.string.model_export_canceled)
-    val savedDataUnavailable = stringResource(R.string.saved_data_unavailable)
-    val previewError = stringResource(R.string.preview_error)
-    val remoteSavedNotice = stringResource(R.string.device_saved)
-    val remoteDeletedNotice = stringResource(R.string.device_deleted)
-    val remoteConnectedNotice = stringResource(R.string.device_connected)
-    val remoteUploadNotice = stringResource(R.string.gcode_sent)
-    val remoteStartedNotice = stringResource(R.string.print_started)
-    val remotePausedNotice = stringResource(R.string.print_paused)
-    val remoteResumedNotice = stringResource(R.string.print_resumed)
-    val remoteCanceledNotice = stringResource(R.string.print_canceled)
-    val remoteUploadCanceledNotice = stringResource(R.string.upload_canceled)
-    val remoteRequestCanceledNotice = stringResource(R.string.remote_request_canceled)
-    val remoteConnectionError = stringResource(R.string.device_connection_error)
-    val remoteUnauthorizedError = stringResource(R.string.device_access_denied)
-    val remoteCommandError = stringResource(R.string.device_command_error)
-    val remoteSaveError = stringResource(R.string.device_save_error)
+    val modelReadError = resources.getString(R.string.model_read_error)
+    val modelTooLargeError = resources.getString(R.string.model_too_large_error)
+    val shapeError = resources.getString(R.string.shape_error)
+    val regionUpdateError = resources.getString(R.string.region_update_error)
+    val autoLayDone = resources.getString(R.string.auto_lay_done)
+    val autoLayUnchanged = resources.getString(R.string.auto_lay_unchanged)
+    val autoLayError = resources.getString(R.string.auto_lay_error)
+    val layOnFaceDone = resources.getString(R.string.lay_on_face_done)
+    val layOnFaceError = resources.getString(R.string.lay_on_face_error)
+    val arrangeDone = resources.getString(R.string.arrange_done)
+    val arrangeError = resources.getString(R.string.arrange_error)
+    val splitNotPossible = resources.getString(R.string.split_not_possible)
+    val splitError = resources.getString(R.string.split_error)
+    val splitPartsNotPossible = resources.getString(R.string.split_parts_not_possible)
+    val splitPartsError = resources.getString(R.string.split_parts_error)
+    val cutNotPossible = resources.getString(R.string.cut_not_possible)
+    val cutError = resources.getString(R.string.cut_error)
+    val simplifyError = resources.getString(R.string.simplify_error)
+    val sliceError = resources.getString(R.string.slice_error)
+    val sliceCanceledNotice = resources.getString(R.string.slice_canceled)
+    val modelEditCanceledNotice = resources.getString(R.string.model_edit_canceled)
+    val saveError = resources.getString(R.string.save_error)
+    val savedNotice = resources.getString(R.string.gcode_saved)
+    val gcodeExportCanceledNotice = resources.getString(R.string.gcode_export_canceled)
+    val profileSavedNotice = resources.getString(R.string.profile_saved)
+    val profileSaveError = resources.getString(R.string.profile_save_error)
+    val profileDeletedNotice = resources.getString(R.string.profile_deleted)
+    val profileDeleteError = resources.getString(R.string.profile_delete_error)
+    val filamentSlotUnavailable = resources.getString(R.string.filament_slot_unavailable)
+    val projectSaveError = resources.getString(R.string.project_save_error)
+    val newProjectStartedNotice = resources.getString(R.string.new_project_started)
+    val savedDataUnavailable = resources.getString(R.string.saved_data_unavailable)
+    val previewError = resources.getString(R.string.preview_error)
+    val remoteSavedNotice = resources.getString(R.string.device_saved)
+    val remoteDeletedNotice = resources.getString(R.string.device_deleted)
+    val remoteConnectedNotice = resources.getString(R.string.device_connected)
+    val remoteUploadNotice = resources.getString(R.string.gcode_sent)
+    val remoteStartedNotice = resources.getString(R.string.print_started)
+    val remotePausedNotice = resources.getString(R.string.print_paused)
+    val remoteResumedNotice = resources.getString(R.string.print_resumed)
+    val remoteCanceledNotice = resources.getString(R.string.print_canceled)
+    val remoteUploadCanceledNotice = resources.getString(R.string.upload_canceled)
+    val remoteRequestCanceledNotice = resources.getString(R.string.remote_request_canceled)
+    val remoteConnectionError = resources.getString(R.string.device_connection_error)
+    val remoteUnauthorizedError = resources.getString(R.string.device_access_denied)
+    val remoteCommandError = resources.getString(R.string.device_command_error)
+    val remoteSaveError = resources.getString(R.string.device_save_error)
 
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -566,58 +612,19 @@ private fun DuckySlicerScreen(
         remoteOperationModel.invalidateUpload()
     }
 
-    LaunchedEffect(projectTransferState.completion?.id) {
-        val completion = projectTransferState.completion ?: return@LaunchedEffect
-        when (completion) {
-            is ProjectTransferCompletion.Imported -> {
-                clearAllCompletedSlices()
-                externalProjectConfirmation = null
-                notice = projectOpenedNotice
-                error = null
-            }
-            is ProjectTransferCompletion.Exported -> {
-                notice = if (completion.format != ProjectExportFormat.PROJECT_ARCHIVE) {
-                    modelExportedNotice
-                } else {
-                    projectSavedNotice
-                }
-                error = null
-            }
-            is ProjectTransferCompletion.Canceled -> {
-                if (completion.direction == ProjectTransferDirection.IMPORT) {
-                    notice = projectImportCanceledNotice
-                    externalProjectConfirmation = null
-                } else {
-                    notice = if (completion.format != ProjectExportFormat.PROJECT_ARCHIVE) {
-                        modelExportCanceledNotice
-                    } else {
-                        projectExportCanceledNotice
-                    }
-                }
-                error = null
-            }
-            is ProjectTransferCompletion.Failed -> {
-                if (completion.direction == ProjectTransferDirection.IMPORT) {
-                    supportEvents.record(SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED)
-                    error = projectOpenError
-                } else {
-                    error = if (completion.format != ProjectExportFormat.PROJECT_ARCHIVE) {
-                        modelExportError
-                    } else {
-                        projectExportError
-                    }
-                }
-                externalProjectConfirmation = null
-                notice = null
-            }
-        }
-        externalProjectRequest
-            ?.takeIf { request -> request.startedOperationId == completion.id }
-            ?.let { request ->
-                onExternalProjectRequestConsumed(request.id, completion.id)
-            }
-        projectTransferModel.consumeCompletion(completion.id)
-    }
+    ProjectTransferCompletionEffect(
+        completion = projectTransferState.completion,
+        externalRequest = externalProjectRequest,
+        supportEvents = supportEvents,
+        onExternalConsumed = onExternalProjectRequestConsumed,
+        onConsumeCompletion = projectTransferModel::consumeCompletion,
+        onImported = ::clearAllCompletedSlices,
+        onDismissExternalConfirmation = { externalProjectConfirmation = null },
+        onPresentation = { nextNotice, nextError ->
+            notice = nextNotice
+            error = nextError
+        },
+    )
 
     LaunchedEffect(projectTransferState.editCompletion?.id) {
         val completion = projectTransferState.editCompletion ?: return@LaunchedEffect
@@ -1524,36 +1531,49 @@ private fun DuckySlicerScreen(
         onPlateSelected = { plateId ->
             if (
                 !projectTransferBusy && !slicing && !previewLoading && !exportingGcode &&
-                !remoteBusy && plateId != selectedPlateId
+                !remoteBusy && plateId != selectedPlateId && selectProjectPlate(
+                    plateId = plateId,
+                    projectTransferModel = projectTransferModel,
+                    sliceOperationModel = sliceOperationModel,
+                    remoteOperationModel = remoteOperationModel,
+                )
             ) {
-                val current = projectTransferModel.state.value.history
-                val next = current.selectPlate(plateId)
-                if (projectTransferModel.updateHistory(current, next)) {
-                    sliceOperationModel.clearCompleted()
-                    layerPreview = null
-                    stalePreviewResult = null
-                    remoteOperationModel.invalidateUpload()
-                    notice = null
-                    error = null
-                }
+                layerPreview = null
+                stalePreviewResult = null
+                notice = null
+                error = null
             }
         },
         onAddPlate = {
             if (
                 !projectTransferBusy && !slicing && !previewLoading && !exportingGcode &&
-                !remoteBusy && projectPlates.size < MAX_PROJECT_PLATES
+                !remoteBusy && projectPlates.size < MAX_PROJECT_PLATES && addEmptyProjectPlate(
+                    projectTransferModel = projectTransferModel,
+                    sliceOperationModel = sliceOperationModel,
+                    remoteOperationModel = remoteOperationModel,
+                )
             ) {
-                val current = projectTransferModel.state.value.history
-                val next = current.addPlate(UUID.randomUUID().toString())
-                if (projectTransferModel.updateHistory(current, next)) {
-                    sliceOperationModel.clearCompleted()
-                    layerPreview = null
-                    stalePreviewResult = null
-                    remoteOperationModel.invalidateUpload()
-                    selectedTab = WorkspaceTab.SLICE
-                    notice = null
-                    error = null
-                }
+                layerPreview = null
+                stalePreviewResult = null
+                selectedTab = WorkspaceTab.SLICE
+                notice = null
+                error = null
+            }
+        },
+        onDuplicatePlate = {
+            if (
+                !projectTransferBusy && !slicing && !previewLoading && !exportingGcode &&
+                !remoteBusy && duplicateActivePlate(
+                    projectTransferModel = projectTransferModel,
+                    sliceOperationModel = sliceOperationModel,
+                    remoteOperationModel = remoteOperationModel,
+                )
+            ) {
+                layerPreview = null
+                stalePreviewResult = null
+                selectedTab = WorkspaceTab.SLICE
+                notice = resources.getString(R.string.plate_duplicated)
+                error = null
             }
         },
         onRemovePlate = {
@@ -2165,6 +2185,75 @@ internal fun profileTransferSuccessNotice(
         )
     } else {
         resources.getString(R.string.profiles_imported, imported)
+    }
+}
+
+@Composable
+private fun ProjectTransferCompletionEffect(
+    completion: ProjectTransferCompletion?,
+    externalRequest: ExternalProjectRequest?,
+    supportEvents: SupportEventJournal,
+    onExternalConsumed: (Long, Long) -> Boolean,
+    onConsumeCompletion: (Long) -> Unit,
+    onImported: () -> Unit,
+    onDismissExternalConfirmation: () -> Unit,
+    onPresentation: (notice: String?, error: String?) -> Unit,
+) {
+    val resources = LocalResources.current
+    LaunchedEffect(completion?.id) {
+        val current = completion ?: return@LaunchedEffect
+        when (current) {
+            is ProjectTransferCompletion.Imported -> {
+                onImported()
+                onDismissExternalConfirmation()
+                onPresentation(resources.getString(R.string.project_opened), null)
+            }
+            is ProjectTransferCompletion.Exported -> {
+                val notice = resources.getString(
+                    if (current.format != ProjectExportFormat.PROJECT_ARCHIVE) {
+                        R.string.model_exported
+                    } else {
+                        R.string.project_saved
+                    },
+                )
+                onPresentation(notice, null)
+            }
+            is ProjectTransferCompletion.Canceled -> {
+                val notice = if (current.direction == ProjectTransferDirection.IMPORT) {
+                    onDismissExternalConfirmation()
+                    resources.getString(R.string.project_import_canceled)
+                } else {
+                    resources.getString(
+                        if (current.format != ProjectExportFormat.PROJECT_ARCHIVE) {
+                            R.string.model_export_canceled
+                        } else {
+                            R.string.project_export_canceled
+                        },
+                    )
+                }
+                onPresentation(notice, null)
+            }
+            is ProjectTransferCompletion.Failed -> {
+                val error = if (current.direction == ProjectTransferDirection.IMPORT) {
+                    supportEvents.record(SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED)
+                    resources.getString(R.string.project_open_error)
+                } else {
+                    resources.getString(
+                        if (current.format != ProjectExportFormat.PROJECT_ARCHIVE) {
+                            R.string.model_export_error
+                        } else {
+                            R.string.project_export_error
+                        },
+                    )
+                }
+                onDismissExternalConfirmation()
+                onPresentation(null, error)
+            }
+        }
+        externalRequest
+            ?.takeIf { request -> request.startedOperationId == current.id }
+            ?.let { request -> onExternalConsumed(request.id, current.id) }
+        onConsumeCompletion(current.id)
     }
 }
 

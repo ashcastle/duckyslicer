@@ -145,7 +145,11 @@ def valid_sources() -> dict[str, str]:
         ),
         "ProjectState.kt": (
             "fun addAuxiliaryVolumeToSelected( fun removeSelectedAuxiliaryVolume( "
-            "fun replaceSelectedAuxiliaryVolume( ProjectVolumeRole.MODEL_PART"
+            "fun replaceSelectedAuxiliaryVolume( ProjectVolumeRole.MODEL_PART "
+            "fun duplicateSelectedPlate( Duplicate plate object identities are incomplete "
+            "current.allObjects.size + source.objects.size <= ProjectStore.MAX_PROJECT_OBJECTS "
+            "ProjectStore.MAX_PROJECT_VOLUMES projectObject.rebaseVolumeIds(newObjectId) "
+            "selectedPlateId = newPlateId"
         ),
         "ProjectTransfer.kt": " ".join(
             (
@@ -229,11 +233,15 @@ def valid_sources() -> dict[str, str]:
                 "removeSelectedAuxiliaryVolume",
                 "fun editAuxiliaryVolume( onEditAuxiliaryVolume = ::editAuxiliaryVolume "
                 "ProjectEditKind.AUXILIARY_VOLUME",
+                "onDuplicatePlate = { val sourceVolumeCount = source.objects.sumOf { it.volumes.size } "
+                "duplicateSelectedPlate( notice = resources.getString(R.string.plate_duplicated)",
             )
         ),
         "WorkspaceScreen.kt": (
             "ProjectSheet( onOpenProject onSaveProject onPlateSelected onAddPlate "
-            "onRemovePlate PlateSwitcher( confirmReplacement "
+            "onDuplicatePlate onRemovePlate PlateSwitcher( canDuplicateSelectedPlate "
+            "R.string.duplicate_plate R.string.plates "
+            'stateDescription = "${selectedIndex + 1}/${plates.size}" confirmReplacement '
             "R.string.replace_project_title R.string.replace_project_body "
             "projectImporting: Boolean projectTransferCancellationRequested: Boolean "
             "onCancelProjectImport: () -> Unit onCancelProjectExport: () -> Unit "
@@ -259,6 +267,10 @@ def valid_sources() -> dict[str, str]:
             "canceledArchiveCopyRemovesStagingAndPreservesTheCurrentProject "
             "cancellationWinningTheCommitGateRemovesInstalledModelsAndPreservesCurrentProject"
         ),
+        "ProjectStateTest.kt": (
+            "duplicatingAPlatePreservesItsCompleteContentWithFreshIdentities "
+            "duplicatingAPlateRejectsIncompleteCollidingAndOverCapacityIdentities"
+        ),
         "ProjectVolumeSemanticsTest.kt": (
             "nativeRoleValuesAreStableAndComplete "
             "volumeConfigSidecarAndJsonRoundTripExactly "
@@ -272,7 +284,8 @@ def valid_sources() -> dict[str, str]:
             "staleOrBusySessionMutationIsRejected withUpdatedSession "
             "projectExportCancellationIsBoundToTheExactActiveTransfer "
             "projectImportCancellationIsBoundToTheExactActiveTransfer"
-            " switchingPlatesRestoresEachPlatesIndependentSliceOptions"
+            " switchingPlatesRestoresEachPlatesIndependentSliceOptions "
+            "duplicatedPlateStartsWithTheSourcePlatesExactSliceOptions"
         ),
         "ProjectArchiveIntentInstrumentedTest.kt": (
             "customProjectIntentSurvivesRecreationRestoresAndSlices "
@@ -323,6 +336,7 @@ def valid_sources() -> dict[str, str]:
         "AccessibilityInstrumentedTest.kt": (
             "cancelProjectImportActionIsReachable cancelProjectExportActionIsReachable "
             "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions "
+            "plateSwitcherDuplicatesTheSelectedPlateAndSelectsTheCopy R.string.duplicate_plate "
             "auxiliaryShapePickerExposesRolesPlacementAndModifierDensity "
             "auxiliaryVolumeManagerExposesExistingRegionsRemovalAndAdd "
             "auxiliaryVolumeEditorExposesScalePlacementDensityAndApply "
@@ -749,6 +763,37 @@ class VerifyProjectArchiveTest(unittest.TestCase):
         sources["PROJECT_FORMAT.md"] = sources["PROJECT_FORMAT.md"].replace(
             "Activity recreation never opens the same request twice",
             "Activity recreation behavior is unspecified",
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_plate_duplicate_without_fresh_volume_identities(self) -> None:
+        sources = valid_sources()
+        sources["ProjectState.kt"] = sources["ProjectState.kt"].replace(
+            "projectObject.rebaseVolumeIds(newObjectId)",
+            "projectObject.volumes",
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_plate_duplicate_without_exact_slice_options_regression(self) -> None:
+        sources = valid_sources()
+        sources["ProjectTransferStateTest.kt"] = sources[
+            "ProjectTransferStateTest.kt"
+        ].replace(
+            "duplicatedPlateStartsWithTheSourcePlatesExactSliceOptions",
+            "missing_duplicate_options_regression",
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_plate_duplicate_without_accessible_ui_regression(self) -> None:
+        sources = valid_sources()
+        sources["AccessibilityInstrumentedTest.kt"] = sources[
+            "AccessibilityInstrumentedTest.kt"
+        ].replace(
+            "plateSwitcherDuplicatesTheSelectedPlateAndSelectsTheCopy",
+            "missing_duplicate_ui_regression",
         )
         with self.assertRaisesRegex(VerificationError, "safeguards"):
             verify_project_archive(sources)

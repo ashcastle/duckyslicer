@@ -406,6 +406,41 @@ class ProjectTransferStateTest {
         assertEquals(secondOptions, state.plateOptions.getValue("second-plate"))
     }
 
+    @Test
+    fun duplicatedPlateStartsWithTheSourcePlatesExactSliceOptions() {
+        val sourceHistory = history()
+        val sourcePlateId = sourceHistory.current.selectedPlateId
+        val sourceOptions = SliceOptions().copy(
+            fillDensity = 0.43f,
+            perimeters = 5,
+            supportEnabled = true,
+        )
+        val state = ProjectTransferState(
+            history = sourceHistory,
+            sliceOptions = sourceOptions,
+            plateOptions = mapOf(sourcePlateId to sourceOptions),
+            restored = true,
+        )
+        val duplicatedHistory = sourceHistory.duplicateSelectedPlate(
+            newPlateId = "plate-copy",
+            newObjectIds = listOf("retained-copy"),
+        )
+
+        val duplicated = requireNotNull(
+            state.withUpdatedSession(
+                expectedHistory = sourceHistory,
+                nextHistory = duplicatedHistory,
+                expectedOptions = sourceOptions,
+                nextOptions = sourceOptions,
+            ),
+        )
+
+        assertEquals("plate-copy", duplicated.history.current.selectedPlateId)
+        assertEquals(sourceOptions, duplicated.sliceOptions)
+        assertEquals(sourceOptions, duplicated.plateOptions.getValue(sourcePlateId))
+        assertEquals(sourceOptions, duplicated.plateOptions.getValue("plate-copy"))
+    }
+
     private fun history(): ProjectHistoryState {
         val model = ModelInfo(
             fileName = "retained.stl",

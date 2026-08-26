@@ -789,6 +789,23 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun plateSwitcherDuplicatesTheSelectedPlateAndSelectsTheCopy() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val duplicateLabel = context.getString(R.string.duplicate_plate)
+        val platesLabel = context.getString(R.string.plates)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PLATES).use {
+            val duplicate = waitForNode(duplicateLabel) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == duplicateLabel
+            }
+            assertTrue(duplicate.isFocusable)
+            assertTrue(duplicate.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNode(platesLabel) {
+                it.stateDescription?.toString() == "3/3"
+            }
+        }
+    }
+
+    @Test
     fun largeTextLandscapeKeepsMenuClearOfScrollableWorkspaceSheet() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val menuLabel = context.getString(R.string.menu)
@@ -895,10 +912,9 @@ class AccessibilityInstrumentedTest {
             clickNamedAction(deleteNamed)
             clickNamedAction(delete)
             waitForLabelsGone(setOf(deleteNamed))
-            assertTrue(
-                "Built-in profiles must remain selectable after deleting a user profile",
-                currentNodes().any { node -> node.isCheckable && node.isClickable },
-            )
+            waitForAnyNode("selectable built-in profile") { node ->
+                node.isCheckable && node.isClickable
+            }
         }
     }
 
@@ -1715,13 +1731,32 @@ class AccessibilityInstrumentedTest {
         matches: (AccessibilityNodeInfo) -> Boolean,
     ): AccessibilityNodeInfo {
         val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
+        var observed = emptyList<String>()
         do {
-            currentNodes().firstOrNull { node ->
+            val nodes = currentNodes()
+            observed = nodes.map { node ->
+                "${node.effectiveLabel()}:${node.stateDescription}:${node.isVisibleToUser}"
+            }.filter { it.isNotBlank() }.distinct().take(40)
+            nodes.firstOrNull { node ->
                 matches(node) && node.isVisibleToUser && node.effectiveLabel().contains(label)
             }?.let { return it }
             SystemClock.sleep(NODE_POLL_MILLIS)
         } while (SystemClock.elapsedRealtime() < deadline)
-        throw AssertionError("Timed out waiting for accessibility node: $label")
+        throw AssertionError("Timed out waiting for accessibility node: $label; observed: $observed")
+    }
+
+    private fun waitForAnyNode(
+        description: String,
+        matches: (AccessibilityNodeInfo) -> Boolean,
+    ): AccessibilityNodeInfo {
+        val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
+        do {
+            currentNodes().firstOrNull { node ->
+                node.isVisibleToUser && matches(node)
+            }?.let { return it }
+            SystemClock.sleep(NODE_POLL_MILLIS)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        throw AssertionError("Timed out waiting for accessibility node: $description")
     }
 
     private fun clickNamedAction(label: String) {

@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.selection.selectable
@@ -536,6 +538,7 @@ internal fun WorkspaceScreen(
     onExportSelectedStl: () -> Unit,
     onPlateSelected: (String) -> Unit,
     onAddPlate: () -> Unit,
+    onDuplicatePlate: () -> Unit,
     onRemovePlate: () -> Unit,
     onObjectSelected: (String?) -> Unit,
     onModelTransformChanged: (ModelTransform) -> Unit,
@@ -668,6 +671,11 @@ internal fun WorkspaceScreen(
     val statusHostState = remember { SnackbarHostState() }
     val plateActionsEnabled = !importing && !editingBusy && !projectImporting &&
         !projectExporting && !slicing && !previewLoading && !exportingGcode && !remoteBusy
+    val canDuplicateSelectedPlate = projectPlates.size < MAX_PROJECT_PLATES &&
+        projectPlates.sumOf { it.objects.size } + projectObjects.size <=
+        ProjectStore.MAX_PROJECT_OBJECTS &&
+        projectPlates.sumOf { plate -> plate.objects.sumOf { it.volumes.size } } +
+        projectObjects.sumOf { it.volumes.size } <= ProjectStore.MAX_PROJECT_VOLUMES
 
     LaunchedEffect(error, notice) {
         val message = error ?: notice ?: return@LaunchedEffect
@@ -876,8 +884,10 @@ internal fun WorkspaceScreen(
                     plates = projectPlates,
                     selectedPlateId = selectedPlateId,
                     enabled = plateActionsEnabled,
+                    canDuplicate = canDuplicateSelectedPlate,
                     onSelected = onPlateSelected,
                     onAdd = onAddPlate,
+                    onDuplicate = onDuplicatePlate,
                     onRemove = { plateRemovalRequested = true },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
                 )
@@ -3255,13 +3265,23 @@ private fun PlateSwitcher(
     plates: List<ProjectPlate>,
     selectedPlateId: String,
     enabled: Boolean,
+    canDuplicate: Boolean,
     onSelected: (String) -> Unit,
     onAdd: () -> Unit,
+    onDuplicate: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val selectedIndex = plates.indexOfFirst { it.id == selectedPlateId }.coerceAtLeast(0)
+    val platesLabel = stringResource(R.string.plates)
     Surface(
-        modifier = modifier.fillMaxWidth(0.92f).widthIn(max = 620.dp),
+        modifier = modifier
+            .fillMaxWidth(0.92f)
+            .widthIn(max = 620.dp)
+            .semantics {
+                contentDescription = platesLabel
+                stateDescription = "${selectedIndex + 1}/${plates.size}"
+            },
         color = Color.Black.copy(alpha = 0.76f),
         contentColor = Color(0xFFF4F4EE),
         shape = RoundedCornerShape(18.dp),
@@ -3276,11 +3296,16 @@ private fun PlateSwitcher(
         ) {
             plates.forEachIndexed { index, plate ->
                 val selected = plate.id == selectedPlateId
+                val bringIntoViewRequester = remember(plate.id) { BringIntoViewRequester() }
+                LaunchedEffect(selected) {
+                    if (selected) bringIntoViewRequester.bringIntoView()
+                }
                 TextButton(
                     onClick = { onSelected(plate.id) },
                     enabled = enabled,
                     modifier = Modifier
                         .heightIn(min = 48.dp)
+                        .bringIntoViewRequester(bringIntoViewRequester)
                         .semantics {
                             this.selected = selected
                             stateDescription = if (selected) {
@@ -3305,6 +3330,12 @@ private fun PlateSwitcher(
                 enabled = enabled && plates.size < MAX_PROJECT_PLATES,
             ) {
                 Icon(Icons.Default.AddBox, stringResource(R.string.add_plate))
+            }
+            IconButton(
+                onClick = onDuplicate,
+                enabled = enabled && canDuplicate,
+            ) {
+                Icon(Icons.Default.ContentCopy, stringResource(R.string.duplicate_plate))
             }
             IconButton(
                 onClick = onRemove,

@@ -678,6 +678,158 @@ class ProjectStateTest {
     }
 
     @Test
+    fun duplicatingAPlatePreservesItsCompleteContentWithFreshIdentities() {
+        val base = projectObject("painted").copy(
+            transform = ModelTransform(offsetXmm = 18f, rotationZdeg = 25f),
+            variableLayerHeights = VariableLayerHeights(
+                listOf(VariableLayerRange(0f, 0.35f, 0.12f)),
+            ),
+            processOverrides = ObjectProcessOverrides(wallLoops = 4),
+            heightRangeModifiers = HeightRangeModifiers(
+                listOf(
+                    HeightRangeModifier(
+                        startZmm = 0.4f,
+                        endZmm = 0.7f,
+                        overrides = ObjectProcessOverrides(sparseInfillDensityPercent = 35f),
+                    ),
+                ),
+            ),
+            brimPoints = BrimPoints(listOf(BrimPoint(1f, 2f, 0f, 3f))),
+        )
+        val auxiliary = base.singleVolume.copy(
+            id = "painted-modifier",
+            model = base.singleVolume.model.copy(fileName = "modifier.stl"),
+            role = ProjectVolumeRole.PARAMETER_MODIFIER,
+            config = ProjectVolumeConfig(mapOf("sparse_infill_density" to "45%")),
+        )
+        val source = base.copy(
+            volumes = listOf(
+                base.singleVolume.copy(
+                    supportPaint = SupportPaint().paint(0, SupportPaintState.ENFORCE),
+                    seamPaint = SeamPaint().paint(0, SeamPaintState.BLOCK),
+                    multiColorPaint = MultiColorPaint().paint(0, 2),
+                    filamentSlot = 1,
+                ),
+                auxiliary,
+            ),
+        )
+        var state = ProjectHistoryState()
+            .add(source)
+            .add(projectObject("second"))
+            .putLayerPause(LayerPauseEvent(2.4f, "Inspect"))
+            .putLayerFilamentChange(LayerFilamentChange(4.2f, 1))
+            .putLayerCustomGCode(LayerCustomGCodeEvent(6.4f, "M117 Check"))
+        val sourcePlateId = state.current.selectedPlateId
+        val sourcePlate = state.current.activePlate
+
+        state = state.duplicateSelectedPlate(
+            newPlateId = "plate-copy",
+            newObjectIds = listOf("painted-copy", "second-copy"),
+        )
+
+        assertEquals("plate-copy", state.current.selectedPlateId)
+        assertEquals(listOf(sourcePlateId, "plate-copy"), state.current.plates.map { it.id })
+        val copiedPlate = state.current.activePlate
+        assertEquals(listOf("painted-copy", "second-copy"), copiedPlate.objects.map { it.id })
+        assertEquals("second-copy", copiedPlate.selectedObjectId)
+        assertEquals(sourcePlate.layerPauseEvents, copiedPlate.layerPauseEvents)
+        assertEquals(sourcePlate.layerFilamentChanges, copiedPlate.layerFilamentChanges)
+        assertEquals(sourcePlate.layerCustomGCodeEvents, copiedPlate.layerCustomGCodeEvents)
+        sourcePlate.objects.zip(copiedPlate.objects).forEach { (original, copied) ->
+            assertTrue(original.id != copied.id)
+            assertTrue(original.volumes.zip(copied.volumes).all { (left, right) -> left.id != right.id })
+            assertEquals(
+                original,
+                copied.copy(
+                    id = original.id,
+                    volumes = copied.volumes.zip(original.volumes) { copy, sourceVolume ->
+                        copy.copy(id = sourceVolume.id)
+                    },
+                ),
+            )
+        }
+        assertEquals(sourcePlate, state.current.plates.first { it.id == sourcePlateId })
+
+        state = state.undo()
+        assertEquals(listOf(sourcePlateId), state.current.plates.map { it.id })
+        assertEquals(sourcePlateId, state.current.selectedPlateId)
+        state = state.redo()
+        assertEquals("plate-copy", state.current.selectedPlateId)
+        assertEquals("second-copy", state.current.selectedObjectId)
+    }
+
+    @Test
+    fun duplicatingAPlateRejectsIncompleteCollidingAndOverCapacityIdentities() {
+        val sourceObjects = listOf(projectObject("first"), projectObject("second"))
+        val state = ProjectHistoryState(
+            current = ProjectSnapshot(
+                selectedPlateId = "source",
+                plates = listOf(ProjectPlate("source", sourceObjects, "second")),
+            ),
+        )
+
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            state.duplicateSelectedPlate("copy", listOf("one-copy"))
+        }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            state.duplicateSelectedPlate("copy", listOf("same", "same"))
+        }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            state.duplicateSelectedPlate("copy", listOf("first", "second-copy"))
+        }
+        val full = ProjectHistoryState(
+            current = ProjectSnapshot(
+                selectedPlateId = "plate-0",
+                plates = List(MAX_PROJECT_PLATES) { index -> ProjectPlate("plate-$index") },
+            ),
+        )
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            full.duplicateSelectedPlate("too-many", emptyList())
+        }
+
+        val objectCapacity = ProjectHistoryState(
+            current = ProjectSnapshot(
+                selectedPlateId = "object-source",
+                plates = listOf(
+                    ProjectPlate("object-source", listOf(projectObject("object-source-item"))),
+                    ProjectPlate(
+                        "object-capacity",
+                        List(ProjectStore.MAX_PROJECT_OBJECTS - 1) { index ->
+                            projectObject("capacity-object-$index")
+                        },
+                    ),
+                ),
+            ),
+        )
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            objectCapacity.duplicateSelectedPlate("object-overflow", listOf("object-copy"))
+        }
+
+        fun volumeObject(id: String) = projectObject(id).let { base ->
+            base.copy(
+                volumes = List(MAX_PROJECT_VOLUMES_PER_OBJECT) { index ->
+                    ProjectVolume("$id-volume-$index", base.singleVolume.model)
+                },
+            )
+        }
+        val volumeCapacityObjects = List(
+            ProjectStore.MAX_PROJECT_VOLUMES / MAX_PROJECT_VOLUMES_PER_OBJECT,
+        ) { index -> volumeObject("volume-capacity-$index") }
+        val volumeCapacity = ProjectHistoryState(
+            current = ProjectSnapshot(
+                selectedPlateId = "volume-source",
+                plates = listOf(
+                    ProjectPlate("volume-source", listOf(volumeCapacityObjects.first())),
+                    ProjectPlate("volume-capacity", volumeCapacityObjects.drop(1)),
+                ),
+            ),
+        )
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            volumeCapacity.duplicateSelectedPlate("volume-overflow", listOf("volume-copy"))
+        }
+    }
+
+    @Test
     fun movingAnObjectBetweenPlatesIsAtomicSelectedAndUndoable() {
         var state = ProjectHistoryState()
             .add(projectObject("first"))

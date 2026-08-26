@@ -425,6 +425,56 @@ data class ProjectHistoryState(
         )
     }
 
+    fun duplicateSelectedPlate(
+        newPlateId: String,
+        newObjectIds: List<String>,
+    ): ProjectHistoryState {
+        require(current.plates.size < MAX_PROJECT_PLATES) { "Project has too many plates" }
+        require(current.plates.none { it.id == newPlateId }) { "Duplicate project plate id" }
+        val source = current.activePlate
+        require(newObjectIds.size == source.objects.size) {
+            "Duplicate plate object identities are incomplete"
+        }
+        require(newObjectIds.toSet().size == newObjectIds.size) {
+            "Duplicate plate contains duplicate object ids"
+        }
+        val existingObjectIds = current.allObjects.mapTo(HashSet(), ProjectObject::id)
+        require(newObjectIds.none(existingObjectIds::contains)) {
+            "Duplicate project object id"
+        }
+        require(current.allObjects.size + source.objects.size <= ProjectStore.MAX_PROJECT_OBJECTS) {
+            "Project has too many objects"
+        }
+        val sourceVolumeCount = source.objects.sumOf { it.volumes.size }
+        require(
+            current.allObjects.sumOf { it.volumes.size } + sourceVolumeCount <=
+                ProjectStore.MAX_PROJECT_VOLUMES,
+        ) { "Project has too many volumes" }
+
+        val copiedObjects = source.objects.zip(newObjectIds) { projectObject, newObjectId ->
+            projectObject.copy(
+                id = newObjectId,
+                volumes = projectObject.rebaseVolumeIds(newObjectId),
+            )
+        }
+        val copiedSelection = source.selectedObjectId?.let { selectedId ->
+            source.objects.indexOfFirst { it.id == selectedId }
+                .takeIf { it >= 0 }
+                ?.let(newObjectIds::get)
+        }
+        val duplicate = source.copy(
+            id = newPlateId,
+            objects = copiedObjects,
+            selectedObjectId = copiedSelection,
+        )
+        return record(
+            current.copy(
+                plates = current.plates + duplicate,
+                selectedPlateId = newPlateId,
+            ),
+        )
+    }
+
     fun removeSelectedPlate(): ProjectHistoryState {
         if (current.plates.size <= 1) return this
         val index = current.plates.indexOfFirst { it.id == current.selectedPlateId }

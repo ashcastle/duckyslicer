@@ -556,6 +556,18 @@ private fun WorkspaceAccessibilityHarness(
                 selectedPlateId = added.id
             }
         },
+        onDuplicatePlate = {
+            val source = projectPlates.first { it.id == selectedPlateId }
+            val snapshot = ProjectSnapshot(selectedPlateId, projectPlates)
+            val duplicated = ProjectHistoryState(snapshot).duplicateSelectedPlate(
+                newPlateId = "accessibility-plate-copy-${projectPlates.size}",
+                newObjectIds = source.objects.indices.map { index ->
+                    "accessibility-object-copy-${projectPlates.size}-$index"
+                },
+            ).current
+            projectPlates = duplicated.plates
+            selectedPlateId = duplicated.selectedPlateId
+        },
         onRemovePlate = {
             if (projectPlates.size > 1) {
                 val selectedIndex = projectPlates.indexOfFirst { it.id == selectedPlateId }
