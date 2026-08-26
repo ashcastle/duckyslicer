@@ -519,6 +519,11 @@ def valid_sources() -> dict[str, str]:
             '<data android:scheme="content" /></intent-filter>'
             '<intent-filter><action android:name="android.intent.action.SEND" />'
             '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="text/x.gcode" />'
+            '<data android:mimeType="application/x-gcode" />'
+            '<data android:mimeType="application/gcode" /></intent-filter>'
+            '<intent-filter><action android:name="android.intent.action.SEND" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
             '<data android:mimeType="model/stl" />'
             '<data android:mimeType="application/sla" />'
             '<data android:mimeType="application/vnd.ms-pki.stl" />'
@@ -661,7 +666,20 @@ class VerifyProjectArchiveTest(unittest.TestCase):
             '<category android:name="android.intent.category.DEFAULT" />'
             '<data android:mimeType="*/*" /></intent-filter></activity>',
         )
-        with self.assertRaisesRegex(VerificationError, "explicit model MIME SEND"):
+        with self.assertRaisesRegex(VerificationError, "explicit G-code and model MIME SEND"):
+            verify_project_archive(sources)
+
+    def test_rejects_missing_gcode_send_filter(self) -> None:
+        sources = valid_sources()
+        sources["AndroidManifest.xml"] = sources["AndroidManifest.xml"].replace(
+            '<intent-filter><action android:name="android.intent.action.SEND" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="text/x.gcode" />'
+            '<data android:mimeType="application/x-gcode" />'
+            '<data android:mimeType="application/gcode" /></intent-filter>',
+            "",
+        )
+        with self.assertRaisesRegex(VerificationError, "explicit G-code and model MIME SEND"):
             verify_project_archive(sources)
 
     def test_rejects_missing_single_top_delivery(self) -> None:

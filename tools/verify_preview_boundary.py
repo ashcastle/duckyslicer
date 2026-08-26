@@ -18,6 +18,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "NativeEngine.kt",
         "PreviewModels.kt",
         "PreviewSummary.kt",
+        "GcodeOpenRequest.kt",
         "GcodePreviewMetadata.kt",
         "GcodePreviewImportViewModel.kt",
         "AppSettings.kt",
@@ -1029,6 +1030,19 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in summary_test:
             raise VerificationError(f"preview summary regression is missing: {marker}")
+    imported_request = sources["GcodeOpenRequest.kt"]
+    for marker in (
+        "Intent.ACTION_VIEW",
+        "Intent.ACTION_SEND",
+        "sharedDocumentUriOrNull(intent)",
+        "ContentResolver.SCHEME_CONTENT",
+        "GCODE_DOCUMENT_MIME_TYPES",
+        "GCODE_COMPATIBLE_MIME_TYPES",
+        "SavedStateHandle",
+        "startedOperationId",
+    ):
+        if marker not in imported_request:
+            raise VerificationError(f"external G-code request boundary is missing: {marker}")
     imported_metadata = sources["GcodePreviewMetadata.kt"]
     for marker in (
         "METADATA_HEAD_BYTES = 128 * 1_024",
@@ -1065,6 +1079,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "importedDocumentIsCopiedParsedAndPreviewedOffline",
         "interruptedReplacementRetriesWithoutDiscardingThePreviousPreviewFirst",
         "providerOpenCanBeCanceledWithoutLeavingAPartialPreview",
+        "sharedGcodeSurvivesActivityRecreationAndImportsExactlyOnce",
         "assertEquals(listOf(0x123456, 0xABCDEF), document.filamentColors)",
     ):
         if marker not in imported_device:
@@ -1267,6 +1282,9 @@ def read_sources() -> dict[str, str]:
         "NativeEngine.kt": (main / "NativeEngine.kt").read_text(encoding="utf-8"),
         "PreviewModels.kt": (main / "PreviewModels.kt").read_text(encoding="utf-8"),
         "PreviewSummary.kt": (main / "PreviewSummary.kt").read_text(encoding="utf-8"),
+        "GcodeOpenRequest.kt": (main / "GcodeOpenRequest.kt").read_text(
+            encoding="utf-8"
+        ),
         "GcodePreviewMetadata.kt": (main / "GcodePreviewMetadata.kt").read_text(
             encoding="utf-8"
         ),

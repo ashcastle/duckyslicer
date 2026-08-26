@@ -298,6 +298,19 @@ def _expected_main_filters() -> set[
             tuple(
                 sorted(
                     (
+                        (("mimeType", "application/gcode"),),
+                        (("mimeType", "application/x-gcode"),),
+                        (("mimeType", "text/x.gcode"),),
+                    )
+                )
+            ),
+        ),
+        (
+            ("android.intent.action.SEND",),
+            ("android.intent.category.DEFAULT",),
+            tuple(
+                sorted(
+                    (
                         (("mimeType", "application/sla"),),
                         (("mimeType", "application/vnd.ms-3mfdocument"),),
                         (("mimeType", "application/vnd.ms-package.3dmanufacturing-3dmodel+xml"),),

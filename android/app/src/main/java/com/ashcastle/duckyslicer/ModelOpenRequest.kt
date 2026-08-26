@@ -42,7 +42,7 @@ internal fun modelDocumentUriOrNull(intent: Intent): Uri? {
 }
 
 @Suppress("DEPRECATION")
-private fun sharedDocumentUriOrNull(intent: Intent): Uri? {
+internal fun sharedDocumentUriOrNull(intent: Intent): Uri? {
     val clipData = intent.clipData
     val clipUri = when {
         clipData == null -> null

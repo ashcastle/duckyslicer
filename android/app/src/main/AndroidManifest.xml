@@ -140,6 +140,15 @@
 
                 <category android:name="android.intent.category.DEFAULT" />
 
+                <data android:mimeType="text/x.gcode" />
+                <data android:mimeType="application/x-gcode" />
+                <data android:mimeType="application/gcode" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
                 <data android:mimeType="model/stl" />
                 <data android:mimeType="application/sla" />
                 <data android:mimeType="application/vnd.ms-pki.stl" />

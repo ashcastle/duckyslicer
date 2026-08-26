@@ -39,6 +39,11 @@ def valid_sources() -> dict[str, str]:
             "fun SliceOutcome.previewSummary() estimatedSeconds / SECONDS_PER_MINUTE "
             "filamentMm / MILLIMETERS_PER_METER Invalid preview filament mass"
         ),
+        "GcodeOpenRequest.kt": (
+            "Intent.ACTION_VIEW Intent.ACTION_SEND sharedDocumentUriOrNull(intent) "
+            "ContentResolver.SCHEME_CONTENT GCODE_DOCUMENT_MIME_TYPES "
+            "GCODE_COMPATIBLE_MIME_TYPES SavedStateHandle startedOperationId"
+        ),
         "GcodePreviewMetadata.kt": (
             "METADATA_HEAD_BYTES = 128 * 1_024 METADATA_TAIL_BYTES = 512 * 1_024 "
             "values.size !in 1..MAX_FILAMENT_SLOTS parseFilamentColor(value) "
@@ -583,6 +588,7 @@ def valid_sources() -> dict[str, str]:
             "importedDocumentIsCopiedParsedAndPreviewedOffline "
             "interruptedReplacementRetriesWithoutDiscardingThePreviousPreviewFirst "
             "providerOpenCanBeCanceledWithoutLeavingAPartialPreview "
+            "sharedGcodeSurvivesActivityRecreationAndImportsExactlyOnce "
             "assertEquals(listOf(0x123456, 0xABCDEF), document.filamentColors)"
         ),
         "SliceOutcomeRestorationTest.kt": (
@@ -1183,6 +1189,25 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "GcodePreviewMetadata.kt"
         ].replace("lastColorList(metadata, ORCA_EXTRUDER_COLORS)", "emptyList()")
         with self.assertRaisesRegex(VerificationError, "imported G-code metadata boundary"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_shared_gcode_intake(self) -> None:
+        sources = valid_sources()
+        sources["GcodeOpenRequest.kt"] = sources["GcodeOpenRequest.kt"].replace(
+            "Intent.ACTION_SEND", "Intent.ACTION_OPEN_DOCUMENT"
+        )
+        with self.assertRaisesRegex(VerificationError, "external G-code request boundary"):
+            verify_preview_boundary(sources)
+
+    def test_requires_shared_gcode_recreation_regression(self) -> None:
+        sources = valid_sources()
+        sources["GcodeOpenIntentInstrumentedTest.kt"] = sources[
+            "GcodeOpenIntentInstrumentedTest.kt"
+        ].replace(
+            "sharedGcodeSurvivesActivityRecreationAndImportsExactlyOnce",
+            "missingShareTest",
+        )
+        with self.assertRaisesRegex(VerificationError, "imported G-code device regression"):
             verify_preview_boundary(sources)
 
     def test_rejects_project_colors_for_imported_gcode_preview(self) -> None:

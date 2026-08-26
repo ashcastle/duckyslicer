@@ -729,9 +729,13 @@ def verify_project_archive(sources: dict[str, str]) -> None:
                 },
             )
         )
-    if send_filters != [(expected_category, set(), MODEL_MIME_TYPES, set(), set())]:
+    expected_send_filters = [
+        (expected_category, set(), GCODE_MIME_TYPES, set(), set()),
+        (expected_category, set(), MODEL_MIME_TYPES, set(), set()),
+    ]
+    if send_filters != expected_send_filters:
         raise VerificationError(
-            "AndroidManifest.xml must expose only the explicit model MIME SEND filter"
+            "AndroidManifest.xml must expose only explicit G-code and model MIME SEND filters"
         )
 
     main = sources["MainActivity.kt"]

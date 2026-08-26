@@ -1,11 +1,14 @@
 package com.ashcastle.duckyslicer
 
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelProvider
+import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -37,20 +40,40 @@ class GcodeOpenIntentInstrumentedTest {
             Uri.parse("content://example/Download/notes.txt"),
             "text/plain",
         )
-        val send = Intent(Intent.ACTION_SEND).setDataAndType(
-            Uri.parse("content://example/duck.gcode"),
-            "text/x.gcode",
-        )
+        val sharedUri = Uri.parse("content://example/duck.gcode")
+        val shared = Intent(Intent.ACTION_SEND).apply {
+            type = "text/x.gcode"
+            putExtra(Intent.EXTRA_STREAM, sharedUri)
+        }
+        val sharedByClip = Intent(Intent.ACTION_SEND).apply {
+            type = "application/gcode"
+            clipData = ClipData.newRawUri("duck", sharedUri)
+        }
+        val conflictingShare = Intent(Intent.ACTION_SEND).apply {
+            type = "text/x.gcode"
+            clipData = ClipData.newRawUri("duck", sharedUri)
+            putExtra(Intent.EXTRA_STREAM, Uri.parse("content://example/other.gcode"))
+        }
+        val multipleShare = Intent(Intent.ACTION_SEND).apply {
+            type = "text/x.gcode"
+            clipData = ClipData.newRawUri("first", sharedUri).apply {
+                addItem(ClipData.Item(Uri.parse("content://example/second.gcode")))
+            }
+        }
 
         assertEquals(explicit.data, gcodeDocumentUriOrNull(explicit))
         assertEquals(named.data, gcodeDocumentUriOrNull(named))
+        assertEquals(sharedUri, gcodeDocumentUriOrNull(shared))
+        assertEquals(sharedUri, gcodeDocumentUriOrNull(sharedByClip))
         assertNull(gcodeDocumentUriOrNull(network))
         assertNull(gcodeDocumentUriOrNull(unrelated))
-        assertNull(gcodeDocumentUriOrNull(send))
+        assertNull(gcodeDocumentUriOrNull(conflictingShare))
+        assertNull(gcodeDocumentUriOrNull(multipleShare))
 
         val packageManager = InstrumentationRegistry.getInstrumentation().targetContext.packageManager
         assertTrue(packageManager.resolvesMainActivity(explicit))
         assertTrue(packageManager.resolvesMainActivity(named))
+        assertTrue(packageManager.resolvesMainActivity(shared))
         assertFalse(packageManager.resolvesMainActivity(network))
         assertFalse(packageManager.resolvesMainActivity(unrelated))
     }
@@ -59,10 +82,10 @@ class GcodeOpenIntentInstrumentedTest {
     fun retainedRequestIsClaimedAndConsumedExactlyOnce() {
         val savedState = SavedStateHandle()
         val model = ExternalGcodeRequestViewModel(savedState)
-        val intent = Intent(Intent.ACTION_VIEW).setDataAndType(
-            Uri.parse("content://example/duck.gcode"),
-            "text/x.gcode",
-        )
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/x.gcode"
+            putExtra(Intent.EXTRA_STREAM, Uri.parse("content://example/duck.gcode"))
+        }
 
         assertTrue(model.enqueue(intent))
         val request = requireNotNull(model.request.value)
@@ -71,6 +94,60 @@ class GcodeOpenIntentInstrumentedTest {
         assertFalse(model.consume(request.id, 42L))
         assertTrue(model.consume(request.id, 41L))
         assertNull(model.request.value)
+    }
+
+    @Test
+    fun sharedGcodeSurvivesActivityRecreationAndImportsExactlyOnce() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val fixture = File(context.cacheDir, "shared-gcode-preview.gcode")
+        fixture.writeText(
+            "; filament_colour = #123456\n;LAYER_CHANGE\n;Z:0.2\n" +
+                "G1 X0 Y0 Z0.2\nG1 X5 Y0 E1\n",
+        )
+        prepareDirectImport(fixture)
+        val outputDirectory = File(context.filesDir, SliceArtifactStore.OUTPUT_DIRECTORY)
+        outputDirectory.deleteRecursively()
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            setPackage(context.packageName)
+            type = "text/x.gcode"
+            putExtra(Intent.EXTRA_STREAM, BlockingImportProvider.GCODE_URI)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            ActivityScenario.launch<MainActivity>(intent).use { scenario ->
+                lateinit var firstModel: GcodePreviewImportViewModel
+                scenario.onActivity { activity ->
+                    firstModel = ViewModelProvider(activity)[GcodePreviewImportViewModel::class.java]
+                }
+                waitUntil("shared G-code was not previewed") {
+                    val state = firstModel.state.value
+                    !state.busy && state.document?.preview != null
+                }
+                val firstOutput = requireNotNull(firstModel.state.value.document).output.canonicalFile
+                assertEquals(listOf(0x123456), firstModel.state.value.document?.filamentColors)
+                assertEquals(1, outputDirectory.listFiles()?.count(File::isFile))
+
+                scenario.recreate()
+                lateinit var restoredModel: GcodePreviewImportViewModel
+                scenario.onActivity { activity ->
+                    restoredModel = ViewModelProvider(activity)[GcodePreviewImportViewModel::class.java]
+                }
+                waitUntil("shared G-code Preview did not survive recreation") {
+                    val state = restoredModel.state.value
+                    !state.busy && state.document?.preview != null
+                }
+                assertEquals(
+                    firstOutput,
+                    requireNotNull(restoredModel.state.value.document).output.canonicalFile,
+                )
+                assertEquals(1, outputDirectory.listFiles()?.count(File::isFile))
+                restoredModel.clearDocument()
+            }
+        } finally {
+            fixture.delete()
+            outputDirectory.deleteRecursively()
+        }
     }
 
     @Test

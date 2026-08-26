@@ -17,8 +17,12 @@ internal data class ExternalGcodeRequest(
 )
 
 internal fun gcodeDocumentUriOrNull(intent: Intent): Uri? {
-    if (intent.action != Intent.ACTION_VIEW) return null
-    val uri = intent.data ?: return null
+    if (intent.action != Intent.ACTION_VIEW && intent.action != Intent.ACTION_SEND) return null
+    val uri = when (intent.action) {
+        Intent.ACTION_VIEW -> intent.data
+        Intent.ACTION_SEND -> sharedDocumentUriOrNull(intent)
+        else -> null
+    } ?: return null
     if (!uri.scheme.equals(ContentResolver.SCHEME_CONTENT, ignoreCase = true)) return null
     val mimeType = intent.type
         ?.substringBefore(';')
