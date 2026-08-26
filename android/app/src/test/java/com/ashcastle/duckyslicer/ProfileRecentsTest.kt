@@ -35,6 +35,20 @@ class ProfileRecentsTest {
     }
 
     @Test
+    fun deletionRemovesOnlyTheMatchingProfileKind() {
+        val recents = ProfileRecents(
+            printerIds = listOf("shared", "printer"),
+            filamentIds = listOf("shared", "filament"),
+            slicingIds = listOf("shared", "slicing"),
+        )
+
+        assertEquals(listOf("printer"), recents.removePrinter("shared").printerIds)
+        assertEquals(listOf("shared", "filament"), recents.removePrinter("shared").filamentIds)
+        assertEquals(listOf("filament"), recents.removeFilament("shared").filamentIds)
+        assertEquals(listOf("slicing"), recents.removeSlicing("shared").slicingIds)
+    }
+
+    @Test
     fun corruptPrimaryRecoversLastKnownGoodRecentProfiles() = withStore { file, store ->
         store.save(ProfileRecents(printerIds = listOf("first")))
         store.save(ProfileRecents(printerIds = listOf("second", "first")))

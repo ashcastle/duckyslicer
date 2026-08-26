@@ -19,7 +19,20 @@ import kotlinx.coroutines.withContext
 internal enum class ProfileLibraryMessage {
     STORAGE_UNAVAILABLE,
     SAVE_FAILED,
+    DELETE_FAILED,
 }
+
+internal enum class ProfileKind {
+    PRINTER,
+    FILAMENT,
+    SLICING,
+}
+
+internal data class ProfileDeleteCompletion(
+    val id: Long,
+    val kind: ProfileKind,
+    val profileId: String,
+)
 
 internal enum class ProfileTransferDirection {
     IMPORT,
@@ -86,6 +99,7 @@ internal data class ProfileLibraryState(
     val persistedRecentsRevision: Long = 0,
     val storageUnavailable: Boolean = false,
     val completion: ProfileSaveCompletion? = null,
+    val deletionCompletion: ProfileDeleteCompletion? = null,
     val message: ProfileLibraryMessage? = null,
     val activeOperationId: Long = 0,
     val activeTransferDirection: ProfileTransferDirection? = null,
@@ -97,7 +111,10 @@ internal fun ProfileLibraryState.withStartedProfileTransfer(
     operationId: Long,
     direction: ProfileTransferDirection,
 ): ProfileLibraryState? {
-    if (busy || !catalogLoaded || completion != null || transferCompletion != null) return null
+    if (
+        busy || !catalogLoaded || completion != null || deletionCompletion != null ||
+        transferCompletion != null
+    ) return null
     return copy(
         busy = true,
         message = null,
@@ -221,6 +238,18 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
             )
         }
 
+    fun deletePrinter(id: String): Boolean = launchDelete(ProfileKind.PRINTER, id) {
+        profileStore.deletePrinter(id)
+    }
+
+    fun deleteFilament(id: String): Boolean = launchDelete(ProfileKind.FILAMENT, id) {
+        profileStore.deleteFilament(id)
+    }
+
+    fun deleteSlicing(id: String): Boolean = launchDelete(ProfileKind.SLICING, id) {
+        profileStore.deleteSlicing(id)
+    }
+
     fun importBundle(uri: Uri): Boolean = launchTransfer(uri, ProfileTransferDirection.IMPORT)
 
     fun exportBundle(uri: Uri): Boolean = launchTransfer(uri, ProfileTransferDirection.EXPORT)
@@ -256,6 +285,13 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
         val current = mutableState.value
         if (current.completion?.id != operationId) return
         mutableState.value = current.copy(completion = null)
+    }
+
+    @Synchronized
+    fun consumeDeletionCompletion(operationId: Long) {
+        val current = mutableState.value
+        if (current.deletionCompletion?.id != operationId) return
+        mutableState.value = current.copy(deletionCompletion = null)
     }
 
     @Synchronized
@@ -432,7 +468,10 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
         operation: (Long, ProfileCatalog) -> ProfileSaveResult,
     ): Boolean {
         val current = mutableState.value
-        if (current.busy || !current.catalogLoaded || current.completion != null) return false
+        if (
+            current.busy || !current.catalogLoaded || current.completion != null ||
+            current.deletionCompletion != null || current.transferCompletion != null
+        ) return false
         val operationId = ++nextOperationId
         mutableState.value = current.copy(
             busy = true,
@@ -474,6 +513,94 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
                         completion = result.completion,
                         message = null,
                     )
+                }
+            }
+        }
+        return true
+    }
+
+    @Synchronized
+    private fun launchDelete(
+        kind: ProfileKind,
+        profileId: String,
+        operation: () -> Boolean,
+    ): Boolean {
+        val current = mutableState.value
+        if (
+            current.busy || !current.catalogLoaded || current.completion != null ||
+            current.deletionCompletion != null || current.transferCompletion != null
+        ) return false
+        val profileIsUserOwned = when (kind) {
+            ProfileKind.PRINTER -> current.catalog.printers.any {
+                it.id == profileId && !it.builtIn
+            }
+            ProfileKind.FILAMENT -> current.catalog.filaments.any {
+                it.id == profileId && !it.builtIn
+            }
+            ProfileKind.SLICING -> current.catalog.slicing.any {
+                it.id == profileId && !it.builtIn
+            }
+        }
+        if (!profileIsUserOwned) return false
+        val operationId = ++nextOperationId
+        mutableState.value = current.copy(
+            busy = true,
+            message = null,
+            activeOperationId = operationId,
+        )
+        viewModelScope.launch {
+            val result = try {
+                withContext(Dispatchers.IO) {
+                    check(operation()) { "profile_not_found" }
+                    profileStore.load()
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                if (profileStore.storageUnavailable) {
+                    supportEvents.record(SupportEvent.PROFILE_STORAGE_UNAVAILABLE)
+                }
+                null
+            }
+            synchronized(this@ProfileLibraryViewModel) {
+                val active = mutableState.value
+                if (!active.busy || active.activeOperationId != operationId) return@synchronized
+                if (result == null) {
+                    mutableState.value = active.copy(
+                        busy = false,
+                        storageUnavailable = active.storageUnavailable ||
+                            profileStore.storageUnavailable || recentStore.storageUnavailable,
+                        message = if (profileStore.storageUnavailable) {
+                            ProfileLibraryMessage.STORAGE_UNAVAILABLE
+                        } else {
+                            ProfileLibraryMessage.DELETE_FAILED
+                        },
+                    )
+                } else {
+                    val nextRecents = when (kind) {
+                        ProfileKind.PRINTER -> active.recents.removePrinter(profileId)
+                        ProfileKind.FILAMENT -> active.recents.removeFilament(profileId)
+                        ProfileKind.SLICING -> active.recents.removeSlicing(profileId)
+                    }
+                    val recentsChanged = nextRecents != active.recents
+                    val revision = active.recentsRevision + if (recentsChanged) 1 else 0
+                    mutableState.value = active.copy(
+                        busy = false,
+                        catalog = result,
+                        catalogLoaded = true,
+                        recents = nextRecents,
+                        recentsRevision = revision,
+                        storageUnavailable = recentStore.storageUnavailable,
+                        deletionCompletion = ProfileDeleteCompletion(
+                            operationId,
+                            kind,
+                            profileId,
+                        ),
+                        message = null,
+                    )
+                    if (recentsChanged) {
+                        scheduleRecentPersistenceLocked(nextRecents, revision)
+                    }
                 }
             }
         }

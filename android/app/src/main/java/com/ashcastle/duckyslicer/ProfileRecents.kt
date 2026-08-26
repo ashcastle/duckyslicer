@@ -20,6 +20,12 @@ internal data class ProfileRecents(
 
     fun recordSlicing(id: String): ProfileRecents = copy(slicingIds = slicingIds.promote(id))
 
+    fun removePrinter(id: String): ProfileRecents = copy(printerIds = printerIds - id)
+
+    fun removeFilament(id: String): ProfileRecents = copy(filamentIds = filamentIds - id)
+
+    fun removeSlicing(id: String): ProfileRecents = copy(slicingIds = slicingIds - id)
+
     fun record(options: SliceOptions): ProfileRecents =
         recordPrinter(options.printerProfile.id)
             .recordFilament(options.filamentProfile.id)

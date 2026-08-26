@@ -862,6 +862,38 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun userProfileDeletionRequiresConfirmationAndKeepsBuiltInsProtected() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val printerProfile = context.getString(R.string.printer_profile)
+        val profileList = context.getString(R.string.profile_list)
+        val myProfiles = context.getString(R.string.my_profiles)
+        val userProfile = "My accessibility printer"
+        val deleteNamed = context.getString(R.string.delete_profile_named, userProfile)
+        val delete = context.getString(R.string.delete_profile)
+        val keep = context.getString(R.string.keep_profile)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
+            tapCenter(waitForNode(printerProfile) { it.isClickable })
+            tapCenter(waitForNode(profileList) { it.isClickable })
+            tapCenter(waitForNode(myProfiles) { it.isClickable })
+
+            val deleteAction = waitForSingleNamedAction(deleteNamed)
+            assertTrue("A user profile must expose one named delete action", deleteAction.isEnabled)
+            assertTrue(deleteAction.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNodes(setOf(delete, keep, userProfile))
+            clickNamedAction(keep)
+            assertTrue(waitForSingleNamedAction(deleteNamed).isEnabled)
+
+            clickNamedAction(deleteNamed)
+            clickNamedAction(delete)
+            waitForLabelsGone(setOf(deleteNamed))
+            assertTrue(
+                "Built-in profiles must remain selectable after deleting a user profile",
+                currentNodes().any { node -> node.isCheckable && node.isClickable },
+            )
+        }
+    }
+
+    @Test
     @Suppress("DEPRECATION")
     fun filamentProfileExposesAProjectColorPickerAndStickyApplyActions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

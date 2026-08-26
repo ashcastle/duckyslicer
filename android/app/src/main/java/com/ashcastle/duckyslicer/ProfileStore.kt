@@ -555,6 +555,15 @@ class ProfileStore private constructor(
     }
 
     @Synchronized
+    fun deletePrinter(id: String): Boolean = delete("printers", id)
+
+    @Synchronized
+    fun deleteFilament(id: String): Boolean = delete("filaments", id)
+
+    @Synchronized
+    fun deleteSlicing(id: String): Boolean = delete("slicing", id)
+
+    @Synchronized
     internal fun exportBundle(): ByteArray {
         val stored = durableProfiles.read(::validateRoot, ::isCompatibleRoot)
         storageUnavailable = !stored.status.mutationSafe
@@ -581,6 +590,19 @@ class ProfileStore private constructor(
         val values = root.optJSONArray(key) ?: JSONArray().also { root.put(key, it) }
         values.put(value)
         writeRoot(root)
+    }
+
+    private fun delete(key: String, id: String): Boolean {
+        if (id.isBlank() || id.length > 512 || id.any(Char::isISOControl)) return false
+        val root = readRoot(forMutation = true)
+        val values = root.optJSONArray(key) ?: return false
+        val index = (0 until values.length()).firstOrNull { entryIndex ->
+            values.optJSONObject(entryIndex)?.optString("id") == id
+        } ?: return false
+        values.remove(index)
+        root.put("schemaVersion", USER_PROFILE_SCHEMA_VERSION)
+        writeRoot(root)
+        return true
     }
 
     private fun readRoot(forMutation: Boolean = false): JSONObject {

@@ -387,6 +387,8 @@ private fun DuckySlicerScreen(
     val gcodeExportCanceledNotice = stringResource(R.string.gcode_export_canceled)
     val profileSavedNotice = stringResource(R.string.profile_saved)
     val profileSaveError = stringResource(R.string.profile_save_error)
+    val profileDeletedNotice = stringResource(R.string.profile_deleted)
+    val profileDeleteError = stringResource(R.string.profile_delete_error)
     val profilesUnchangedNotice = stringResource(R.string.profiles_unchanged)
     val profilesExportedNotice = stringResource(R.string.profiles_exported)
     val profileImportCanceledNotice = stringResource(R.string.profile_import_canceled)
@@ -482,6 +484,7 @@ private fun DuckySlicerScreen(
     val profileRecents = profileLibraryState.recents
     val profileRecentsLoaded = profileLibraryState.recentsLoaded
     val profileBusy = profileLibraryState.busy || profileLibraryState.completion != null ||
+        profileLibraryState.deletionCompletion != null ||
         profileLibraryState.transferCompletion != null
     val profileTransferDirection = profileLibraryState.activeTransferDirection
     val profileTransferCancellationRequested =
@@ -792,6 +795,7 @@ private fun DuckySlicerScreen(
         error = when (message) {
             ProfileLibraryMessage.STORAGE_UNAVAILABLE -> savedDataUnavailable
             ProfileLibraryMessage.SAVE_FAILED -> profileSaveError
+            ProfileLibraryMessage.DELETE_FAILED -> profileDeleteError
         }
         notice = null
         profileLibraryModel.consumeMessage(message)
@@ -838,6 +842,13 @@ private fun DuckySlicerScreen(
         notice = profileSavedNotice
         error = null
         profileLibraryModel.consumeCompletion(completion.id)
+    }
+
+    LaunchedEffect(profileLibraryState.deletionCompletion?.id) {
+        val completion = profileLibraryState.deletionCompletion ?: return@LaunchedEffect
+        notice = profileDeletedNotice
+        error = null
+        profileLibraryModel.consumeDeletionCompletion(completion.id)
     }
 
     LaunchedEffect(profileLibraryState.transferCompletion?.id) {
@@ -1965,6 +1976,24 @@ private fun DuckySlicerScreen(
                 )
             ) {
                 error = profileSaveError
+                notice = null
+            }
+        },
+        onDeletePrinterProfile = { profileId ->
+            if (!profileLibraryModel.deletePrinter(profileId)) {
+                error = profileDeleteError
+                notice = null
+            }
+        },
+        onDeleteFilamentProfile = { profileId ->
+            if (!profileLibraryModel.deleteFilament(profileId)) {
+                error = profileDeleteError
+                notice = null
+            }
+        },
+        onDeleteSlicingProfile = { profileId ->
+            if (!profileLibraryModel.deleteSlicing(profileId)) {
+                error = profileDeleteError
                 notice = null
             }
         },

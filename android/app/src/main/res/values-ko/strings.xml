@@ -721,6 +721,12 @@
     <string name="profile_import_error">프로필을 가져오지 못했습니다. 저장된 프로필은 변경하지 않았습니다.</string>
     <string name="profile_export_error">프로필을 내보내지 못했습니다.</string>
     <string name="profile_save_error">이 프로필을 저장하지 못했습니다.</string>
+    <string name="profile_deleted">프로필을 삭제했습니다.</string>
+    <string name="profile_delete_error">이 프로필을 삭제하지 못했습니다.</string>
+    <string name="delete_profile">프로필 삭제</string>
+    <string name="delete_profile_named">%1$s 삭제</string>
+    <string name="confirm_delete_profile">%1$s 프로필을 삭제할까요? 현재 프로젝트의 설정은 유지됩니다.</string>
+    <string name="keep_profile">프로필 유지</string>
     <string name="project_save_error">이 프로젝트를 저장하지 못했습니다.</string>
     <string name="new_project">새 프로젝트</string>
     <string name="new_project_title">새 프로젝트를 시작할까요?</string>

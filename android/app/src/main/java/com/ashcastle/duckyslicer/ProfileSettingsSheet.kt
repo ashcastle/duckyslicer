@@ -19,13 +19,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -38,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -150,6 +154,9 @@ internal fun ProfileSettings(
     onSavePrinter: (String, SliceOptions) -> Unit,
     onSaveFilament: (String, SliceOptions, Int) -> Unit,
     onSaveSlicing: (String, SliceOptions) -> Unit,
+    onDeletePrinter: (String) -> Unit,
+    onDeleteFilament: (String) -> Unit,
+    onDeleteSlicing: (String) -> Unit,
 ) {
     var editor by remember { mutableStateOf<ProfileEditorState?>(null) }
     var expanded by rememberSaveable { mutableStateOf(true) }
@@ -260,6 +267,7 @@ internal fun ProfileSettings(
                 onOptionsChanged(staged)
                 onSavePrinter(name, staged)
             },
+            onDelete = onDeletePrinter,
             dirty = activeEditor.session.isDirty,
             onRevert = ::revertEditor,
             onApply = ::applyEditor,
@@ -278,6 +286,7 @@ internal fun ProfileSettings(
                 onOptionsChanged(staged)
                 onSaveFilament(name, staged, slot)
             },
+            onDelete = onDeleteFilament,
             dirty = activeEditor.session.isDirty,
             onRevert = ::revertEditor,
             onApply = ::applyEditor,
@@ -299,6 +308,7 @@ internal fun ProfileSettings(
                 onOptionsChanged(staged)
                 onSaveSlicing(name, staged)
             },
+            onDelete = onDeleteSlicing,
             dirty = activeEditor.session.isDirty,
             onRevert = ::revertEditor,
             onApply = ::applyEditor,
@@ -341,6 +351,7 @@ private fun PrinterSettingsSheet(
     onProfileSelected: (PrinterProfile) -> Unit,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String, SliceOptions) -> Unit,
+    onDelete: (String) -> Unit,
     dirty: Boolean,
     onRevert: () -> Unit,
     onApply: () -> Unit,
@@ -1725,6 +1736,7 @@ private fun PrinterSettingsSheet(
                 onProfileSelected(it)
                 profilesOpen = false
             },
+            onDelete = { onDelete(it.id) },
             onDismiss = { profilesOpen = false },
         )
     }
@@ -1737,6 +1749,7 @@ private fun FilamentSettingsSheet(
     recentIds: List<String>,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String, SliceOptions, Int) -> Unit,
+    onDelete: (String) -> Unit,
     dirty: Boolean,
     onRevert: () -> Unit,
     onApply: () -> Unit,
@@ -2969,6 +2982,7 @@ private fun FilamentSettingsSheet(
                 onOptionsChanged(options.updateFilamentSlot(selectedSlot, it))
                 profilesOpen = false
             },
+            onDelete = { onDelete(it.id) },
             onDismiss = { profilesOpen = false },
         )
     }
@@ -3138,6 +3152,7 @@ private fun SlicingSettingsSheet(
     recentIds: List<String>,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String, SliceOptions) -> Unit,
+    onDelete: (String) -> Unit,
     dirty: Boolean,
     onRevert: () -> Unit,
     onApply: () -> Unit,
@@ -7034,6 +7049,7 @@ private fun SlicingSettingsSheet(
                 onOptionsChanged(options.selectQuality(it))
                 profilesOpen = false
             },
+            onDelete = { onDelete(it.id) },
             onDismiss = { profilesOpen = false },
         )
     }
@@ -8458,12 +8474,14 @@ private fun <T> ProfileChooserSheet(
     builtIn: (T) -> Boolean,
     searchTerms: (T) -> List<String>,
     onSelected: (T) -> Unit,
+    onDelete: (T) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val sheetHeight = with(LocalDensity.current) {
         LocalWindowInfo.current.containerSize.height.toDp()
     } * 0.88f
+    var pendingDeletion by remember { mutableStateOf<T?>(null) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
@@ -8491,13 +8509,47 @@ private fun <T> ProfileChooserSheet(
                 builtIn = builtIn,
                 searchTerms = searchTerms,
                 onSelected = onSelected,
+                onDelete = { pendingDeletion = it },
             )
             Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.done))
             }
         }
     }
+    pendingDeletion?.let { profile ->
+        val profileName = label(profile)
+        AlertDialog(
+            onDismissRequest = { pendingDeletion = null },
+            title = { Text(stringResource(R.string.delete_profile)) },
+            text = { Text(stringResource(R.string.confirm_delete_profile, profileName)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (id(profile) == id(selected)) {
+                            profileDeletionFallback(entries, profile, builtIn)?.let(onSelected)
+                        }
+                        onDelete(profile)
+                        pendingDeletion = null
+                    },
+                ) {
+                    Text(stringResource(R.string.delete_profile))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeletion = null }) {
+                    Text(stringResource(R.string.keep_profile))
+                }
+            },
+        )
+    }
 }
+
+internal fun <T> profileDeletionFallback(
+    entries: List<T>,
+    deleted: T,
+    builtIn: (T) -> Boolean,
+): T? = entries.firstOrNull { it != deleted && builtIn(it) }
+    ?: entries.firstOrNull { it != deleted }
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -8652,6 +8704,7 @@ internal fun <T> SearchableGroupedProfileChoices(
     builtIn: (T) -> Boolean,
     searchTerms: (T) -> List<String>,
     onSelected: (T) -> Unit,
+    onDelete: (T) -> Unit = {},
 ) {
     val myProfiles = stringResource(R.string.my_profiles)
     val otherProfiles = stringResource(R.string.other_profiles)
@@ -8757,21 +8810,42 @@ internal fun <T> SearchableGroupedProfileChoices(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .selectable(
-                                    selected = selectedEntry,
-                                    role = Role.RadioButton,
-                                    onClick = { onSelected(entry) },
-                                )
-                                .padding(start = 18.dp, top = 1.dp, bottom = 1.dp),
+                                .heightIn(min = 48.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            RadioButton(
-                                selected = selectedEntry,
-                                onClick = null,
-                                colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFF6C945)),
-                            )
-                            Text(label(entry), maxLines = 1)
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .selectable(
+                                        selected = selectedEntry,
+                                        role = Role.RadioButton,
+                                        onClick = { onSelected(entry) },
+                                    )
+                                    .padding(start = 18.dp, top = 1.dp, bottom = 1.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = selectedEntry,
+                                    onClick = null,
+                                    colors = RadioButtonDefaults.colors(
+                                        selectedColor = Color(0xFFF6C945),
+                                    ),
+                                )
+                                Text(label(entry), maxLines = 1)
+                            }
+                            if (group.key == myProfilesKey) {
+                                IconButton(onClick = { onDelete(entry) }) {
+                                    Icon(
+                                        Icons.Default.DeleteOutline,
+                                        contentDescription = stringResource(
+                                            R.string.delete_profile_named,
+                                            label(entry),
+                                        ),
+                                        tint = Color(0xFFFF8A80),
+                                    )
+                                }
+                            }
                         }
                     }
                 }

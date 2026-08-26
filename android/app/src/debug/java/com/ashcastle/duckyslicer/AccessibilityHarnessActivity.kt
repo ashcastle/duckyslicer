@@ -180,6 +180,31 @@ class AccessibilityHarnessActivity : ComponentActivity() {
 
 @Composable
 private fun ProfileSettingsAccessibilityHarness() {
+    val userPrinter = PrinterProfile.CUSTOM_CARTESIAN.copy(
+        id = "user-accessibility-printer",
+        name = "My accessibility printer",
+        builtIn = false,
+    )
+    val userFilament = FilamentProfile.GENERIC_PLA.copy(
+        id = "user-accessibility-filament",
+        name = "My accessibility filament",
+        builtIn = false,
+    )
+    val userSlicing = QualityProfile.STANDARD.copy(
+        id = "user-accessibility-slicing",
+        name = "My accessibility slicing",
+        builtIn = false,
+    )
+    var catalog by remember {
+        val builtIns = ProfileCatalog()
+        mutableStateOf(
+            builtIns.copy(
+                printers = builtIns.printers + userPrinter,
+                filaments = builtIns.filaments + userFilament,
+                slicing = builtIns.slicing + userSlicing,
+            ),
+        )
+    }
     var options by remember {
         mutableStateOf(
             SliceOptions().copy(
@@ -192,13 +217,22 @@ private fun ProfileSettingsAccessibilityHarness() {
     Column(Modifier.padding(16.dp)) {
         ProfileSettings(
             options = options,
-            catalog = ProfileCatalog(),
+            catalog = catalog,
             recents = ProfileRecents(),
             enabled = true,
             onOptionsChanged = { options = it },
             onSavePrinter = { _, _ -> },
             onSaveFilament = { _, _, _ -> },
             onSaveSlicing = { _, _ -> },
+            onDeletePrinter = { id ->
+                catalog = catalog.copy(printers = catalog.printers.filterNot { it.id == id })
+            },
+            onDeleteFilament = { id ->
+                catalog = catalog.copy(filaments = catalog.filaments.filterNot { it.id == id })
+            },
+            onDeleteSlicing = { id ->
+                catalog = catalog.copy(slicing = catalog.slicing.filterNot { it.id == id })
+            },
         )
     }
 }
@@ -632,6 +666,9 @@ private fun WorkspaceAccessibilityHarness(
         onSavePrinterProfile = { _, _ -> },
         onSaveFilamentProfile = { _, _, _ -> },
         onSaveSlicingProfile = { _, _ -> },
+        onDeletePrinterProfile = {},
+        onDeleteFilamentProfile = {},
+        onDeleteSlicingProfile = {},
         onLayerRangeSelected = { _, _ -> },
         onAddLayerPause = { _, _ -> },
         onRemoveLayerPause = {},

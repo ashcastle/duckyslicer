@@ -578,6 +578,9 @@ internal fun WorkspaceScreen(
     onSavePrinterProfile: (String, SliceOptions) -> Unit,
     onSaveFilamentProfile: (String, SliceOptions, Int) -> Unit,
     onSaveSlicingProfile: (String, SliceOptions) -> Unit,
+    onDeletePrinterProfile: (String) -> Unit,
+    onDeleteFilamentProfile: (String) -> Unit,
+    onDeleteSlicingProfile: (String) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
     onAddLayerPause: (Int, Float) -> Unit,
     onRemoveLayerPause: (Float) -> Unit,
@@ -1085,6 +1088,9 @@ internal fun WorkspaceScreen(
                     onSavePrinter = onSavePrinterProfile,
                     onSaveFilament = onSaveFilamentProfile,
                     onSaveSlicing = onSaveSlicingProfile,
+                    onDeletePrinter = onDeletePrinterProfile,
+                    onDeleteFilament = onDeleteFilamentProfile,
+                    onDeleteSlicing = onDeleteSlicingProfile,
                     modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
 
@@ -6543,6 +6549,9 @@ private fun SliceSheet(
     onSavePrinter: (String, SliceOptions) -> Unit,
     onSaveFilament: (String, SliceOptions, Int) -> Unit,
     onSaveSlicing: (String, SliceOptions) -> Unit,
+    onDeletePrinter: (String) -> Unit,
+    onDeleteFilament: (String) -> Unit,
+    onDeleteSlicing: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     WorkspaceCard(modifier) {
@@ -6555,6 +6564,9 @@ private fun SliceSheet(
             onSavePrinter = onSavePrinter,
             onSaveFilament = onSaveFilament,
             onSaveSlicing = onSaveSlicing,
+            onDeletePrinter = onDeletePrinter,
+            onDeleteFilament = onDeleteFilament,
+            onDeleteSlicing = onDeleteSlicing,
         )
         if (modelDimensions != null) {
             Text(

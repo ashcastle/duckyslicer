@@ -55,6 +55,15 @@ class ProfileLibraryViewModelTest {
     @Test
     fun profileTransferStateRejectsStaleTransitionsAndSettlesCancellation() {
         val idle = ProfileLibraryState(busy = false, catalogLoaded = true)
+        assertNull(
+            idle.copy(
+                deletionCompletion = ProfileDeleteCompletion(
+                    id = 5,
+                    kind = ProfileKind.PRINTER,
+                    profileId = "user-pending",
+                ),
+            ).withStartedProfileTransfer(6, ProfileTransferDirection.IMPORT),
+        )
         val started = requireNotNull(
             idle.withStartedProfileTransfer(7, ProfileTransferDirection.IMPORT),
         )
@@ -95,5 +104,40 @@ class ProfileLibraryViewModelTest {
         assertEquals(ProfileTransferOutcome.CANCELED, settled.transferCompletion?.outcome)
         assertNull(settled.transferCompletion?.importResult)
         assertNotNull(settled.catalog)
+    }
+
+    @Test
+    fun deletingTheSelectedUserProfilePrefersABuiltInFallback() {
+        val deleted = QualityProfile.STANDARD.copy(
+            id = "user-delete-me",
+            name = "Delete me",
+            builtIn = false,
+        )
+        val otherUser = deleted.copy(id = "user-other", name = "Other")
+        val builtIn = QualityProfile.FINE
+
+        assertEquals(
+            builtIn,
+            profileDeletionFallback(
+                entries = listOf(deleted, otherUser, builtIn),
+                deleted = deleted,
+                builtIn = QualityProfile::builtIn,
+            ),
+        )
+        assertEquals(
+            otherUser,
+            profileDeletionFallback(
+                entries = listOf(deleted, otherUser),
+                deleted = deleted,
+                builtIn = QualityProfile::builtIn,
+            ),
+        )
+        assertNull(
+            profileDeletionFallback(
+                entries = listOf(deleted),
+                deleted = deleted,
+                builtIn = QualityProfile::builtIn,
+            ),
+        )
     }
 }

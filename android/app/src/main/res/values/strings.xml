@@ -721,6 +721,12 @@
     <string name="profile_import_error">Couldn’t import profiles. Your saved profiles were left unchanged.</string>
     <string name="profile_export_error">Couldn’t export profiles.</string>
     <string name="profile_save_error">Couldn’t save this profile.</string>
+    <string name="profile_deleted">Profile deleted.</string>
+    <string name="profile_delete_error">Couldn’t delete this profile.</string>
+    <string name="delete_profile">Delete profile</string>
+    <string name="delete_profile_named">Delete %1$s</string>
+    <string name="confirm_delete_profile">Delete %1$s? The current project keeps its settings.</string>
+    <string name="keep_profile">Keep profile</string>
     <string name="project_save_error">Couldn’t save this project.</string>
     <string name="new_project">New project</string>
     <string name="new_project_title">Start a new project?</string>
