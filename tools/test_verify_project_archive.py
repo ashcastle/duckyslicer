@@ -144,7 +144,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "ProjectOpenRequest.kt": " ".join(
             (
-                "intent.action != Intent.ACTION_VIEW",
+                "Intent.ACTION_VIEW Intent.ACTION_SEND sharedDocumentUriOrNull(intent)",
                 "ContentResolver.SCHEME_CONTENT",
                 "PROJECT_ARCHIVE_MIME_TYPE PROJECT_ARCHIVE_FILE_EXTENSION",
                 "PROJECT_ARCHIVE_COMPATIBLE_MIME_TYPES",
@@ -361,9 +361,11 @@ def valid_sources() -> dict[str, str]:
             "projectViewIntentSurvivesRecreationAndImportsExactlyOnce "
             "unsavedProjectEditAndUndoSurviveImmediateActivityRecreation "
             "clearingRetainedOwnerFlushesProjectBeforeDebounce "
-            "compatibleZipIntentConfirmsBeforeReplacingTheCurrentProject "
+            "sharedProjectIntentConfirmsBeforeReplacingTheCurrentProject "
+            "projectShareIntentsAcceptOneContentStreamAndRejectHostileShapes "
             "projectViewIntentRejectsNetworkAndUnrelatedBinaryUris "
-            "Intent.ACTION_VIEW Intent.FLAG_GRANT_READ_URI_PERMISSION "
+            "Intent.ACTION_VIEW Intent.ACTION_SEND Intent.EXTRA_STREAM ClipData.newRawUri "
+            "Intent.FLAG_GRANT_READ_URI_PERMISSION "
             "scenario.recreate() BlockingImportProvider.URI "
             "retainedRequest.request.value == null OnDeviceSlicer.slice("
         ),
@@ -519,6 +521,9 @@ def valid_sources() -> dict[str, str]:
             '<data android:scheme="content" /></intent-filter>'
             '<intent-filter><action android:name="android.intent.action.SEND" />'
             '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="application/vnd.duckyslicer.project+zip" /></intent-filter>'
+            '<intent-filter><action android:name="android.intent.action.SEND" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
             '<data android:mimeType="text/x.gcode" />'
             '<data android:mimeType="application/x-gcode" />'
             '<data android:mimeType="application/gcode" /></intent-filter>'
@@ -562,7 +567,7 @@ def valid_sources() -> dict[str, str]:
             "height-range process modifiers "
             "rejects duplicate, directory, traversal, and unknown entries "
             "A failed import leaves the current project unchanged and removes staged data "
-            "it in Files. External opening accepts only a granted `content://` URI "
+            "another app's Share sheet External opening accepts only one granted `content://` URI "
             "requires confirmation before the current project is replaced "
             "Save project as private app state never a resolved local path "
             "is not written into the portable archive "
@@ -666,7 +671,26 @@ class VerifyProjectArchiveTest(unittest.TestCase):
             '<category android:name="android.intent.category.DEFAULT" />'
             '<data android:mimeType="*/*" /></intent-filter></activity>',
         )
-        with self.assertRaisesRegex(VerificationError, "explicit G-code and model MIME SEND"):
+        with self.assertRaisesRegex(VerificationError, "explicit project, G-code, and model MIME SEND"):
+            verify_project_archive(sources)
+
+    def test_rejects_missing_project_send_filter(self) -> None:
+        sources = valid_sources()
+        sources["AndroidManifest.xml"] = sources["AndroidManifest.xml"].replace(
+            '<intent-filter><action android:name="android.intent.action.SEND" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="application/vnd.duckyslicer.project+zip" /></intent-filter>',
+            "",
+        )
+        with self.assertRaisesRegex(VerificationError, "explicit project, G-code, and model MIME SEND"):
+            verify_project_archive(sources)
+
+    def test_rejects_project_share_without_single_stream_parser(self) -> None:
+        sources = valid_sources()
+        sources["ProjectOpenRequest.kt"] = sources["ProjectOpenRequest.kt"].replace(
+            "sharedDocumentUriOrNull(intent)", "intent.data",
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
             verify_project_archive(sources)
 
     def test_rejects_missing_gcode_send_filter(self) -> None:
@@ -679,7 +703,7 @@ class VerifyProjectArchiveTest(unittest.TestCase):
             '<data android:mimeType="application/gcode" /></intent-filter>',
             "",
         )
-        with self.assertRaisesRegex(VerificationError, "explicit G-code and model MIME SEND"):
+        with self.assertRaisesRegex(VerificationError, "explicit project, G-code, and model MIME SEND"):
             verify_project_archive(sources)
 
     def test_rejects_missing_single_top_delivery(self) -> None:

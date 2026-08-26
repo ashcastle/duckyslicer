@@ -53,8 +53,9 @@ The archive intentionally does not contain G-code, remote-printer profiles, prin
 addresses, access keys, support reports, or other app state. A project therefore
 remains offline and portable without becoming a printer-credential backup.
 
-On Android, a saved project can be opened from DuckySlicer's Project tab or by tapping
-it in Files. External opening accepts only a granted `content://` URI with the project
+On Android, a saved project can be opened from DuckySlicer's Project tab, by tapping
+it in Files, or by sending its project MIME type from another app's Share sheet.
+External opening accepts only one granted `content://` URI with the project
 MIME type, or a `.duckyproject` name reported as a ZIP-compatible type. Web, `file://`,
 and unrelated binary URIs are not accepted. Opening into a non-empty workspace always
 requires confirmation before the current project is replaced.

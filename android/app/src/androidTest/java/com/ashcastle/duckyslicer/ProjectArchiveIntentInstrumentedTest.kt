@@ -1,6 +1,7 @@
 package com.ashcastle.duckyslicer
 
 import android.app.Application
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -31,8 +32,10 @@ class ProjectArchiveIntentInstrumentedTest {
 
     @Test
     fun externalProjectRequestBindsOneOperationAndRestoresAsRetryableAfterProcessLoss() {
-        val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(BlockingImportProvider.URI, PROJECT_ARCHIVE_MIME_TYPE)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = PROJECT_ARCHIVE_MIME_TYPE
+            putExtra(Intent.EXTRA_STREAM, BlockingImportProvider.URI)
+        }
         val savedState = SavedStateHandle()
         val retained = ExternalProjectRequestViewModel(savedState)
 
@@ -483,7 +486,7 @@ class ProjectArchiveIntentInstrumentedTest {
     }
 
     @Test
-    fun compatibleZipIntentConfirmsBeforeReplacingTheCurrentProject() {
+    fun sharedProjectIntentConfirmsBeforeReplacingTheCurrentProject() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
@@ -495,15 +498,19 @@ class ProjectArchiveIntentInstrumentedTest {
         projectRoot.deleteRecursively()
         try {
             seedCurrentProject("current-object", "current.stl")
-            val intent = Intent(Intent.ACTION_VIEW)
-                .setPackage(context.packageName)
-                .setDataAndType(archiveUri(replacementArchive), "application/zip")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val uri = archiveUri(replacementArchive)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                setPackage(context.packageName)
+                type = PROJECT_ARCHIVE_MIME_TYPE
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newRawUri("replacement.duckyproject", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
             ActivityScenario.launch<MainActivity>(intent).use {
                 val title = context.getString(R.string.replace_project_title)
                 waitForNode(title)
                 assertEquals(
-                    "A VIEW intent must not replace a non-empty project before confirmation",
+                    "A shared project must not replace a non-empty project before confirmation",
                     "current-object",
                     ProjectStore(context).load().selectedObjectId,
                 )
@@ -536,9 +543,9 @@ class ProjectArchiveIntentInstrumentedTest {
                 "application/octet-stream",
             )
 
-        assertNull(projectArchiveViewUriOrNull(network))
-        assertNull(projectArchiveViewUriOrNull(unrelated))
-        assertEquals(compatible.data, projectArchiveViewUriOrNull(compatible))
+        assertNull(projectArchiveDocumentUriOrNull(network))
+        assertNull(projectArchiveDocumentUriOrNull(unrelated))
+        assertEquals(compatible.data, projectArchiveDocumentUriOrNull(compatible))
         val packageManager = InstrumentationRegistry.getInstrumentation().targetContext.packageManager
         assertTrue(
             packageManager.queryIntentActivities(compatible, 0).any { result ->
@@ -553,6 +560,50 @@ class ProjectArchiveIntentInstrumentedTest {
         )
         assertTrue(
             packageManager.queryIntentActivities(network, 0).none { result ->
+                result.activityInfo.name == MainActivity::class.java.name
+            },
+        )
+    }
+
+    @Test
+    fun projectShareIntentsAcceptOneContentStreamAndRejectHostileShapes() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val first = Uri.parse("content://example/shared.duckyproject")
+        val second = Uri.parse("content://example/other.duckyproject")
+        val shared = Intent(Intent.ACTION_SEND).apply {
+            type = PROJECT_ARCHIVE_MIME_TYPE
+            putExtra(Intent.EXTRA_STREAM, first)
+        }
+        val sharedByClip = Intent(Intent.ACTION_SEND).apply {
+            type = PROJECT_ARCHIVE_MIME_TYPE
+            clipData = ClipData.newRawUri("shared.duckyproject", first)
+        }
+        val conflicting = Intent(shared).apply {
+            clipData = ClipData.newRawUri("other.duckyproject", second)
+        }
+        val multiple = Intent(Intent.ACTION_SEND).apply {
+            type = PROJECT_ARCHIVE_MIME_TYPE
+            clipData = ClipData.newRawUri("shared.duckyproject", first).apply {
+                addItem(ClipData.Item(second))
+            }
+        }
+        val network = Intent(Intent.ACTION_SEND).apply {
+            type = PROJECT_ARCHIVE_MIME_TYPE
+            putExtra(Intent.EXTRA_STREAM, Uri.parse("https://example.invalid/shared.duckyproject"))
+        }
+        val unrelated = Intent(Intent.ACTION_SEND).apply {
+            type = "application/octet-stream"
+            putExtra(Intent.EXTRA_STREAM, Uri.parse("content://example/model.stl"))
+        }
+
+        assertEquals(first, projectArchiveDocumentUriOrNull(shared))
+        assertEquals(first, projectArchiveDocumentUriOrNull(sharedByClip))
+        assertNull(projectArchiveDocumentUriOrNull(conflicting))
+        assertNull(projectArchiveDocumentUriOrNull(multiple))
+        assertNull(projectArchiveDocumentUriOrNull(network))
+        assertNull(projectArchiveDocumentUriOrNull(unrelated))
+        assertTrue(
+            context.packageManager.queryIntentActivities(shared, 0).any { result ->
                 result.activityInfo.name == MainActivity::class.java.name
             },
         )

@@ -295,6 +295,11 @@ def _expected_main_filters() -> set[
         (
             ("android.intent.action.SEND",),
             ("android.intent.category.DEFAULT",),
+            ((("mimeType", "application/vnd.duckyslicer.project+zip"),),),
+        ),
+        (
+            ("android.intent.action.SEND",),
+            ("android.intent.category.DEFAULT",),
             tuple(
                 sorted(
                     (

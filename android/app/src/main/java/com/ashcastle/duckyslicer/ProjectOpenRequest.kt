@@ -16,9 +16,13 @@ internal data class ExternalProjectRequest(
     val startedOperationId: Long? = null,
 )
 
-internal fun projectArchiveViewUriOrNull(intent: Intent): Uri? {
-    if (intent.action != Intent.ACTION_VIEW) return null
-    val uri = intent.data ?: return null
+internal fun projectArchiveDocumentUriOrNull(intent: Intent): Uri? {
+    if (intent.action != Intent.ACTION_VIEW && intent.action != Intent.ACTION_SEND) return null
+    val uri = when (intent.action) {
+        Intent.ACTION_VIEW -> intent.data
+        Intent.ACTION_SEND -> sharedDocumentUriOrNull(intent)
+        else -> null
+    } ?: return null
     if (!uri.scheme.equals(ContentResolver.SCHEME_CONTENT, ignoreCase = true)) return null
     val mimeType = intent.type
         ?.substringBefore(';')
@@ -55,7 +59,7 @@ internal class ExternalProjectRequestViewModel(
     val request: StateFlow<ExternalProjectRequest?> = mutableRequest.asStateFlow()
 
     fun enqueue(intent: Intent): Boolean {
-        val uri = projectArchiveViewUriOrNull(intent) ?: return false
+        val uri = projectArchiveDocumentUriOrNull(intent) ?: return false
         nextRequestId += 1L
         savedStateHandle[KEY_NEXT_REQUEST_ID] = nextRequestId
         savedStateHandle[KEY_REQUEST_ID] = nextRequestId

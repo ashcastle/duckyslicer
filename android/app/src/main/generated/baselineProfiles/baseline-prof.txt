@@ -1073,7 +1073,7 @@ HSPLcom/ashcastle/duckyslicer/ProjectHistoryState;->getCanRedo()Z
 HSPLcom/ashcastle/duckyslicer/ProjectHistoryState;->getCanUndo()Z
 HSPLcom/ashcastle/duckyslicer/ProjectHistoryState;->getCurrent()Lcom/ashcastle/duckyslicer/ProjectSnapshot;
 HSPLcom/ashcastle/duckyslicer/ProjectOpenRequestKt;-><clinit>()V
-HSPLcom/ashcastle/duckyslicer/ProjectOpenRequestKt;->projectArchiveViewUriOrNull(Landroid/content/Intent;)Landroid/net/Uri;
+HSPLcom/ashcastle/duckyslicer/ProjectOpenRequestKt;->projectArchiveDocumentUriOrNull(Landroid/content/Intent;)Landroid/net/Uri;
 HSPLcom/ashcastle/duckyslicer/ProjectPersistenceMessage;->$values()[Lcom/ashcastle/duckyslicer/ProjectPersistenceMessage;
 HSPLcom/ashcastle/duckyslicer/ProjectPersistenceMessage;-><clinit>()V
 HSPLcom/ashcastle/duckyslicer/ProjectPersistenceMessage;-><init>(Ljava/lang/String;I)V

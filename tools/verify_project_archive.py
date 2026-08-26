@@ -33,6 +33,7 @@ GCODE_MIME_TYPES = {
     "application/x-gcode",
     "application/gcode",
 }
+PROJECT_MIME_TYPES = {"application/vnd.duckyslicer.project+zip"}
 REQUIRED_STRINGS = {
     "cancel_project_import",
     "canceling_project_import",
@@ -367,7 +368,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "ProjectOpenRequest.kt",
         sources["ProjectOpenRequest.kt"],
         (
-            "intent.action != Intent.ACTION_VIEW",
+            "Intent.ACTION_VIEW",
+            "Intent.ACTION_SEND",
+            "sharedDocumentUriOrNull(intent)",
             "ContentResolver.SCHEME_CONTENT",
             "PROJECT_ARCHIVE_MIME_TYPE",
             "PROJECT_ARCHIVE_FILE_EXTENSION",
@@ -730,12 +733,13 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             )
         )
     expected_send_filters = [
+        (expected_category, set(), PROJECT_MIME_TYPES, set(), set()),
         (expected_category, set(), GCODE_MIME_TYPES, set(), set()),
         (expected_category, set(), MODEL_MIME_TYPES, set(), set()),
     ]
     if send_filters != expected_send_filters:
         raise VerificationError(
-            "AndroidManifest.xml must expose only explicit G-code and model MIME SEND filters"
+            "AndroidManifest.xml must expose only explicit project, G-code, and model MIME SEND filters"
         )
 
     main = sources["MainActivity.kt"]
@@ -942,8 +946,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "rejects duplicate, directory, traversal, and unknown entries",
             "A failed import leaves the",
             "current project unchanged and removes staged data",
-            "it in Files. External opening",
-            "accepts only a granted `content://` URI",
+            "another app's Share sheet",
+            "External opening accepts only one granted `content://` URI",
             "requires confirmation before the current project is replaced",
             "bound to that exact import operation",
             "Activity recreation never opens the same request twice",
@@ -1008,12 +1012,16 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "customProjectIntentSurvivesRecreationRestoresAndSlices",
             "externalProjectRequestBindsOneOperationAndRestoresAsRetryableAfterProcessLoss",
+            "projectShareIntentsAcceptOneContentStreamAndRejectHostileShapes",
             "projectViewIntentSurvivesRecreationAndImportsExactlyOnce",
             "unsavedProjectEditAndUndoSurviveImmediateActivityRecreation",
             "clearingRetainedOwnerFlushesProjectBeforeDebounce",
-            "compatibleZipIntentConfirmsBeforeReplacingTheCurrentProject",
+            "sharedProjectIntentConfirmsBeforeReplacingTheCurrentProject",
             "projectViewIntentRejectsNetworkAndUnrelatedBinaryUris",
             "Intent.ACTION_VIEW",
+            "Intent.ACTION_SEND",
+            "Intent.EXTRA_STREAM",
+            "ClipData.newRawUri",
             "Intent.FLAG_GRANT_READ_URI_PERMISSION",
             "scenario.recreate()",
             "BlockingImportProvider.URI",
