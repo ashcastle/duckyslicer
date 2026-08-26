@@ -75,6 +75,8 @@ data class RemoteDeviceDraft(
     val kind: RemoteDeviceKind = RemoteDeviceKind.OCTOPRINT,
     val baseUrl: String = "http://",
     val credential: String = "",
+    val hasSavedCredential: Boolean = false,
+    val removeSavedCredential: Boolean = false,
 )
 
 data class RemoteDeviceStatus(
@@ -341,6 +343,9 @@ class RemoteDeviceStore internal constructor(
         require(draft.credential.toByteArray(StandardCharsets.UTF_8).size <= MAX_REMOTE_CREDENTIAL_BYTES) {
             "credential_too_large"
         }
+        require(draft.credential.isBlank() || !draft.removeSavedCredential) {
+            "credential_update_conflict"
+        }
         val candidate = RemoteDeviceProfile(
             id = draft.id ?: UUID.randomUUID().toString(),
             name = draft.name,
@@ -359,7 +364,9 @@ class RemoteDeviceStore internal constructor(
         val stagedCredential = suppliedCredential?.let { newCredentialKey() to it }
         val stagedCredentialKey = stagedCredential?.first
         val retainedCredentialKey = previous?.credentialKey
-            ?.takeIf { !endpointChanged && secrets.contains(it) }
+            ?.takeIf {
+                !endpointChanged && !draft.removeSavedCredential && secrets.contains(it)
+            }
         val credentialKey = stagedCredentialKey ?: retainedCredentialKey
         val profile = candidate.copy(
             hasCredential = credentialKey != null,

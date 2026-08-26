@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -32,6 +33,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -176,6 +178,7 @@ internal fun DeviceSheet(
                                     name = profile.name,
                                     kind = profile.kind,
                                     baseUrl = profile.baseUrl,
+                                    hasSavedCredential = profile.hasCredential,
                                 )
                             },
                             enabled = !busy,
@@ -446,7 +449,10 @@ private fun DeviceEditorDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial.id == null) stringResource(R.string.add_device) else stringResource(R.string.edit_device)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     RemoteDeviceKind.entries.forEach { kind ->
                         FilterChip(
@@ -483,13 +489,20 @@ private fun DeviceEditorDialog(
                 )
                 OutlinedTextField(
                     value = draft.credential,
-                    onValueChange = { draft = draft.copy(credential = it) },
+                    onValueChange = {
+                        draft = draft.copy(
+                            credential = it,
+                            removeSavedCredential = false,
+                        )
+                    },
                     label = { Text(stringResource(R.string.access_key)) },
                     supportingText = {
                         if (initial.id != null) {
                             Text(
                                 stringResource(
-                                    if (connectionChanged) {
+                                    if (draft.removeSavedCredential) {
+                                        R.string.access_key_remove_pending_hint
+                                    } else if (connectionChanged) {
                                         R.string.access_key_connection_change_hint
                                     } else {
                                         R.string.access_key_keep_hint
@@ -500,8 +513,47 @@ private fun DeviceEditorDialog(
                     },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
+                    enabled = !draft.removeSavedCredential,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (
+                    initial.id != null && initial.hasSavedCredential && !connectionChanged
+                ) {
+                    val removeSavedKey = stringResource(R.string.remove_saved_access_key)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .toggleable(
+                                value = draft.removeSavedCredential,
+                                role = Role.Switch,
+                                onValueChange = { remove ->
+                                    draft = draft.copy(
+                                        credential = if (remove) "" else draft.credential,
+                                        removeSavedCredential = remove,
+                                    )
+                                },
+                            )
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = removeSavedKey
+                            },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text(removeSavedKey, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                stringResource(R.string.remove_saved_access_key_summary),
+                                color = Color(0xFFC8C9C2),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Switch(
+                            checked = draft.removeSavedCredential,
+                            onCheckedChange = null,
+                        )
+                    }
+                }
                 if (validation != null) {
                     Text(
                         when (validation) {

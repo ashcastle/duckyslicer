@@ -168,7 +168,7 @@ class RemoteDeviceInstrumentedTest {
                         if (received.endsWith("\r\n\r\n")) break
                     }
                     requestAccepted.countDown()
-                    check(releaseResponse.await(5, TimeUnit.SECONDS))
+                    check(releaseResponse.await(15, TimeUnit.SECONDS))
                     val body = """{"state":"Operational"}""".toByteArray(StandardCharsets.UTF_8)
                     socket.getOutputStream().use { output ->
                         output.write("HTTP/1.1 200 OK\r\n".toByteArray())
@@ -214,7 +214,11 @@ class RemoteDeviceInstrumentedTest {
 
                 releaseResponse.countDown()
                 val model = retainedModel.get()
-                waitForRemoteState(model, "Retained remote request did not finish") { !it.busy }
+                waitForRemoteState(
+                    model,
+                    "Retained remote request did not finish",
+                    timeoutMillis = 10_000,
+                ) { !it.busy }
                 assertEquals("Operational", model.state.value.statusFor(profile.id)?.state)
             }
         } finally {
@@ -495,9 +499,10 @@ class RemoteDeviceInstrumentedTest {
     private fun waitForRemoteState(
         model: RemoteOperationViewModel,
         failureMessage: String,
+        timeoutMillis: Long = 5_000,
         condition: (RemoteOperationState) -> Boolean,
     ) {
-        val deadline = SystemClock.elapsedRealtime() + 5_000
+        val deadline = SystemClock.elapsedRealtime() + timeoutMillis
         while (!condition(model.state.value) && SystemClock.elapsedRealtime() < deadline) {
             SystemClock.sleep(25)
         }

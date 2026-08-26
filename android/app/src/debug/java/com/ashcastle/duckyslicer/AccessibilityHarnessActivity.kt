@@ -319,6 +319,7 @@ private fun DeviceAccessibilityHarness(
     printing: Boolean = false,
 ) {
     var destructiveAction by remember { mutableStateOf<String?>(null) }
+    var credentialRemovalSaved by remember { mutableStateOf(false) }
     Box {
         DeviceSheet(
             profiles = listOf(
@@ -327,6 +328,8 @@ private fun DeviceAccessibilityHarness(
                     name = TEST_DEVICE_LABEL,
                     kind = RemoteDeviceKind.OCTOPRINT,
                     baseUrl = "http://127.0.0.1",
+                    hasCredential = true,
+                    credentialKey = "credential-accessibility",
                 ),
             ),
             selectedProfileId = "accessibility-device".takeIf {
@@ -358,7 +361,7 @@ private fun DeviceAccessibilityHarness(
             isError = false,
             confirmBeforePrint = true,
             onSelect = {},
-            onSave = {},
+            onSave = { credentialRemovalSaved = it.removeSavedCredential },
             onDelete = { destructiveAction = TEST_REMOTE_DELETE_DISPATCHED },
             onRefresh = {},
             onUpload = {},
@@ -371,6 +374,12 @@ private fun DeviceAccessibilityHarness(
         destructiveAction?.let { result ->
             Text(
                 result,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        }
+        if (credentialRemovalSaved) {
+            Text(
+                TEST_REMOTE_CREDENTIAL_REMOVAL_SAVED,
                 modifier = Modifier.align(Alignment.TopCenter),
             )
         }
@@ -726,6 +735,8 @@ internal const val TEST_SWITCH_LABEL = "Accessibility switch"
 internal const val TEST_DEVICE_LABEL = "Accessibility test printer"
 internal const val TEST_REMOTE_DELETE_DISPATCHED = "Accessibility device deletion dispatched"
 internal const val TEST_REMOTE_CANCEL_DISPATCHED = "Accessibility print cancellation dispatched"
+internal const val TEST_REMOTE_CREDENTIAL_REMOVAL_SAVED =
+    "Accessibility credential removal saved"
 internal const val TEST_LAY_ON_FACE_SELECTED_LABEL = "Accessibility face selected"
 internal const val TEST_LAY_ON_FACE_FAILED_LABEL = "Accessibility face placement failed"
 internal const val TEST_LAY_ON_FACE_UNDONE_LABEL = "Accessibility face placement undone"

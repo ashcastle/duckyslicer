@@ -56,6 +56,55 @@ class RemoteDeviceStoreTest {
     }
 
     @Test
+    fun explicitCredentialRemovalKeepsThePrinterProfile() = withStore { file, secrets, store ->
+        val original = store.save(
+            RemoteDeviceDraft(
+                id = "credential-removal",
+                name = "Original printer",
+                kind = RemoteDeviceKind.OCTOPRINT,
+                baseUrl = "http://127.0.0.1:5000",
+                credential = "remove-only-this-secret",
+            ),
+        )
+        val originalKey = requireNotNull(original.credentialKey)
+
+        val updated = store.save(
+            RemoteDeviceDraft(
+                id = original.id,
+                name = "Printer without a key",
+                kind = original.kind,
+                baseUrl = original.baseUrl,
+                hasSavedCredential = true,
+                removeSavedCredential = true,
+            ),
+        )
+
+        assertEquals(original.id, updated.id)
+        assertEquals("Printer without a key", updated.name)
+        assertFalse(updated.hasCredential)
+        assertNull(updated.credentialKey)
+        assertEquals("", store.credential(updated))
+        assertFalse(secrets.contains(originalKey))
+        assertEquals(1, JSONObject(file.readText()).getJSONArray("devices").length())
+    }
+
+    @Test
+    fun credentialRemovalCannotAlsoStageAReplacement() = withStore { _, _, store ->
+        assertThrows(IllegalArgumentException::class.java) {
+            store.save(
+                RemoteDeviceDraft(
+                    id = "conflicting-credential-update",
+                    name = "Printer",
+                    kind = RemoteDeviceKind.OCTOPRINT,
+                    baseUrl = "http://127.0.0.1:5000",
+                    credential = "replacement",
+                    removeSavedCredential = true,
+                ),
+            )
+        }
+    }
+
+    @Test
     fun legacyProfileCredentialsMigrateWithoutEnteringPlaintextMetadata() =
         withStore { file, secrets, store ->
             secrets.put("legacy", "legacy-secret")

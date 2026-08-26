@@ -765,6 +765,9 @@
     <string name="access_key">접속 키</string>
     <string name="access_key_keep_hint">비워 두면 저장된 키를 유지합니다.</string>
     <string name="access_key_connection_change_hint">연결 방식이나 주소를 바꾸면 저장된 키가 삭제됩니다. 새 키가 필요하면 입력하세요.</string>
+    <string name="remove_saved_access_key">저장된 접속 키 삭제</string>
+    <string name="remove_saved_access_key_summary">저장하면 이 프린터에 키 없이 연결합니다.</string>
+    <string name="access_key_remove_pending_hint">저장하면 기존 접속 키가 삭제됩니다.</string>
     <string name="device_name_required">이름을 입력하세요.</string>
     <string name="device_address_invalid">올바른 주소를 입력하세요.</string>
     <string name="local_http_only">로컬 네트워크 밖의 주소는 HTTPS가 필요합니다.</string>

@@ -284,7 +284,9 @@ class AccessibilityInstrumentedTest {
             val addNode = scrollUntilClickable(addLabel)
             assertTrue(addNode.isFocusable)
             assertTrue(addNode.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-            assertTrue(waitForNodes(setOf(title)).any { it.effectiveLabel().contains(title) })
+            assertTrue(
+                waitForNode(title) { node -> node.effectiveLabel().contains(title) }.isVisibleToUser,
+            )
             replaceEditableText(fieldLabel, "M117 Inspect")
             val applyNode = waitForNodes(setOf(applyLabel)).single {
                 it.isClickable && it.effectiveLabel() == applyLabel
@@ -337,6 +339,49 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun savedRemoteCredentialCanBeExplicitlyRemoved() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val edit = context.getString(R.string.edit_device)
+        val remove = context.getString(R.string.remove_saved_access_key)
+        val save = context.getString(R.string.save)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_DEVICE).use {
+            clickNamedAction(edit)
+            val removeAction = scrollUntilNode(remove) { node ->
+                node.isEnabled && node.isClickable && node.isCheckable
+            }
+            val matchingActions = currentNodes().filter { node ->
+                node.isVisibleToUser &&
+                    node.isEnabled &&
+                    node.isClickable &&
+                    node.isCheckable &&
+                    node.effectiveLabel().contains(remove)
+            }
+            assertEquals(
+                "The saved-key control must expose one merged accessibility action",
+                1,
+                matchingActions.size,
+            )
+            assertTrue(removeAction.isCheckable)
+            assertEquals(AccessibilityNodeInfo.CHECKED_STATE_FALSE, removeAction.checked)
+
+            assertTrue(removeAction.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(
+                waitForNode(remove) { node ->
+                    node.isClickable &&
+                        node.isCheckable &&
+                        node.checked == AccessibilityNodeInfo.CHECKED_STATE_TRUE
+                }.isVisibleToUser,
+            )
+            clickNamedAction(save)
+            assertTrue(
+                waitForNode(TEST_REMOTE_CREDENTIAL_REMOVAL_SAVED) { node ->
+                    node.effectiveLabel() == TEST_REMOTE_CREDENTIAL_REMOVAL_SAVED
+                }.isVisibleToUser,
+            )
+        }
+    }
+
+    @Test
     fun remoteDeviceDeletionRequiresExplicitConfirmation() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val delete = context.getString(R.string.delete_device)
@@ -352,6 +397,7 @@ class AccessibilityInstrumentedTest {
             )
 
             clickNamedAction(keep)
+            waitForLabelsGone(setOf(prompt, keep))
             assertFalse(
                 "Dismissing delete confirmation must not dispatch deletion",
                 currentNodes().any { it.effectiveLabel().contains(TEST_REMOTE_DELETE_DISPATCHED) },
@@ -385,6 +431,7 @@ class AccessibilityInstrumentedTest {
             )
 
             clickNamedAction(keep)
+            waitForLabelsGone(setOf(prompt, keep))
             assertFalse(
                 "Keeping the print must not dispatch cancellation",
                 currentNodes().any { it.effectiveLabel().contains(TEST_REMOTE_CANCEL_DISPATCHED) },
@@ -1022,10 +1069,12 @@ class AccessibilityInstrumentedTest {
             assertNotNull("Height ranges must expose an Add action", addButton)
             assertTrue(checkNotNull(addButton).performAction(AccessibilityNodeInfo.ACTION_CLICK))
 
-            val editorNodes = waitForNodes(setOf(strength))
+            val strengthTab = waitForNode(strength) { node ->
+                node.isClickable && node.effectiveLabel() == strength
+            }
             assertTrue(
                 "A range must expose Orca-style setting categories",
-                editorNodes.any { it.isClickable && it.effectiveLabel() == strength },
+                strengthTab.isVisibleToUser,
             )
             val infillControl = scrollUntilNode(
                 infill,
@@ -1593,6 +1642,18 @@ class AccessibilityInstrumentedTest {
         throw AssertionError(
             "Expected one visible accessibility action for $label; observed $observedCount",
         )
+    }
+
+    private fun waitForLabelsGone(labels: Set<String>) {
+        val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
+        do {
+            val visibleLabels = currentNodes()
+                .filter { node -> node.isVisibleToUser }
+                .map { node -> node.effectiveLabel() }
+            if (labels.none { label -> visibleLabels.any { it.contains(label) } }) return
+            SystemClock.sleep(NODE_POLL_MILLIS)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        throw AssertionError("Timed out waiting for accessibility labels to disappear: $labels")
     }
 
     private fun replaceEditableText(label: String, value: String) {
