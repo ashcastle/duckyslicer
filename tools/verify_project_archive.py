@@ -643,7 +643,6 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "onExternalProjectRequestStarted = externalProjectModel::markStarted",
             "onExternalProjectRequestConsumed = externalProjectModel::consume",
             "onExternalProjectRequestDiscarded = externalProjectModel::discardUnstarted",
-            "request.startedOperationId == completion.id",
             "startExternalProjectImport(",
             "activeTransferDirection == ProjectTransferDirection.IMPORT",
             "override fun onStop()",
@@ -670,6 +669,16 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "val sourceVolumeCount = source.objects.sumOf { it.volumes.size }",
             "duplicateSelectedPlate(",
             "notice = resources.getString(R.string.plate_duplicated)",
+        ),
+    )
+    _require_markers(
+        "ProjectEditCompletionEffect.kt",
+        sources["ProjectEditCompletionEffect.kt"],
+        (
+            "completed.kind == ProjectEditKind.MODEL_IMPORT",
+            "request.startedOperationId == completed.id",
+            "onExternalModelRequestConsumed(request.id, completed.id)",
+            "onConsumeCompletion(completed.id)",
         ),
     )
     for forbidden in (
@@ -1023,6 +1032,9 @@ def read_sources() -> dict[str, str]:
         "ProjectTransfer.kt": (package / "ProjectTransfer.kt").read_text(encoding="utf-8"),
         "CreatedDocument.kt": (package / "CreatedDocument.kt").read_text(encoding="utf-8"),
         "MainActivity.kt": (package / "MainActivity.kt").read_text(encoding="utf-8"),
+        "ProjectEditCompletionEffect.kt": (
+            package / "ProjectEditCompletionEffect.kt"
+        ).read_text(encoding="utf-8"),
         "WorkspaceScreen.kt": (package / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
         "ObjectProcessSettingsSheet.kt": (
             package / "ObjectProcessSettingsSheet.kt"

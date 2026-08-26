@@ -51,7 +51,14 @@ data class PlateSliceInput(
 internal fun ProjectSnapshot.sliceInput(
     plateOptions: Map<String, SliceOptions>,
 ): PlateSliceInput? {
-    val plate = activePlate
+    return sliceInput(activePlate.id, plateOptions)
+}
+
+internal fun ProjectSnapshot.sliceInput(
+    plateId: String,
+    plateOptions: Map<String, SliceOptions>,
+): PlateSliceInput? {
+    val plate = plates.firstOrNull { it.id == plateId } ?: return null
     if (plate.objects.isEmpty()) return null
     return PlateSliceInput(
         plateId = plate.id,
@@ -61,4 +68,10 @@ internal fun ProjectSnapshot.sliceInput(
         layerFilamentChanges = plate.layerFilamentChanges,
         layerCustomGCodeEvents = plate.layerCustomGCodeEvents,
     )
+}
+
+internal fun ProjectSnapshot.sliceablePlateIds(
+    plateOptions: Map<String, SliceOptions>,
+): List<String> = plates.mapNotNull { plate ->
+    plate.id.takeIf { plate.objects.isNotEmpty() && plateOptions.containsKey(plate.id) }
 }

@@ -37,6 +37,7 @@ def valid_sources() -> dict[str, str]:
     settings_events = {"APP_SETTINGS_SAVE_FAILED"}
     gcode_events = {"GCODE_EXPORT_FAILED"}
     support_export_events = {"SUPPORT_REPORT_EXPORT_FAILED"}
+    slice_events = {"SLICE_FAILED", "PREVIEW_FAILED"}
     event_calls = " ".join(
         f"SupportEvent.{event}"
         for event in EXPECTED_EVENTS
@@ -46,6 +47,7 @@ def valid_sources() -> dict[str, str]:
         - settings_events
         - gcode_events
         - support_export_events
+        - slice_events
     )
     project_event_calls = " ".join(f"SupportEvent.{event}" for event in project_events)
     remote_event_calls = " ".join(f"SupportEvent.{event}" for event in remote_events)
@@ -116,6 +118,9 @@ def valid_sources() -> dict[str, str]:
             " ViewModelProvider(this)[SupportReportExportViewModel::class.java] "
             "supportReportExportModel.export(uri, appSettings) "
             "supportReportExportModel::cancel"
+        ),
+        "PlateSliceBatchEffect.kt": " ".join(
+            f"SupportEvent.{event}" for event in slice_events
         ),
         "ProjectTransfer.kt": project_event_calls,
         "RemoteOperationViewModel.kt": remote_event_calls,
@@ -226,7 +231,7 @@ class VerifySupportDiagnosticsTest(unittest.TestCase):
 
     def test_rejects_missing_problem_category_recording(self) -> None:
         sources = valid_sources()
-        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+        sources["PlateSliceBatchEffect.kt"] = sources["PlateSliceBatchEffect.kt"].replace(
             "SupportEvent.SLICE_FAILED", ""
         )
         with self.assertRaisesRegex(VerificationError, "never recorded"):

@@ -211,8 +211,20 @@ return START_NOT_STICKY
         encoding="utf-8",
     )
     (kotlin_root / "MainActivity.kt").write_text(
-        "fun beginSlice() {}\nval startSlice = { beginSlice() }\nonSlice = startSlice\n"
-        "val cancelSlice = {}\nonCancelSlice = cancelSlice\n",
+        "val sliceStartControls = rememberSliceStartControls(\n"
+        "if (allPlates) sliceStartControls.startAll() else sliceStartControls.startSelected()\n"
+        "onCancelSlice = sliceStartControls.cancel\n",
+        encoding="utf-8",
+    )
+    (kotlin_root / "PlateSliceBatchEffect.kt").write_text(
+        "fun beginSelected() {}\nfun beginAll() {}\nfun request(all: Boolean) {}\n"
+        "startSelected = { request(false) }\nstartAll = { request(true) }\n"
+        "operationModel.cancel()\n",
+        encoding="utf-8",
+    )
+    (kotlin_root / "WorkspaceScreen.kt").write_text(
+        "onSlice = { onSlice(false) }\nonSliceAll = { onSlice(true) }\n"
+        "onClick = onSlice\nonClick = onSliceAll\nonClick = onCancelSlice\n",
         encoding="utf-8",
     )
     return store
@@ -340,6 +352,17 @@ class VerifyStoreListingTest(unittest.TestCase):
             encoding="utf-8",
         )
         with self.assertRaisesRegex(StoreListingError, "supports its declaration"):
+            self.verify()
+
+    def test_rejects_slice_ui_without_user_cancel_action(self) -> None:
+        path = self.root / (
+            "android/app/src/main/java/com/ashcastle/duckyslicer/WorkspaceScreen.kt"
+        )
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("onClick = onCancelSlice", ""),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(StoreListingError, "demonstrably user initiated"):
             self.verify()
 
     def test_rejects_missing_localized_alt_text(self) -> None:

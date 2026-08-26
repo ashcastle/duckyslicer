@@ -52,6 +52,21 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             projectObjects = listOf(accessibilityProjectObject()),
                             plateCount = 2,
                         )
+                        SCREEN_SLICE_ALL -> WorkspaceAccessibilityHarness(
+                            projectObjects = listOf(accessibilityProjectObject()),
+                            plateCount = 2,
+                            allPlatesHaveObjects = true,
+                        )
+                        SCREEN_SLICE_ALL_PROGRESS -> WorkspaceAccessibilityHarness(
+                            projectObjects = listOf(accessibilityProjectObject()),
+                            plateCount = 2,
+                            allPlatesHaveObjects = true,
+                            slicing = true,
+                            sliceProgress = SliceProgress(
+                                percent = 37,
+                                batch = PlateSliceBatchProgress(current = 2, total = 3),
+                            ),
+                        )
                         SCREEN_OBJECT_SETTINGS -> ObjectSettingsAccessibilityHarness()
                         SCREEN_HEIGHT_RANGE_MODIFIERS -> HeightRangeModifiersAccessibilityHarness()
                         SCREEN_SHAPES -> BasicShapeSheet(
@@ -157,6 +172,8 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_PROJECT = "project"
         const val SCREEN_PROJECT_PLATES = "project-plates"
         const val SCREEN_PLATES = "plates"
+        const val SCREEN_SLICE_ALL = "slice-all"
+        const val SCREEN_SLICE_ALL_PROGRESS = "slice-all-progress"
         const val SCREEN_WORKSPACE = "workspace"
         const val SCREEN_WORKSPACE_PROFILES = "workspace-profiles"
         const val SCREEN_OBJECT_SETTINGS = "object-settings"
@@ -458,6 +475,9 @@ private fun WorkspaceAccessibilityHarness(
     profileTransferDirection: ProfileTransferDirection? = null,
     profileTransferCancellationRequested: Boolean = false,
     plateCount: Int = 1,
+    allPlatesHaveObjects: Boolean = false,
+    slicing: Boolean = false,
+    sliceProgress: SliceProgress = SliceProgress(0),
     layOnFaceForcedFailure: Boolean = false,
 ) {
     var harnessNotice by remember { mutableStateOf<String?>(null) }
@@ -465,10 +485,19 @@ private fun WorkspaceAccessibilityHarness(
     var projectPlates by remember(plateCount) {
         mutableStateOf(
             List(plateCount) { index ->
+                val plateObjects = if (index == 0 || allPlatesHaveObjects) {
+                    projectObjects.map { projectObject ->
+                        if (index == 0) projectObject else projectObject.copy(
+                            id = "${projectObject.id}-$index",
+                        )
+                    }
+                } else {
+                    emptyList()
+                }
                 ProjectPlate(
                     id = "accessibility-plate-$index",
-                    objects = projectObjects.takeIf { index == 0 }.orEmpty(),
-                    selectedObjectId = projectObjects.firstOrNull()?.id.takeIf { index == 0 },
+                    objects = plateObjects,
+                    selectedObjectId = plateObjects.firstOrNull()?.id,
                 )
             },
         )
@@ -522,9 +551,9 @@ private fun WorkspaceAccessibilityHarness(
         projectImporting = projectImporting,
         projectExporting = projectExporting,
         projectTransferCancellationRequested = false,
-        slicing = false,
+        slicing = slicing,
         sliceCancellationRequested = false,
-        sliceProgress = 0,
+        sliceProgress = sliceProgress,
         previewLoading = false,
         exportingGcode = exportingGcode,
         gcodeExportCancellationRequested = false,
@@ -682,7 +711,9 @@ private fun WorkspaceAccessibilityHarness(
         onHeightRangeModifiersChanged = {},
         onRemoveAuxiliaryVolume = {},
         onRemoveModel = {},
-        onSlice = {},
+        onSlice = { allPlates ->
+            if (allPlates) harnessNotice = TEST_SLICE_ALL_REQUESTED_LABEL
+        },
         onCancelSlice = {},
         onSave = {},
         onCancelGcodeExport = {},
@@ -809,3 +840,4 @@ internal const val TEST_LAY_ON_FACE_FAILED_LABEL = "Accessibility face placement
 internal const val TEST_LAY_ON_FACE_UNDONE_LABEL = "Accessibility face placement undone"
 internal const val TEST_TRANSFORM_COMMITTED_LABEL = "Accessibility transform committed"
 internal const val TEST_SUPPORT_PAINTED_LABEL = "Accessibility support painted"
+internal const val TEST_SLICE_ALL_REQUESTED_LABEL = "Accessibility all plates requested"

@@ -92,6 +92,7 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -515,7 +516,7 @@ internal fun WorkspaceScreen(
     projectTransferCancellationRequested: Boolean,
     slicing: Boolean,
     sliceCancellationRequested: Boolean,
-    sliceProgress: Int,
+    sliceProgress: SliceProgress,
     previewLoading: Boolean,
     exportingGcode: Boolean,
     gcodeExportCancellationRequested: Boolean,
@@ -573,7 +574,7 @@ internal fun WorkspaceScreen(
     onHeightRangeModifiersChanged: (HeightRangeModifiers) -> Unit,
     onRemoveAuxiliaryVolume: (String) -> Unit,
     onRemoveModel: (String) -> Unit,
-    onSlice: () -> Unit,
+    onSlice: (Boolean) -> Unit,
     onCancelSlice: () -> Unit,
     onSave: () -> Unit,
     onCancelGcodeExport: () -> Unit,
@@ -1094,10 +1095,13 @@ internal fun WorkspaceScreen(
                     previewLoading = previewLoading,
                     slicing = slicing,
                     cancellationRequested = sliceCancellationRequested,
-                    progress = sliceProgress,
+                    progress = sliceProgress.percent,
+                    batchProgress = sliceProgress.batch,
+                    sliceAllAvailable = projectPlates.count { it.objects.isNotEmpty() } >= 2,
                     error = error,
                     notice = notice,
-                    onSlice = onSlice,
+                    onSlice = { onSlice(false) },
+                    onSliceAll = { onSlice(true) },
                     onCancelSlice = onCancelSlice,
                     onCancelProjectEdit = onCancelProjectEdit,
                     onOptionsChanged = onSliceOptionsChanged,
@@ -6583,9 +6587,12 @@ private fun SliceSheet(
     slicing: Boolean,
     cancellationRequested: Boolean,
     progress: Int,
+    batchProgress: PlateSliceBatchProgress?,
+    sliceAllAvailable: Boolean,
     error: String?,
     notice: String?,
     onSlice: () -> Unit,
+    onSliceAll: () -> Unit,
     onCancelSlice: () -> Unit,
     onCancelProjectEdit: () -> Unit,
     onOptionsChanged: (SliceOptions) -> Unit,
@@ -6659,7 +6666,19 @@ private fun SliceSheet(
             }
         }
         if (slicing) {
-            Text(stringResource(R.string.slicing_progress, progress), fontWeight = FontWeight.SemiBold)
+            Text(
+                if (batchProgress == null) {
+                    stringResource(R.string.slicing_progress, progress)
+                } else {
+                    stringResource(
+                        R.string.slicing_all_plates_progress,
+                        batchProgress.current,
+                        batchProgress.total,
+                        progress,
+                    )
+                },
+                fontWeight = FontWeight.SemiBold,
+            )
             LinearProgressIndicator(
                 progress = { progress / 100f },
                 modifier = Modifier.fillMaxWidth(),
@@ -6687,6 +6706,17 @@ private fun SliceSheet(
                 Icon(Icons.Default.Layers, null)
                 Spacer(Modifier.width(7.dp))
                 Text(stringResource(R.string.slice_model), fontWeight = FontWeight.Bold)
+            }
+            if (sliceAllAvailable) {
+                OutlinedButton(
+                    onClick = onSliceAll,
+                    enabled = !slicing && !importing && !previewLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.GridView, null)
+                    Spacer(Modifier.width(7.dp))
+                    Text(stringResource(R.string.slice_all_plates), fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

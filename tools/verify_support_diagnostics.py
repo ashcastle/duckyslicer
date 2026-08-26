@@ -150,6 +150,7 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         "ProcessExitHistory.kt",
         "ProcessExitHistoryApi30.kt",
         "MainActivity.kt",
+        "PlateSliceBatchEffect.kt",
         "ProjectTransfer.kt",
         "RemoteOperationViewModel.kt",
         "ProfileLibraryViewModel.kt",
@@ -256,6 +257,7 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         )
     event_recorders = (
         sources["MainActivity.kt"] +
+        sources["PlateSliceBatchEffect.kt"] +
         sources["ProjectTransfer.kt"] +
         sources["RemoteOperationViewModel.kt"] +
         sources["ProfileLibraryViewModel.kt"] +
@@ -438,6 +440,9 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "MainActivity.kt": (package / "MainActivity.kt").read_text(encoding="utf-8"),
+        "PlateSliceBatchEffect.kt": (package / "PlateSliceBatchEffect.kt").read_text(
+            encoding="utf-8"
+        ),
         "ProjectTransfer.kt": (package / "ProjectTransfer.kt").read_text(encoding="utf-8"),
         "RemoteOperationViewModel.kt": (package / "RemoteOperationViewModel.kt").read_text(
             encoding="utf-8"

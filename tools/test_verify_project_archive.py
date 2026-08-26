@@ -216,7 +216,7 @@ def valid_sources() -> dict[str, str]:
                 "onExternalProjectRequestStarted = externalProjectModel::markStarted "
                 "onExternalProjectRequestConsumed = externalProjectModel::consume "
                 "onExternalProjectRequestDiscarded = externalProjectModel::discardUnstarted "
-                "request.startedOperationId == completion.id startExternalProjectImport( "
+                "startExternalProjectImport( "
                 "activeTransferDirection == ProjectTransferDirection.IMPORT",
                 "override fun onStop() projectTransferModel.flushPersistence()",
                 "ProjectTransferViewModel projectTransferState.completion ProjectReplacementDialog(",
@@ -236,7 +236,13 @@ def valid_sources() -> dict[str, str]:
                 "onDuplicatePlate = { val sourceVolumeCount = source.objects.sumOf { it.volumes.size } "
                 "duplicateSelectedPlate( notice = resources.getString(R.string.plate_duplicated)",
             )
-        ),
+            ),
+            "ProjectEditCompletionEffect.kt": (
+                "completed.kind == ProjectEditKind.MODEL_IMPORT "
+                "request.startedOperationId == completed.id "
+                "onExternalModelRequestConsumed(request.id, completed.id) "
+                "onConsumeCompletion(completed.id)"
+            ),
         "WorkspaceScreen.kt": (
             "ProjectSheet( onOpenProject onSaveProject onPlateSelected onAddPlate "
             "onDuplicatePlate onRemovePlate PlateSwitcher( canDuplicateSelectedPlate "

@@ -92,6 +92,7 @@ def verify_data_practices(sources: dict[str, str]) -> None:
     required_files = {
         "AppSettingsSheet.kt",
         "MainActivity.kt",
+        "PlateSliceBatchEffect.kt",
         "RemoteDevice.kt",
         "AndroidManifest.xml",
         "build.gradle.kts",
@@ -124,7 +125,7 @@ def verify_data_practices(sources: dict[str, str]) -> None:
                 f"data-practice UI does not use required copy: {resource_name}"
             )
 
-    activity = sources["MainActivity.kt"]
+    activity = sources["PlateSliceBatchEffect.kt"]
     for marker in (
         "ActivityResultContracts.RequestPermission()",
         "Manifest.permission.POST_NOTIFICATIONS",
@@ -201,6 +202,9 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "MainActivity.kt": (package / "MainActivity.kt").read_text(encoding="utf-8"),
+        "PlateSliceBatchEffect.kt": (package / "PlateSliceBatchEffect.kt").read_text(
+            encoding="utf-8"
+        ),
         "RemoteDevice.kt": (package / "RemoteDevice.kt").read_text(encoding="utf-8"),
         "AndroidManifest.xml": (main / "AndroidManifest.xml").read_text(encoding="utf-8"),
         "build.gradle.kts": (ROOT / "android/app/build.gradle.kts").read_text(

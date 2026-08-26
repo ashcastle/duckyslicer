@@ -35,7 +35,8 @@ def valid_sources() -> dict[str, str]:
             "Lifecycle.Event.ON_RESUME stateDescription = notificationState "
             f"{settings_markers}"
         ),
-        "MainActivity.kt": (
+        "MainActivity.kt": "",
+        "PlateSliceBatchEffect.kt": (
             "ActivityResultContracts.RequestPermission() Manifest.permission.POST_NOTIFICATIONS "
             "SLICE_NOTIFICATION_PERMISSION_ASKED "
             ".putBoolean(SLICE_NOTIFICATION_PERMISSION_ASKED, true)"
@@ -131,7 +132,7 @@ class VerifyDataPracticesTest(unittest.TestCase):
 
     def test_rejects_missing_notification_permission_request(self) -> None:
         sources = valid_sources()
-        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+        sources["PlateSliceBatchEffect.kt"] = sources["PlateSliceBatchEffect.kt"].replace(
             "Manifest.permission.POST_NOTIFICATIONS", ""
         )
         with self.assertRaisesRegex(VerificationError, "notification permission"):

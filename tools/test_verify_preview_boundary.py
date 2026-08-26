@@ -354,7 +354,6 @@ def valid_sources() -> dict[str, str]:
             "raw.copyOfRange(vertexStart, vertexEnd) exactModelIntegerOrNull() "
             "MODEL_MAX_COORDINATE_ABS_MM "
             "var plateSliceResults by rememberSaveable var selectedTab by rememberSaveable "
-            "restored.isRestorableFrom(context.filesDir) "
             "completed?.isRestorableFrom(context.filesDir) == true "
             "val requested = plateSliceResults.resultFor(selectedPlateId) "
             "requested.plateId requested.outcome "
@@ -362,6 +361,7 @@ def valid_sources() -> dict[str, str]:
             "exactPaintFacetsToClear("
             " fun laySelectedFaceOnBed(objectId: String, triangle: FloatArray): Boolean"
         ),
+        "PlateSliceBatchEffect.kt": "restored.isRestorableFrom(filesDirectory)",
         "ProjectState.kt": (
             "fun updateExactSupportPaint( fun commitExactSupportPaint( "
             "fun updateExactSeamPaint( fun commitExactSeamPaint( "

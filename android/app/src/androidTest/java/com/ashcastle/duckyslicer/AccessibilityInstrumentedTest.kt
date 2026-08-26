@@ -806,6 +806,32 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun sliceAllPlatesIsExplicitAndBatchProgressNamesTheCurrentPlate() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val sliceAll = context.getString(R.string.slice_all_plates)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_SLICE_ALL).use {
+            val action = waitForNode(sliceAll) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == sliceAll
+            }
+            assertTrue(action.isFocusable)
+            assertTrue(action.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNode(TEST_SLICE_ALL_REQUESTED_LABEL) {
+                it.effectiveLabel() == TEST_SLICE_ALL_REQUESTED_LABEL
+            }
+        }
+
+        val progress = context.getString(R.string.slicing_all_plates_progress, 2, 3, 37)
+        val cancel = context.getString(R.string.cancel)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_SLICE_ALL_PROGRESS).use {
+            waitForNode(progress) { it.effectiveLabel() == progress }
+            val cancelAction = waitForNode(cancel) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == cancel
+            }
+            assertTrue(cancelAction.isFocusable)
+        }
+    }
+
+    @Test
     fun largeTextLandscapeKeepsMenuClearOfScrollableWorkspaceSheet() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val menuLabel = context.getString(R.string.menu)

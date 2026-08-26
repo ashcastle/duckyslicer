@@ -1,16 +1,11 @@
 package com.ashcastle.duckyslicer
 
-import android.Manifest
-import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.Color as AndroidColor
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,7 +16,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,8 +49,6 @@ private val DuckyColors = darkColorScheme(
 internal const val GCODE_DOCUMENT_MIME_TYPE = "application/octet-stream"
 internal const val THREE_MF_DOCUMENT_MIME_TYPE = "model/3mf"
 internal const val STL_DOCUMENT_MIME_TYPE = "model/stl"
-private const val SLICE_NOTIFICATION_PREFERENCES = "slice_notifications"
-private const val SLICE_NOTIFICATION_PERMISSION_ASKED = "permission_asked"
 private const val DEFAULT_PROJECT_ARCHIVE_NAME = "DuckySlicer-project$PROJECT_ARCHIVE_FILE_EXTENSION"
 private const val DEFAULT_THREE_MF_NAME = "DuckySlicer-model.3mf"
 private const val DEFAULT_PROFILE_BUNDLE_NAME = "DuckySlicer-profiles$PROFILE_BUNDLE_FILE_EXTENSION"
@@ -275,6 +267,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val sliceOperationModel = ViewModelProvider(this)[SliceOperationViewModel::class.java]
+        val plateSliceBatchModel = ViewModelProvider(this)[PlateSliceBatchViewModel::class.java]
         val remoteOperationModel = ViewModelProvider(this)[RemoteOperationViewModel::class.java]
         profileLibraryModel = ViewModelProvider(this)[ProfileLibraryViewModel::class.java]
         appSettingsModel = ViewModelProvider(this)[AppSettingsViewModel::class.java]
@@ -304,6 +297,7 @@ class MainActivity : ComponentActivity() {
                     externalProfileModel.request.collectAsStateWithLifecycle()
                 DuckySlicerScreen(
                     sliceOperationModel = sliceOperationModel,
+                    plateSliceBatchModel = plateSliceBatchModel,
                     remoteOperationModel = remoteOperationModel,
                     profileLibraryModel = profileLibraryModel,
                     appSettingsModel = appSettingsModel,
@@ -400,6 +394,7 @@ private fun addEmptyProjectPlate(
 @Composable
 private fun DuckySlicerScreen(
     sliceOperationModel: SliceOperationViewModel,
+    plateSliceBatchModel: PlateSliceBatchViewModel,
     remoteOperationModel: RemoteOperationViewModel,
     profileLibraryModel: ProfileLibraryViewModel,
     appSettingsModel: AppSettingsViewModel,
@@ -422,35 +417,20 @@ private fun DuckySlicerScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val resources = LocalResources.current
     val modelReadError = resources.getString(R.string.model_read_error)
-    val modelTooLargeError = resources.getString(R.string.model_too_large_error)
     val shapeError = resources.getString(R.string.shape_error)
-    val regionUpdateError = resources.getString(R.string.region_update_error)
-    val autoLayDone = resources.getString(R.string.auto_lay_done)
-    val autoLayUnchanged = resources.getString(R.string.auto_lay_unchanged)
-    val autoLayError = resources.getString(R.string.auto_lay_error)
     val layOnFaceDone = resources.getString(R.string.lay_on_face_done)
     val layOnFaceError = resources.getString(R.string.lay_on_face_error)
-    val arrangeDone = resources.getString(R.string.arrange_done)
-    val arrangeError = resources.getString(R.string.arrange_error)
-    val splitNotPossible = resources.getString(R.string.split_not_possible)
     val splitError = resources.getString(R.string.split_error)
-    val splitPartsNotPossible = resources.getString(R.string.split_parts_not_possible)
     val splitPartsError = resources.getString(R.string.split_parts_error)
-    val cutNotPossible = resources.getString(R.string.cut_not_possible)
     val cutError = resources.getString(R.string.cut_error)
-    val simplifyError = resources.getString(R.string.simplify_error)
     val sliceError = resources.getString(R.string.slice_error)
     val sliceCanceledNotice = resources.getString(R.string.slice_canceled)
-    val modelEditCanceledNotice = resources.getString(R.string.model_edit_canceled)
-    val saveError = resources.getString(R.string.save_error)
-    val savedNotice = resources.getString(R.string.gcode_saved)
-    val gcodeExportCanceledNotice = resources.getString(R.string.gcode_export_canceled)
+    val allPlatesSlicedNotice = resources.getString(R.string.all_plates_sliced)
     val profileSavedNotice = resources.getString(R.string.profile_saved)
     val profileSaveError = resources.getString(R.string.profile_save_error)
     val profileDeletedNotice = resources.getString(R.string.profile_deleted)
     val profileDeleteError = resources.getString(R.string.profile_delete_error)
     val filamentSlotUnavailable = resources.getString(R.string.filament_slot_unavailable)
-    val projectSaveError = resources.getString(R.string.project_save_error)
     val newProjectStartedNotice = resources.getString(R.string.new_project_started)
     val savedDataUnavailable = resources.getString(R.string.saved_data_unavailable)
     val previewError = resources.getString(R.string.preview_error)
@@ -490,9 +470,27 @@ private fun DuckySlicerScreen(
     var layerPreview by remember { mutableStateOf<GcodeLayerPreview?>(null) }
     var stalePreviewResult by remember { mutableStateOf<PlateSliceResult?>(null) }
     val sliceOperationState by sliceOperationModel.state.collectAsStateWithLifecycle()
-    val slicing = sliceOperationState.slicing
-    val sliceCancellationRequested = sliceOperationState.cancellationRequested
-    val sliceProgress = sliceOperationState.progress
+    val plateSliceBatchState by plateSliceBatchModel.state.collectAsStateWithLifecycle()
+    val operationSlicing = sliceOperationState.slicing
+    val slicing = operationSlicing || plateSliceBatchState.active
+    val sliceCancellationRequested = sliceOperationState.cancellationRequested ||
+        plateSliceBatchState.cancellationRequested
+    val sliceProgress = if (plateSliceBatchState.active) {
+        val currentProgress = if (plateSliceBatchState.currentPlateId == null) {
+            0
+        } else {
+            sliceOperationState.progress
+        }
+        (
+            (plateSliceBatchState.completedCount * 100 + currentProgress) /
+                plateSliceBatchState.plateIds.size
+            ).coerceIn(0, 100)
+    } else {
+        sliceOperationState.progress
+    }
+    val plateSliceBatchProgress = plateSliceBatchState.currentNumber?.let { current ->
+        PlateSliceBatchProgress(current, plateSliceBatchState.plateIds.size)
+    }
     val previewLoading = sliceOperationState.previewLoading
     val projectTransferState by projectTransferModel.state.collectAsStateWithLifecycle()
     val projectTransferBusy = projectTransferState.busy ||
@@ -626,206 +624,68 @@ private fun DuckySlicerScreen(
         },
     )
 
-    LaunchedEffect(projectTransferState.editCompletion?.id) {
-        val completion = projectTransferState.editCompletion ?: return@LaunchedEffect
-        if (completion.failure == null) {
-            if (completion.sessionChanged) clearCompletedSlice()
-            error = null
-            notice = when (completion.kind) {
-                ProjectEditKind.MODEL_IMPORT -> null
-                ProjectEditKind.PRIMITIVE -> resources.getString(
-                    R.string.shape_added,
-                    completion.displayName.orEmpty(),
-                )
-                ProjectEditKind.AUXILIARY_VOLUME -> resources.getString(
-                    R.string.region_updated,
-                    completion.displayName.orEmpty(),
-                )
-                ProjectEditKind.AUTO_LAY -> if (completion.sessionChanged) {
-                    autoLayDone
-                } else {
-                    autoLayUnchanged
-                }
-                ProjectEditKind.ARRANGE -> arrangeDone
-                ProjectEditKind.SPLIT -> resources.getString(
-                    if (completion.clearedObjectSettings) {
-                        R.string.split_done_painting_cleared
-                    } else {
-                        R.string.split_done
-                    },
-                    completion.objectCount,
-                )
-                ProjectEditKind.SPLIT_PARTS -> resources.getString(
-                    if (completion.clearedObjectSettings) {
-                        R.string.split_parts_done_painting_cleared
-                    } else {
-                        R.string.split_parts_done
-                    },
-                    completion.objectCount,
-                )
-                ProjectEditKind.CUT -> resources.getString(
-                    if (completion.clearedObjectSettings) {
-                        R.string.cut_done_painting_cleared
-                    } else {
-                        R.string.cut_done
-                    },
-                )
-                ProjectEditKind.SIMPLIFY -> resources.getString(
-                    if (completion.clearedObjectSettings) {
-                        R.string.simplify_done_painting_cleared
-                    } else {
-                        R.string.simplify_done
-                    },
-                    completion.triangleCount,
-                )
-            }
-            selectedTab = WorkspaceTab.SLICE
-        } else {
-            notice = null
-            error = when (completion.failure) {
-                ProjectEditFailure.CANCELED -> null
-                ProjectEditFailure.MODEL_TOO_LARGE -> modelTooLargeError
-                ProjectEditFailure.NOT_SPLITTABLE -> if (
-                    completion.kind == ProjectEditKind.SPLIT_PARTS
-                ) {
-                    splitPartsNotPossible
-                } else {
-                    splitNotPossible
-                }
-                ProjectEditFailure.NOT_CUTTABLE -> cutNotPossible
-                ProjectEditFailure.GENERIC -> when (completion.kind) {
-                    ProjectEditKind.MODEL_IMPORT -> modelReadError
-                    ProjectEditKind.PRIMITIVE -> shapeError
-                    ProjectEditKind.AUXILIARY_VOLUME -> regionUpdateError
-                    ProjectEditKind.AUTO_LAY -> autoLayError
-                    ProjectEditKind.ARRANGE -> arrangeError
-                    ProjectEditKind.SPLIT -> splitError
-                    ProjectEditKind.SPLIT_PARTS -> splitPartsError
-                    ProjectEditKind.CUT -> cutError
-                    ProjectEditKind.SIMPLIFY -> simplifyError
-                }
-            }
-            if (completion.failure == ProjectEditFailure.CANCELED) {
-                notice = modelEditCanceledNotice
-            }
-        }
-        externalModelRequest
-            ?.takeIf { request ->
-                completion.kind == ProjectEditKind.MODEL_IMPORT &&
-                    request.startedOperationId == completion.id
-            }
-            ?.let { request ->
-                onExternalModelRequestConsumed(request.id, completion.id)
-            }
-        projectTransferModel.consumeEditCompletion(completion.id)
-    }
+    ProjectEditCompletionEffect(
+        completion = projectTransferState.editCompletion,
+        externalModelRequest = externalModelRequest,
+        onExternalModelRequestConsumed = onExternalModelRequestConsumed,
+        onConsumeCompletion = projectTransferModel::consumeEditCompletion,
+        onSessionChanged = ::clearCompletedSlice,
+        onTabSelected = { selectedTab = it },
+        onPresentation = { nextNotice, nextError ->
+            notice = nextNotice
+            error = nextError
+        },
+    )
 
-    LaunchedEffect(gcodeExportState.completion?.id) {
-        val completion = gcodeExportState.completion ?: return@LaunchedEffect
-        when (completion.result) {
-            GcodeExportResult.SAVED -> {
-                notice = savedNotice
-                error = null
-            }
-            GcodeExportResult.CANCELED -> {
-                notice = gcodeExportCanceledNotice
-                error = null
-            }
-            GcodeExportResult.FAILED -> {
-                notice = null
-                error = saveError
-            }
-        }
-        gcodeExportModel.consumeCompletion(completion.id)
-    }
-
-    LaunchedEffect(sliceOutcome?.output?.absolutePath, selectedPlateId) {
-        val restored = sliceOutcome ?: return@LaunchedEffect
-        if (!restored.isRestorableFrom(context.filesDir)) {
-            clearCompletedSlice()
-            if (selectedTab == WorkspaceTab.PREVIEW) selectedTab = WorkspaceTab.SLICE
-        }
-    }
-    LaunchedEffect(
-        sliceOperationState.plateId,
-        sliceOperationState.outcome,
-        sliceOperationState.preview,
-    ) {
-        val completed = sliceOperationState.outcome ?: return@LaunchedEffect
-        val ownerPlateId = sliceOperationState.plateId ?: run {
-            sliceOperationModel.clearCompleted()
-            return@LaunchedEffect
-        }
-        if (projectPlates.none { it.id == ownerPlateId }) {
-            sliceOperationModel.clearCompleted()
-            return@LaunchedEffect
-        }
-        plateSliceResults = plateSliceResults.put(ownerPlateId, completed)
-        if (ownerPlateId == selectedPlateId) {
-            stalePreviewResult = null
-            sliceOperationState.preview?.let { layerPreview = it }
-            selectedTab = WorkspaceTab.PREVIEW
-        }
-        remoteOperationModel.invalidateUpload()
-    }
-    LaunchedEffect(sliceOperationState.terminalStatus) {
-        when (sliceOperationState.terminalStatus) {
-            SliceTerminalStatus.CANCELED -> {
-                notice = sliceCanceledNotice
-                error = null
-            }
-            SliceTerminalStatus.SLICE_FAILED -> {
-                supportEvents.record(SupportEvent.SLICE_FAILED)
-                error = sliceError
-                notice = null
-            }
-            SliceTerminalStatus.PREVIEW_FAILED -> {
-                supportEvents.record(SupportEvent.PREVIEW_FAILED)
-                error = previewError
-                notice = null
-            }
-            SliceTerminalStatus.NONE -> Unit
-        }
-    }
-    LaunchedEffect(projectPlates.map(ProjectPlate::id)) {
-        plateSliceResults = plateSliceResults.retain(projectPlates.mapTo(HashSet(), ProjectPlate::id))
-    }
-    LaunchedEffect(projectTransferState.persistenceMessage) {
-        when (projectTransferState.persistenceMessage) {
-            ProjectPersistenceMessage.STORAGE_UNAVAILABLE -> error = savedDataUnavailable
-            ProjectPersistenceMessage.SAVE_FAILED -> error = projectSaveError
-            null -> Unit
-        }
-        if (projectTransferState.persistenceMessage != null) notice = null
-    }
-    LaunchedEffect(projectRestored, profileRecentsLoaded) {
-        if (projectRestored && profileRecentsLoaded) {
-            profileLibraryModel.recordSelection(sliceOptions)
-        }
-    }
-    LaunchedEffect(profileLibraryState.message) {
-        val message = profileLibraryState.message ?: return@LaunchedEffect
-        error = when (message) {
-            ProfileLibraryMessage.STORAGE_UNAVAILABLE -> savedDataUnavailable
-            ProfileLibraryMessage.SAVE_FAILED -> profileSaveError
-            ProfileLibraryMessage.DELETE_FAILED -> profileDeleteError
-        }
-        notice = null
-        profileLibraryModel.consumeMessage(message)
-    }
-    LaunchedEffect(remoteOperationState.profilesLoaded, remoteOperationState.storageUnavailable) {
-        if (remoteOperationState.profilesLoaded && remoteOperationState.storageUnavailable) {
-            error = savedDataUnavailable
-        }
-    }
+    SliceResultLifecycleEffects(
+        filesDirectory = context.filesDir,
+        selectedOutcome = sliceOutcome,
+        selectedTab = selectedTab,
+        selectedPlateId = selectedPlateId,
+        projectPlateIds = projectPlates.mapTo(HashSet(), ProjectPlate::id),
+        results = plateSliceResults,
+        operationState = sliceOperationState,
+        batchState = plateSliceBatchState,
+        operationModel = sliceOperationModel,
+        batchModel = plateSliceBatchModel,
+        supportEvents = supportEvents,
+        messages = SliceLifecycleMessages(
+            canceled = sliceCanceledNotice,
+            failed = sliceError,
+            previewFailed = previewError,
+            allPlatesCompleted = allPlatesSlicedNotice,
+        ),
+        onInvalidSelectedResult = ::clearCompletedSlice,
+        onResultsChanged = { plateSliceResults = it },
+        onPreviewChanged = { layerPreview = it },
+        onClearStalePreview = { stalePreviewResult = null },
+        onTabSelected = { selectedTab = it },
+        onPresentation = { nextNotice, nextError ->
+            notice = nextNotice
+            error = nextError
+        },
+        onRemoteResultInvalidated = remoteOperationModel::invalidateUpload,
+    )
     val keepScreenAwake = appSettings.keepScreenAwakeWhileWorking &&
         (importing || projectTransferBusy || autoLaying || arranging || splitting || cutting || slicing ||
             previewLoading || exportingGcode || remoteBusy || profileBusy)
-    DisposableEffect(keepScreenAwake) {
-        val window = (context as? MainActivity)?.window
-        if (keepScreenAwake) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
-    }
+    WorkspaceStatusEffects(
+        gcodeExportState = gcodeExportState,
+        gcodeExportModel = gcodeExportModel,
+        persistenceMessage = projectTransferState.persistenceMessage,
+        projectRestored = projectRestored,
+        profileRecentsLoaded = profileRecentsLoaded,
+        sliceOptions = sliceOptions,
+        profileLibraryState = profileLibraryState,
+        profileLibraryModel = profileLibraryModel,
+        remoteProfilesLoaded = remoteOperationState.profilesLoaded,
+        remoteStorageUnavailable = remoteOperationState.storageUnavailable,
+        keepScreenAwake = keepScreenAwake,
+        onPresentation = { nextNotice, nextError ->
+            notice = nextNotice
+            error = nextError
+        },
+    )
     fun applyOptions(options: SliceOptions) {
         val session = projectTransferModel.state.value
         val previous = session.sliceOptions
@@ -1324,59 +1184,28 @@ private fun DuckySlicerScreen(
         }
     }
 
-    fun beginSlice() {
-        val session = projectTransferModel.state.value
-        val input = session.history.current.sliceInput(session.plateOptions) ?: return
-        if (
-            !slicing && !importing && !projectTransferBusy && !autoLaying && !arranging &&
-            !splitting && !cutting && !previewLoading &&
-            sliceOperationModel.start(
-                input.plateId,
-                input.objects,
-                input.options,
-                input.layerPauseEvents,
-                input.layerFilamentChanges,
-                input.layerCustomGCodeEvents,
-            )
-        ) {
-            plateSliceResults = plateSliceResults.clear(input.plateId)
+    val sliceStartControls = rememberSliceStartControls(
+        ready = projectRestored && !projectTransferBusy,
+        blocked = slicing || importing || autoLaying || arranging || splitting || cutting ||
+            previewLoading,
+        snapshot = projectHistory.current,
+        plateOptions = projectTransferState.plateOptions,
+        results = plateSliceResults,
+        operationState = sliceOperationState,
+        batchState = plateSliceBatchState,
+        operationModel = sliceOperationModel,
+        batchModel = plateSliceBatchModel,
+        onResultsChanged = { plateSliceResults = it },
+        onVisualResultsCleared = {
             layerPreview = null
             stalePreviewResult = null
-            remoteOperationModel.invalidateUpload()
+        },
+        onPresentationCleared = {
             error = null
             notice = null
-        }
-    }
-    val sliceNotificationPreferences = remember(context) {
-        context.getSharedPreferences(SLICE_NOTIFICATION_PREFERENCES, Context.MODE_PRIVATE)
-    }
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) {
-        sliceNotificationPreferences.edit()
-            .putBoolean(SLICE_NOTIFICATION_PERMISSION_ASKED, true)
-            .apply()
-        beginSlice()
-    }
-    val startSlice = {
-        val shouldRequestNotification =
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
-                PackageManager.PERMISSION_GRANTED &&
-                !sliceNotificationPreferences.getBoolean(
-                    SLICE_NOTIFICATION_PERMISSION_ASKED,
-                    false,
-                )
-        if (shouldRequestNotification) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            beginSlice()
-        }
-    }
-
-    val cancelSlice = {
-        sliceOperationModel.cancel()
-    }
+        },
+        onRemoteResultInvalidated = remoteOperationModel::invalidateUpload,
+    )
 
     val saveGcode = {
         val requested = plateSliceResults.resultFor(selectedPlateId)
@@ -1463,7 +1292,7 @@ private fun DuckySlicerScreen(
         projectTransferCancellationRequested = projectTransferCancellationRequested,
         slicing = slicing,
         sliceCancellationRequested = sliceCancellationRequested,
-        sliceProgress = sliceProgress,
+        sliceProgress = SliceProgress(sliceProgress, plateSliceBatchProgress),
         previewLoading = previewLoading,
         exportingGcode = exportingGcode,
         gcodeExportCancellationRequested = gcodeExportCancellationRequested,
@@ -1940,8 +1769,10 @@ private fun DuckySlicerScreen(
                 error = null
             }
         },
-        onSlice = startSlice,
-        onCancelSlice = cancelSlice,
+        onSlice = { allPlates ->
+            if (allPlates) sliceStartControls.startAll() else sliceStartControls.startSelected()
+        },
+        onCancelSlice = sliceStartControls.cancel,
         onSave = saveGcode,
         onCancelGcodeExport = gcodeExportModel::cancelActiveExport,
         onSliceOptionsChanged = ::applyOptions,

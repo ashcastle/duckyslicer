@@ -33,6 +33,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "PreviewPerformanceHarnessActivity.kt",
         "WorkspaceScreen.kt",
         "MainActivity.kt",
+        "PlateSliceBatchEffect.kt",
         "ProjectState.kt",
         "ProjectStore.kt",
         "OrcaModelCut.kt",
@@ -978,7 +979,6 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     for marker in (
         "var plateSliceResults by rememberSaveable",
         "var selectedTab by rememberSaveable",
-        "restored.isRestorableFrom(context.filesDir)",
         "completed?.isRestorableFrom(context.filesDir) == true",
         "val requested = plateSliceResults.resultFor(selectedPlateId)",
         "requested.plateId",
@@ -987,6 +987,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in main_activity:
             raise VerificationError(f"configuration restoration is missing: {marker}")
+    if "restored.isRestorableFrom(filesDirectory)" not in sources["PlateSliceBatchEffect.kt"]:
+        raise VerificationError("configuration restoration is missing: restored output validation")
 
     restoration_tests = sources["SliceOutcomeRestorationTest.kt"]
     for marker in (
@@ -1248,6 +1250,9 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "WorkspaceScreen.kt": (main / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
+        "PlateSliceBatchEffect.kt": (main / "PlateSliceBatchEffect.kt").read_text(
+            encoding="utf-8"
+        ),
         "ProjectState.kt": (main / "ProjectState.kt").read_text(encoding="utf-8"),
         "ProjectStore.kt": (main / "ProjectStore.kt").read_text(encoding="utf-8"),
         "OrcaModelCut.kt": (main / "OrcaModelCut.kt").read_text(encoding="utf-8"),

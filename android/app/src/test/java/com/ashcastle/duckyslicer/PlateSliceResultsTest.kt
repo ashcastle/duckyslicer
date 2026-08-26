@@ -71,6 +71,13 @@ class PlateSliceResultsTest {
         assertEquals(secondFilamentChanges, selected.layerFilamentChanges)
         assertEquals(secondCustomGCode, selected.layerCustomGCodeEvents)
         assertNull(snapshot.sliceInput(options - "second-plate"))
+        assertEquals(
+            listOf("first-plate", "second-plate"),
+            snapshot.sliceablePlateIds(options),
+        )
+        assertEquals(firstObject, snapshot.sliceInput("first-plate", options)?.objects?.single())
+        assertNull(snapshot.sliceInput("missing", options))
+        assertEquals(listOf("first-plate"), snapshot.sliceablePlateIds(options - "second-plate"))
     }
 
     private fun outcome(name: String, layers: Int) = SliceOutcome(

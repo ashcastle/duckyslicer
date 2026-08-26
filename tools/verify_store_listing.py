@@ -316,8 +316,12 @@ def _verify_foreground_service_sources(repository_root: Path) -> None:
     source_paths = {
         "slicer service": repository_root
         / "android/app/src/main/java/com/ashcastle/duckyslicer/SlicerProcessService.kt",
-        "slice UI": repository_root
+        "slice composition": repository_root
         / "android/app/src/main/java/com/ashcastle/duckyslicer/MainActivity.kt",
+        "slice controls": repository_root
+        / "android/app/src/main/java/com/ashcastle/duckyslicer/PlateSliceBatchEffect.kt",
+        "slice UI": repository_root
+        / "android/app/src/main/java/com/ashcastle/duckyslicer/WorkspaceScreen.kt",
     }
     sources: dict[str, str] = {}
     for name, path in source_paths.items():
@@ -345,17 +349,39 @@ def _verify_foreground_service_sources(repository_root: Path) -> None:
         raise StoreListingError(
             f"Foreground slicing implementation no longer supports its declaration: {missing_service}"
         )
+    control_markers = (
+        "fun beginSelected()",
+        "fun beginAll()",
+        "fun request(all: Boolean)",
+        "startSelected = { request(false) }",
+        "startAll = { request(true) }",
+        "operationModel.cancel()",
+    )
+    missing_controls = [
+        marker for marker in control_markers if marker not in sources["slice controls"]
+    ]
+    composition_markers = (
+        "val sliceStartControls = rememberSliceStartControls(",
+        "if (allPlates) sliceStartControls.startAll() else sliceStartControls.startSelected()",
+        "onCancelSlice = sliceStartControls.cancel",
+    )
+    missing_composition = [
+        marker
+        for marker in composition_markers
+        if marker not in sources["slice composition"]
+    ]
     ui_markers = (
-        "fun beginSlice()",
-        "val startSlice = {",
-        "onSlice = startSlice",
-        "val cancelSlice = {",
-        "onCancelSlice = cancelSlice",
+        "onSlice = { onSlice(false) }",
+        "onSliceAll = { onSlice(true) }",
+        "onClick = onSlice",
+        "onClick = onSliceAll",
+        "onClick = onCancelSlice",
     )
     missing_ui = [marker for marker in ui_markers if marker not in sources["slice UI"]]
-    if missing_ui:
+    if missing_controls or missing_composition or missing_ui:
         raise StoreListingError(
-            f"Foreground slicing is no longer demonstrably user initiated: {missing_ui}"
+            "Foreground slicing is no longer demonstrably user initiated: "
+            f"{missing_controls + missing_composition + missing_ui}"
         )
 
 

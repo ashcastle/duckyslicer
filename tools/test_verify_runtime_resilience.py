@@ -180,7 +180,21 @@ def valid_sources() -> dict[str, str]:
             "projectTransferModel.createPrimitive(primitive, sizeMm, displayName) "
             "projectTransferModel.importModels(uris) "
             "projectTransferModel.importModels(request.uri) "
-            "projectTransferModel::cancelActiveEdit"
+            "projectTransferModel::cancelActiveEdit "
+            "ViewModelProvider(this)[PlateSliceBatchViewModel::class.java] "
+            "plateSliceBatchModel.state.collectAsStateWithLifecycle() "
+            "rememberSliceStartControls( R.string.all_plates_sliced"
+        ),
+        "PlateSliceBatchViewModel.kt": (
+            "SavedStateHandle val plateIds: List<String> val completedCount: Int "
+            "val currentPlateId: String? fun start(plateIds: List<String>) fun claimNext() "
+            "fun complete(plateId: String) fun requestCancellation() "
+            "PlateSliceBatchTerminalStatus.COMPLETED"
+        ),
+        "PlateSliceBatchEffect.kt": (
+            "snapshot.sliceInput(plateId, plateOptions) operationModel.start( "
+            "batchModel.complete(ownerPlateId) operationModel.clearCompleted() "
+            "batchModel.requestCancellation()"
         ),
         "WorkspaceScreen.kt": (
             "projectEditActive: Boolean projectEditCancellationRequested: Boolean "
@@ -190,7 +204,9 @@ def valid_sources() -> dict[str, str]:
             "profileTransferCancellationRequested: Boolean "
             "onImportProfiles: () -> Unit onExportProfiles: () -> Unit "
             "onCancelProfileTransfer: () -> Unit R.string.cancel_profile_import "
-            "R.string.cancel_profile_export"
+            "R.string.cancel_profile_export R.string.slice_all_plates "
+            "R.string.slicing_all_plates_progress "
+            "projectPlates.count { it.objects.isNotEmpty() } >= 2"
         ),
         "DeviceSheet.kt": (
             ".selectable( selected = true enabled = !busy ), "
@@ -264,7 +280,14 @@ def valid_sources() -> dict[str, str]:
             "activeRemoteRequestExposesOneNamedStopAction SCREEN_REMOTE_REQUEST"
         ),
         "AccessibilityHarnessActivity.kt": (
-            "SCREEN_REMOTE_REQUEST DeviceAccessibilityHarness(requestActive = true)"
+            "SCREEN_REMOTE_REQUEST DeviceAccessibilityHarness(requestActive = true) "
+            "SCREEN_SLICE_ALL SCREEN_SLICE_ALL_PROGRESS TEST_SLICE_ALL_REQUESTED_LABEL"
+        ),
+        "PlateSliceBatchViewModelTest.kt": (
+            "queueRunsInStableOrderAndReportsCompletion "
+            "activeQueueSurvivesViewModelRecreationWithoutGeometry "
+            "cancellationWaitsForClaimedPlateAndThenClearsTheQueue "
+            "failureMustBelongToTheClaimedPlate"
         ),
         "ProfileLibraryInstrumentedTest.kt": (
             "profileSaveAndRecentSelectionSurviveImmediateActivityRecreation "

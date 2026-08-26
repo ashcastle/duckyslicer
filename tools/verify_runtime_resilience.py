@@ -32,6 +32,9 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "RemoteDevice.kt",
         "RemoteOperationViewModel.kt",
         "MainActivity.kt",
+        "PlateSliceBatchViewModel.kt",
+        "PlateSliceBatchEffect.kt",
+        "PlateSliceBatchViewModelTest.kt",
         "WorkspaceScreen.kt",
         "DeviceSheet.kt",
         "DurableJsonFileTest.kt",
@@ -311,6 +314,48 @@ def verify_resilience(sources: dict[str, str]) -> None:
         raise VerificationError("remote network work is still owned by the Activity composition")
     if "RemoteDeviceStore(" in main or "remoteProfileBusy" in main:
         raise VerificationError("remote profile persistence is still owned by the Activity composition")
+
+    plate_batch = sources["PlateSliceBatchViewModel.kt"]
+    for marker in (
+        "SavedStateHandle",
+        "val plateIds: List<String>",
+        "val completedCount: Int",
+        "val currentPlateId: String?",
+        "fun start(plateIds: List<String>)",
+        "fun claimNext()",
+        "fun complete(plateId: String)",
+        "fun requestCancellation()",
+        "PlateSliceBatchTerminalStatus.COMPLETED",
+    ):
+        if marker not in plate_batch:
+            raise VerificationError(f"retained plate batch contract is missing: {marker}")
+    if "ProjectObject" in plate_batch or "SliceOptions" in plate_batch:
+        raise VerificationError("plate batch saved state retains project geometry or profiles")
+    plate_batch_effect = sources["PlateSliceBatchEffect.kt"]
+    for marker in (
+        "snapshot.sliceInput(plateId, plateOptions)",
+        "operationModel.start(",
+        "batchModel.complete(ownerPlateId)",
+        "operationModel.clearCompleted()",
+        "batchModel.requestCancellation()",
+    ):
+        if marker not in plate_batch_effect:
+            raise VerificationError(f"sequential plate execution contract is missing: {marker}")
+    for marker in (
+        "ViewModelProvider(this)[PlateSliceBatchViewModel::class.java]",
+        "plateSliceBatchModel.state.collectAsStateWithLifecycle()",
+        "rememberSliceStartControls(",
+        "R.string.all_plates_sliced",
+    ):
+        if marker not in main:
+            raise VerificationError(f"plate batch Activity recovery contract is missing: {marker}")
+    for marker in (
+        "R.string.slice_all_plates",
+        "R.string.slicing_all_plates_progress",
+        "projectPlates.count { it.objects.isNotEmpty() } >= 2",
+    ):
+        if marker not in workspace:
+            raise VerificationError(f"plate batch UI contract is missing: {marker}")
 
     profile_library = sources["ProfileLibraryViewModel.kt"]
     for marker in (
@@ -659,6 +704,15 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "AccessibilityHarnessActivity.kt": (
             "SCREEN_REMOTE_REQUEST",
             "DeviceAccessibilityHarness(requestActive = true)",
+            "SCREEN_SLICE_ALL",
+            "SCREEN_SLICE_ALL_PROGRESS",
+            "TEST_SLICE_ALL_REQUESTED_LABEL",
+        ),
+        "PlateSliceBatchViewModelTest.kt": (
+            "queueRunsInStableOrderAndReportsCompletion",
+            "activeQueueSurvivesViewModelRecreationWithoutGeometry",
+            "cancellationWaitsForClaimedPlateAndThenClearsTheQueue",
+            "failureMustBelongToTheClaimedPlate",
         ),
         "ProfileLibraryViewModelTest.kt": (
             "savedProfileAppliesOnlyToTheSessionRevisionThatStartedTheSave",
@@ -908,10 +962,19 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
+        "PlateSliceBatchViewModel.kt": (
+            main / "PlateSliceBatchViewModel.kt"
+        ).read_text(encoding="utf-8"),
+        "PlateSliceBatchEffect.kt": (main / "PlateSliceBatchEffect.kt").read_text(
+            encoding="utf-8"
+        ),
         "WorkspaceScreen.kt": (main / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
         "DeviceSheet.kt": (main / "DeviceSheet.kt").read_text(encoding="utf-8"),
         "DurableJsonFileTest.kt": (tests / "DurableJsonFileTest.kt").read_text(encoding="utf-8"),
         "ProjectStoreTest.kt": (tests / "ProjectStoreTest.kt").read_text(encoding="utf-8"),
+        "PlateSliceBatchViewModelTest.kt": (
+            tests / "PlateSliceBatchViewModelTest.kt"
+        ).read_text(encoding="utf-8"),
         "ModelImportTest.kt": (tests / "ModelImportTest.kt").read_text(encoding="utf-8"),
         "ProfileStoreMigrationTest.kt": (tests / "ProfileStoreMigrationTest.kt").read_text(
             encoding="utf-8"
