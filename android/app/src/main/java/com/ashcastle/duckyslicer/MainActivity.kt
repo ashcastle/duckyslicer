@@ -665,16 +665,21 @@ private fun rememberModelDocumentCreator(
 private fun ExternalProjectImportEffect(
     request: ExternalProjectRequest?,
     enabled: Boolean,
-    projectIsEmpty: Boolean,
+    replacementConfirmationRequired: Boolean,
     projectTransferModel: ProjectTransferViewModel,
     onImport: (Uri) -> Boolean,
     onRequestStarted: (Long, Long) -> Boolean,
     onConfirmationRequired: (ExternalProjectRequest) -> Unit,
 ) {
-    LaunchedEffect(request?.id, request?.startedOperationId, enabled, projectIsEmpty) {
+    LaunchedEffect(
+        request?.id,
+        request?.startedOperationId,
+        enabled,
+        replacementConfirmationRequired,
+    ) {
         val pending = request ?: return@LaunchedEffect
         if (pending.startedOperationId != null || !enabled) return@LaunchedEffect
-        if (projectIsEmpty) {
+        if (!replacementConfirmationRequired) {
             startExternalProjectImport(
                 pending,
                 projectTransferModel,
@@ -1331,7 +1336,11 @@ private fun DuckySlicerScreen(
         enabled = projectRestored && !projectTransferBusy && !importing && !autoLaying &&
             !arranging && !splitting && !cutting && !slicing && !previewLoading &&
             projectTransferState.completion == null,
-        projectIsEmpty = projectHistory.current.allObjects.isEmpty(),
+        replacementConfirmationRequired = requiresProjectReplacementConfirmation(
+            plateCount = projectHistory.current.plates.size,
+            objectCount = projectHistory.current.allObjects.size,
+            linkedDocumentDirty = projectTransferState.linkedDocumentDirty,
+        ),
         projectTransferModel = projectTransferModel,
         onImport = ::importProject,
         onRequestStarted = onExternalProjectRequestStarted,

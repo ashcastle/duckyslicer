@@ -268,6 +268,12 @@ data class ProjectSnapshot(
     }
 }
 
+internal fun requiresProjectReplacementConfirmation(
+    plateCount: Int,
+    objectCount: Int,
+    linkedDocumentDirty: Boolean,
+): Boolean = linkedDocumentDirty || plateCount > 1 || objectCount > 0
+
 data class ProjectHistoryState(
     val current: ProjectSnapshot = ProjectSnapshot(),
     private val undoStates: List<ProjectSnapshot> = emptyList(),

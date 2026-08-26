@@ -20,6 +20,38 @@ class ProjectStateTest {
     )
 
     @Test
+    fun replacementConfirmationProtectsDirtyAndStructuredProjects() {
+        assertFalse(
+            requiresProjectReplacementConfirmation(
+                plateCount = 1,
+                objectCount = 0,
+                linkedDocumentDirty = false,
+            ),
+        )
+        assertTrue(
+            requiresProjectReplacementConfirmation(
+                plateCount = 1,
+                objectCount = 0,
+                linkedDocumentDirty = true,
+            ),
+        )
+        assertTrue(
+            requiresProjectReplacementConfirmation(
+                plateCount = 2,
+                objectCount = 0,
+                linkedDocumentDirty = false,
+            ),
+        )
+        assertTrue(
+            requiresProjectReplacementConfirmation(
+                plateCount = 1,
+                objectCount = 1,
+                linkedDocumentDirty = false,
+            ),
+        )
+    }
+
+    @Test
     fun addRemoveUndoAndRedoKeepObjectSelectionDeterministic() {
         val first = projectObject("first")
         val second = projectObject("second")

@@ -164,7 +164,8 @@ def valid_sources() -> dict[str, str]:
             "fun duplicateSelectedPlate( Duplicate plate object identities are incomplete "
             "current.allObjects.size + source.objects.size <= ProjectStore.MAX_PROJECT_OBJECTS "
             "ProjectStore.MAX_PROJECT_VOLUMES projectObject.rebaseVolumeIds(newObjectId) "
-            "selectedPlateId = newPlateId"
+            "selectedPlateId = newPlateId fun requiresProjectReplacementConfirmation( "
+            "linkedDocumentDirty || plateCount > 1 || objectCount > 0"
         ),
         "ProjectTransfer.kt": " ".join(
             (
@@ -242,6 +243,8 @@ def valid_sources() -> dict[str, str]:
                 "ProjectTransferViewModel projectTransferState.completion ProjectReplacementDialog( "
                 "projectTransferState.linkedDocument?.displayName "
                 "projectTransferState.linkedDocumentDirty "
+                "replacementConfirmationRequired = requiresProjectReplacementConfirmation( "
+                "linkedDocumentDirty = projectTransferState.linkedDocumentDirty "
                 "projectTransferModel.saveLinkedProject( !started && !latest.busy "
                 "latest.completion == null && latest.editCompletion == null "
                 "onSaveProject = projectSaveAction(",
@@ -272,6 +275,8 @@ def valid_sources() -> dict[str, str]:
             ),
         "WorkspaceScreen.kt": (
             "ProjectSheet( onOpenProject onSaveProject linkedProjectName linkedProjectDirty "
+            "replacementConfirmationRequired = requiresProjectReplacementConfirmation( "
+            "linkedDocumentDirty = linkedProjectDirty "
             "R.string.linked_project_file R.string.linked_project_unsaved "
             "R.string.project_save_options R.string.save_project_as "
             "onPlateSelected onAddPlate "
@@ -385,6 +390,7 @@ def valid_sources() -> dict[str, str]:
         "AccessibilityInstrumentedTest.kt": (
             "cancelProjectImportActionIsReachable cancelProjectExportActionIsReachable "
             "projectActionsAreVisibleAndOpeningConfirmsReplacement R.string.project_save_options "
+            "dirtyEmptyLinkedProjectRequiresConfirmationBeforeOpenOrNew "
             "R.string.linked_project_unsaved R.string.replace_project_unsaved_body "
             "R.string.save_project_as Save project as must be reachable from the split action "
             "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions "

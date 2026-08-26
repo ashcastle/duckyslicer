@@ -43,6 +43,9 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             selectedTab = WorkspaceTab.PROJECT,
                             projectObjects = listOf(accessibilityProjectObject()),
                         )
+                        SCREEN_PROJECT_DIRTY_EMPTY -> WorkspaceAccessibilityHarness(
+                            selectedTab = WorkspaceTab.PROJECT,
+                        )
                         SCREEN_PROJECT_PLATES -> WorkspaceAccessibilityHarness(
                             selectedTab = WorkspaceTab.PROJECT,
                             projectObjects = listOf(accessibilityProjectObject()),
@@ -201,6 +204,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_SETTINGS = "settings"
         const val SCREEN_SUPPORT_EXPORT = "support-export"
         const val SCREEN_PROJECT = "project"
+        const val SCREEN_PROJECT_DIRTY_EMPTY = "project-dirty-empty"
         const val SCREEN_PROJECT_PLATES = "project-plates"
         const val SCREEN_PLATES = "plates"
         const val SCREEN_SLICE_ALL = "slice-all"

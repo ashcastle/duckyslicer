@@ -1212,9 +1212,11 @@ internal fun WorkspaceScreen(
                     objects = projectObjects,
                     plates = projectPlates,
                     selectedPlateId = selectedPlateId,
-                    hasProjectContent = projectPlates.size > 1 || projectPlates.any {
-                        it.objects.isNotEmpty()
-                    },
+                    replacementConfirmationRequired = requiresProjectReplacementConfirmation(
+                        plateCount = projectPlates.size,
+                        objectCount = projectPlates.sumOf { it.objects.size },
+                        linkedDocumentDirty = linkedProjectDirty,
+                    ),
                     selectedObjectId = selectedObjectId,
                     outcome = sliceOutcome,
                     busy = importing || editingBusy,
@@ -7735,7 +7737,7 @@ private fun ProjectSheet(
     objects: List<ProjectObject>,
     plates: List<ProjectPlate>,
     selectedPlateId: String,
-    hasProjectContent: Boolean,
+    replacementConfirmationRequired: Boolean,
     selectedObjectId: String?,
     outcome: SliceOutcome?,
     busy: Boolean,
@@ -7903,7 +7905,7 @@ private fun ProjectSheet(
         )
         Button(
             onClick = { confirmNewProject = true },
-            enabled = hasProjectContent && !busy && !importing && !exporting,
+            enabled = replacementConfirmationRequired && !busy && !importing && !exporting,
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFF454640),
                 contentColor = Color(0xFFF4F4EE),
@@ -7922,8 +7924,8 @@ private fun ProjectSheet(
                 onClick = {
                     when {
                         importing -> onCancelProjectImport()
-                        objects.isEmpty() -> onOpenProject()
-                        else -> confirmReplacement = true
+                        replacementConfirmationRequired -> confirmReplacement = true
+                        else -> onOpenProject()
                     }
                 },
                 enabled = if (importing) !cancellationRequested else !busy && !exporting,

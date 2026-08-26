@@ -665,6 +665,51 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun dirtyEmptyLinkedProjectRequiresConfirmationBeforeOpenOrNew() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val newLabel = context.getString(R.string.new_project)
+        val openLabel = context.getString(R.string.open_project)
+        val replaceTitle = context.getString(R.string.replace_project_title)
+        val replaceWarning = context.getString(
+            R.string.replace_project_unsaved_body,
+            "Linked-project.duckyproject",
+        )
+        val newTitle = context.getString(R.string.new_project_title)
+        val newWarning = context.getString(
+            R.string.new_project_unsaved_body,
+            "Linked-project.duckyproject",
+        )
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PROJECT_DIRTY_EMPTY).use {
+            val open = scrollUntilClickable(openLabel)
+            assertTrue("Open must remain actionable for a dirty empty project", open.isEnabled)
+            assertTrue(open.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(
+                "Opening over dirty linked settings must require confirmation",
+                waitForNodes(setOf(replaceTitle, replaceWarning)).let { nodes ->
+                    nodes.any { it.effectiveLabel().contains(replaceTitle) } &&
+                        nodes.any { it.effectiveLabel().contains(replaceWarning) }
+                },
+            )
+            assertTrue(
+                InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(
+                    AccessibilityService.GLOBAL_ACTION_BACK,
+                ),
+            )
+
+            val newProject = scrollUntilClickable(newLabel)
+            assertTrue("New must remain actionable for a dirty empty project", newProject.isEnabled)
+            assertTrue(newProject.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(
+                "Resetting dirty linked settings must require confirmation",
+                waitForNodes(setOf(newTitle, newWarning)).let { nodes ->
+                    nodes.any { it.effectiveLabel().contains(newTitle) } &&
+                        nodes.any { it.effectiveLabel().contains(newWarning) }
+                },
+            )
+        }
+    }
+
+    @Test
     fun newProjectActionRequiresConfirmation() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val newLabel = context.getString(R.string.new_project)
