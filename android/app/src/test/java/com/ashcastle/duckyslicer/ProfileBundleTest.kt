@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import java.io.ByteArrayInputStream
 import java.nio.file.Files
+import java.util.Locale
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -332,6 +333,127 @@ class ProfileBundleTest {
             )
         } finally {
             directory.deleteRecursively()
+            sourceDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun conflictingNamesAreRenamedAndRepeatImportRemainsStable() {
+        val directory = Files.createTempDirectory("duckyslicer-profile-name-conflict-").toFile()
+        val sourceDirectory = Files.createTempDirectory("duckyslicer-profile-name-source-").toFile()
+        try {
+            val destinationFile = directory.resolve("user_profiles.json")
+            val destination = ProfileStore(destinationFile)
+            destination.savePrinter("Workshop", SliceOptions())
+            destination.saveFilament("Material", SliceOptions())
+            destination.saveSlicing("Quality", SliceOptions())
+
+            val source = ProfileStore(sourceDirectory.resolve("user_profiles.json"))
+            source.savePrinter(
+                "workshop",
+                SliceOptions().copy(maxPrintHeight = 345f),
+            )
+            source.saveFilament(
+                "MATERIAL",
+                SliceOptions().copy(nozzleTemp = 231, flowRatio = 0.97f),
+            )
+            source.saveSlicing(
+                "quality",
+                SliceOptions().copy(layerHeight = 0.18f, perimeters = 5),
+            )
+            val bundle = source.exportBundle()
+
+            val imported = destination.importBundle(bundle)
+            assertEquals(3, imported.importedTotal)
+            assertEquals(3, imported.renamedConflicts)
+            assertEquals(0, imported.skippedDuplicates)
+
+            val catalog = destination.load()
+            assertEquals(345f, catalog.printers.single { it.name == "workshop (2)" }.maxPrintHeight)
+            assertEquals(231, catalog.filaments.single { it.name == "MATERIAL (2)" }.nozzleTemp)
+            assertEquals(5, catalog.slicing.single { it.name == "quality (2)" }.perimeters)
+            assertEquals(
+                catalog.printers.size,
+                catalog.printers.map { it.name.trim().lowercase(Locale.ROOT) }.distinct().size,
+            )
+            assertEquals(
+                catalog.filaments.size,
+                catalog.filaments.map { it.name.trim().lowercase(Locale.ROOT) }.distinct().size,
+            )
+            assertEquals(
+                catalog.slicing.size,
+                catalog.slicing.map { it.name.trim().lowercase(Locale.ROOT) }.distinct().size,
+            )
+
+            val firstGeneration = destinationFile.readBytes()
+            val repeated = destination.importBundle(bundle)
+            assertEquals(0, repeated.importedTotal)
+            assertEquals(0, repeated.renamedConflicts)
+            assertEquals(3, repeated.skippedDuplicates)
+            assertTrue(firstGeneration.contentEquals(destinationFile.readBytes()))
+        } finally {
+            directory.deleteRecursively()
+            sourceDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun nameConflictsInsideOneBundleAreResolvedWithoutDroppingSettings() {
+        val sourceDirectory = Files.createTempDirectory("duckyslicer-profile-bundle-name-source-")
+            .toFile()
+        val destinationDirectory = Files.createTempDirectory(
+            "duckyslicer-profile-bundle-name-destination-",
+        ).toFile()
+        try {
+            val source = ProfileStore(sourceDirectory.resolve("user_profiles.json"))
+            source.savePrinter("Shared name", SliceOptions())
+            source.savePrinter("Second name", SliceOptions().copy(maxPrintHeight = 390f))
+            val bundle = JSONObject(source.exportBundle().toString(Charsets.UTF_8))
+            bundle.getJSONObject("profiles").getJSONArray("printers")
+                .getJSONObject(1).put("name", " shared name ")
+
+            val destinationFile = destinationDirectory.resolve("user_profiles.json")
+            val destination = ProfileStore(destinationFile)
+            val bytes = bundle.toString().toByteArray(Charsets.UTF_8)
+            val imported = destination.importBundle(bytes)
+            assertEquals(2, imported.importedPrinters)
+            assertEquals(1, imported.renamedConflicts)
+            val printers = destination.load().printers
+            assertTrue(printers.any { it.name == "Shared name" })
+            assertEquals(390f, printers.single { it.name == "shared name (2)" }.maxPrintHeight)
+
+            val firstGeneration = destinationFile.readBytes()
+            val repeated = destination.importBundle(bytes)
+            assertEquals(0, repeated.importedTotal)
+            assertEquals(2, repeated.skippedDuplicates)
+            assertTrue(firstGeneration.contentEquals(destinationFile.readBytes()))
+        } finally {
+            sourceDirectory.deleteRecursively()
+            destinationDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun conflictSuffixKeepsMaximumLengthNamesValid() {
+        val destinationDirectory = Files.createTempDirectory("duckyslicer-long-profile-name-")
+            .toFile()
+        val sourceDirectory = Files.createTempDirectory("duckyslicer-long-profile-source-")
+            .toFile()
+        try {
+            val name = "P".repeat(512)
+            val destination = ProfileStore(destinationDirectory.resolve("user_profiles.json"))
+            destination.saveSlicing(name, SliceOptions())
+            val source = ProfileStore(sourceDirectory.resolve("user_profiles.json"))
+            source.saveSlicing(name, SliceOptions().copy(perimeters = 6))
+
+            val imported = destination.importBundle(source.exportBundle())
+            assertEquals(1, imported.importedTotal)
+            assertEquals(1, imported.renamedConflicts)
+            val renamed = destination.load().slicing.single { it.perimeters == 6 }
+            assertEquals(512, renamed.name.length)
+            assertTrue(renamed.name.endsWith(" (2)"))
+        } finally {
+            destinationDirectory.deleteRecursively()
             sourceDirectory.deleteRecursively()
         }
     }

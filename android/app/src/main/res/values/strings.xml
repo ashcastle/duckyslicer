@@ -717,6 +717,7 @@
     <string name="apply_changes">Apply</string>
     <string name="profile_saved">Profile saved.</string>
     <string name="profiles_imported">%1$d profiles imported.</string>
+    <string name="profiles_imported_with_renamed_conflicts">%1$d profiles imported. %2$d renamed to keep every profile distinct.</string>
     <string name="profiles_unchanged">Profiles are already up to date.</string>
     <string name="profiles_exported">Profiles exported.</string>
     <string name="profile_import_canceled">Profile import stopped.</string>

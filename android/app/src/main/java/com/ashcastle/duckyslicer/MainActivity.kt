@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Resources
 import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Build
@@ -389,12 +390,6 @@ private fun DuckySlicerScreen(
     val profileSaveError = stringResource(R.string.profile_save_error)
     val profileDeletedNotice = stringResource(R.string.profile_deleted)
     val profileDeleteError = stringResource(R.string.profile_delete_error)
-    val profilesUnchangedNotice = stringResource(R.string.profiles_unchanged)
-    val profilesExportedNotice = stringResource(R.string.profiles_exported)
-    val profileImportCanceledNotice = stringResource(R.string.profile_import_canceled)
-    val profileExportCanceledNotice = stringResource(R.string.profile_export_canceled)
-    val profileImportError = stringResource(R.string.profile_import_error)
-    val profileExportError = stringResource(R.string.profile_export_error)
     val filamentSlotUnavailable = stringResource(R.string.filament_slot_unavailable)
     val projectSaveError = stringResource(R.string.project_save_error)
     val newProjectStartedNotice = stringResource(R.string.new_project_started)
@@ -862,46 +857,16 @@ private fun DuckySlicerScreen(
         profileLibraryModel.consumeDeletionCompletion(completion.id)
     }
 
-    LaunchedEffect(profileLibraryState.transferCompletion?.id) {
-        val completion = profileLibraryState.transferCompletion ?: return@LaunchedEffect
-        when (completion.outcome) {
-            ProfileTransferOutcome.SUCCEEDED -> {
-                error = null
-                notice = if (completion.direction == ProfileTransferDirection.IMPORT) {
-                    val imported = completion.importResult?.importedTotal ?: 0
-                    if (imported == 0) {
-                        profilesUnchangedNotice
-                    } else {
-                        resources.getString(R.string.profiles_imported, imported)
-                    }
-                } else {
-                    profilesExportedNotice
-                }
-            }
-            ProfileTransferOutcome.CANCELED -> {
-                error = null
-                notice = if (completion.direction == ProfileTransferDirection.IMPORT) {
-                    profileImportCanceledNotice
-                } else {
-                    profileExportCanceledNotice
-                }
-            }
-            ProfileTransferOutcome.FAILED -> {
-                notice = null
-                error = if (completion.direction == ProfileTransferDirection.IMPORT) {
-                    profileImportError
-                } else {
-                    profileExportError
-                }
-            }
-        }
-        externalProfileRequest
-            ?.takeIf { request -> request.startedOperationId == completion.id }
-            ?.let { request ->
-                onExternalProfileRequestConsumed(request.id, completion.id)
-            }
-        profileLibraryModel.consumeTransferCompletion(completion.id)
-    }
+    ProfileTransferCompletionEffect(
+        completion = profileLibraryState.transferCompletion,
+        externalRequest = externalProfileRequest,
+        onExternalConsumed = onExternalProfileRequestConsumed,
+        onConsumeCompletion = profileLibraryModel::consumeTransferCompletion,
+        onPresentation = { nextNotice, nextError ->
+            notice = nextNotice
+            error = nextError
+        },
+    )
 
     fun applyModelTransform(transform: ModelTransform, recordHistory: Boolean = true) {
         val current = projectTransferModel.state.value.history
@@ -2151,6 +2116,77 @@ private class ProfileLibraryActions(
 
     fun renameSlicing(profileId: String, name: String, options: SliceOptions) =
         accept(model.renameSlicing(profileId, name, options, sessionRevision()))
+}
+
+internal fun profileTransferSuccessNotice(
+    resources: Resources,
+    completion: ProfileTransferCompletion,
+    profilesUnchangedNotice: String,
+    profilesExportedNotice: String,
+): String {
+    if (completion.direction == ProfileTransferDirection.EXPORT) return profilesExportedNotice
+    val result = completion.importResult
+    val imported = result?.importedTotal ?: 0
+    if (imported == 0) return profilesUnchangedNotice
+    val renamed = result?.renamedConflicts ?: 0
+    return if (renamed > 0) {
+        resources.getString(
+            R.string.profiles_imported_with_renamed_conflicts,
+            imported,
+            renamed,
+        )
+    } else {
+        resources.getString(R.string.profiles_imported, imported)
+    }
+}
+
+@Composable
+private fun ProfileTransferCompletionEffect(
+    completion: ProfileTransferCompletion?,
+    externalRequest: ExternalProfileRequest?,
+    onExternalConsumed: (Long, Long) -> Boolean,
+    onConsumeCompletion: (Long) -> Unit,
+    onPresentation: (String?, String?) -> Unit,
+) {
+    val resources = LocalResources.current
+    val profilesUnchangedNotice = stringResource(R.string.profiles_unchanged)
+    val profilesExportedNotice = stringResource(R.string.profiles_exported)
+    val profileImportCanceledNotice = stringResource(R.string.profile_import_canceled)
+    val profileExportCanceledNotice = stringResource(R.string.profile_export_canceled)
+    val profileImportError = stringResource(R.string.profile_import_error)
+    val profileExportError = stringResource(R.string.profile_export_error)
+    LaunchedEffect(completion?.id) {
+        val completed = completion ?: return@LaunchedEffect
+        val presentation = when (completed.outcome) {
+            ProfileTransferOutcome.SUCCEEDED -> profileTransferSuccessNotice(
+                resources,
+                completed,
+                profilesUnchangedNotice,
+                profilesExportedNotice,
+            ) to null
+            ProfileTransferOutcome.CANCELED -> {
+                val notice = if (completed.direction == ProfileTransferDirection.IMPORT) {
+                    profileImportCanceledNotice
+                } else {
+                    profileExportCanceledNotice
+                }
+                notice to null
+            }
+            ProfileTransferOutcome.FAILED -> {
+                val error = if (completed.direction == ProfileTransferDirection.IMPORT) {
+                    profileImportError
+                } else {
+                    profileExportError
+                }
+                null to error
+            }
+        }
+        onPresentation(presentation.first, presentation.second)
+        externalRequest
+            ?.takeIf { request -> request.startedOperationId == completed.id }
+            ?.let { request -> onExternalConsumed(request.id, completed.id) }
+        onConsumeCompletion(completed.id)
+    }
 }
 
 internal fun initialWorkspaceReady(

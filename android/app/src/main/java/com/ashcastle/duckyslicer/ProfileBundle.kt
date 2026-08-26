@@ -3,6 +3,7 @@ package com.ashcastle.duckyslicer
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -16,6 +17,7 @@ internal data class ProfileBundleImportResult(
     val importedFilaments: Int,
     val importedSlicing: Int,
     val skippedDuplicates: Int,
+    val renamedConflicts: Int = 0,
 ) {
     val importedTotal: Int
         get() = importedPrinters + importedFilaments + importedSlicing
@@ -47,6 +49,7 @@ internal fun mergeProfileBundle(
     val incoming = decodeProfileBundle(bundleBytes)
 
     var skipped = 0
+    var renamedConflicts = 0
     val printers = current.printers.toMutableList()
     val printerIds = printers.mapTo(mutableSetOf(), PrinterProfile::id)
     val portablePrinters = printers.associateByTo(
@@ -56,18 +59,36 @@ internal fun mergeProfileBundle(
     val importedPrinterIds = mutableMapOf<String, String>()
     var importedPrinters = 0
     incoming.printers.forEach { source ->
-        val sanitized = source.copy(builtIn = false)
+        val sanitized = source.copy(name = source.name.trim(), builtIn = false)
         val portable = sanitized.portableProfile()
         val existing = portablePrinters[portable]
         if (existing != null) {
             importedPrinterIds[source.id] = existing.id
             skipped += 1
         } else {
-            val imported = sanitized.copy(id = importedId(sanitized.id, printerIds, newUserId))
+            val resolved = resolveImportedName(
+                source = sanitized,
+                existing = printers,
+                name = PrinterProfile::name,
+                withName = { profile, name -> profile.copy(name = name) },
+                sameSettings = { left, right ->
+                    left.copy(id = "", name = "", builtIn = false) ==
+                        right.copy(id = "", name = "", builtIn = false)
+                },
+            )
+            if (resolved.duplicate != null) {
+                importedPrinterIds[source.id] = resolved.duplicate.id
+                skipped += 1
+                return@forEach
+            }
+            val imported = resolved.profile.copy(
+                id = importedId(sanitized.id, printerIds, newUserId),
+            )
             printers += imported
             portablePrinters[portable] = imported
             importedPrinterIds[source.id] = imported.id
             importedPrinters += 1
+            if (resolved.renamed) renamedConflicts += 1
         }
     }
 
@@ -77,14 +98,32 @@ internal fun mergeProfileBundle(
     var importedFilaments = 0
     incoming.filaments.forEach { source ->
         val sanitized = source.copy(
+            name = source.name.trim(),
             builtIn = false,
             compatiblePrinters = source.compatiblePrinters.remapPrinterIds(importedPrinterIds),
         )
         if (!portableFilaments.add(sanitized.portableProfile())) {
             skipped += 1
         } else {
-            filaments += sanitized.copy(id = importedId(sanitized.id, filamentIds, newUserId))
+            val resolved = resolveImportedName(
+                source = sanitized,
+                existing = filaments,
+                name = FilamentProfile::name,
+                withName = { profile, name -> profile.copy(name = name) },
+                sameSettings = { left, right ->
+                    left.copy(id = "", name = "", builtIn = false) ==
+                        right.copy(id = "", name = "", builtIn = false)
+                },
+            )
+            if (resolved.duplicate != null) {
+                skipped += 1
+                return@forEach
+            }
+            filaments += resolved.profile.copy(
+                id = importedId(sanitized.id, filamentIds, newUserId),
+            )
             importedFilaments += 1
+            if (resolved.renamed) renamedConflicts += 1
         }
     }
 
@@ -94,14 +133,32 @@ internal fun mergeProfileBundle(
     var importedSlicing = 0
     incoming.slicing.forEach { source ->
         val sanitized = source.copy(
+            name = source.name.trim(),
             builtIn = false,
             compatiblePrinters = source.compatiblePrinters.remapPrinterIds(importedPrinterIds),
         )
         if (!portableSlicing.add(sanitized.portableProfile())) {
             skipped += 1
         } else {
-            slicing += sanitized.copy(id = importedId(sanitized.id, slicingIds, newUserId))
+            val resolved = resolveImportedName(
+                source = sanitized,
+                existing = slicing,
+                name = QualityProfile::name,
+                withName = { profile, name -> profile.copy(name = name) },
+                sameSettings = { left, right ->
+                    left.copy(id = "", name = "", builtIn = false) ==
+                        right.copy(id = "", name = "", builtIn = false)
+                },
+            )
+            if (resolved.duplicate != null) {
+                skipped += 1
+                return@forEach
+            }
+            slicing += resolved.profile.copy(
+                id = importedId(sanitized.id, slicingIds, newUserId),
+            )
             importedSlicing += 1
+            if (resolved.renamed) renamedConflicts += 1
         }
     }
 
@@ -114,9 +171,51 @@ internal fun mergeProfileBundle(
             importedFilaments = importedFilaments,
             importedSlicing = importedSlicing,
             skippedDuplicates = skipped,
+            renamedConflicts = renamedConflicts,
         ),
     )
 }
+
+private data class ImportedNameResolution<T>(
+    val profile: T,
+    val duplicate: T? = null,
+    val renamed: Boolean = false,
+)
+
+private fun <T> resolveImportedName(
+    source: T,
+    existing: List<T>,
+    name: (T) -> String,
+    withName: (T, String) -> T,
+    sameSettings: (T, T) -> Boolean,
+): ImportedNameResolution<T> {
+    val baseName = name(source).trim()
+    val profilesByName = existing.groupBy { name(it).normalizedProfileName() }
+    if (baseName.normalizedProfileName() !in profilesByName) {
+        return ImportedNameResolution(withName(source, baseName))
+    }
+    for (suffixNumber in 2..MAX_USER_PROFILES + 1) {
+        val suffix = " ($suffixNumber)"
+        val prefix = baseName.take(MAX_PROFILE_NAME_LENGTH - suffix.length).trimEnd()
+        val candidate = "$prefix$suffix"
+        val conflicts = profilesByName[candidate.normalizedProfileName()].orEmpty()
+        if (conflicts.isEmpty()) {
+            return ImportedNameResolution(
+                profile = withName(source, candidate),
+                renamed = true,
+            )
+        }
+        conflicts.firstOrNull { sameSettings(it, source) }?.let { duplicate ->
+            return ImportedNameResolution(
+                profile = source,
+                duplicate = duplicate,
+            )
+        }
+    }
+    throw IllegalStateException("profile_bundle_name_generation_failed")
+}
+
+private fun String.normalizedProfileName(): String = trim().lowercase(Locale.ROOT)
 
 internal fun readProfileBundleBytes(
     input: InputStream,
@@ -267,6 +366,7 @@ private const val PROFILE_BUNDLE_PROFILE_SCHEMA_VERSION = USER_PROFILE_SCHEMA_VE
 private const val PROFILE_BUNDLE_BUFFER_BYTES = 64 * 1_024
 private const val USER_PROFILE_ID_PREFIX = "user-"
 private const val MAX_ID_GENERATION_ATTEMPTS = 1_024
+private const val MAX_PROFILE_NAME_LENGTH = 512
 private val PROFILE_BUNDLE_KEYS = setOf(
     "type",
     "bundleVersion",

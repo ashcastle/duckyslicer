@@ -68,7 +68,8 @@ def valid_sources() -> dict[str, str]:
             "MAX_PROFILE_BUNDLE_BYTES PROFILE_BUNDLE_KEYS PROFILE_ARRAY_KEYS "
             "parseBoundedJsonObject(bytes, MAX_PROFILE_BUNDLE_BYTES) portableProfile "
             "importedPrinterIds remapPrinterIds "
-            "importedId MAX_USER_PROFILES ProfileValidation.printer(parsed) "
+            "importedId MAX_USER_PROFILES renamedConflicts resolveImportedName "
+            "normalizedProfileName ProfileValidation.printer(parsed) "
             "ProfileValidation.filament(parsed) ProfileValidation.slicing(parsed) "
             "cancellation.throwIfRequested() copy(builtIn = false)"
         ),
@@ -160,8 +161,10 @@ def valid_sources() -> dict[str, str]:
             "ViewModelProvider(this)[ExternalProfileRequestViewModel::class.java] "
             "externalProfileModel.enqueue(intent) "
             "externalProfileModel.request.collectAsStateWithLifecycle() "
-            "request.startedOperationId == completion.id "
-            "onExternalProfileRequestConsumed(request.id, completion.id) "
+            "ProfileTransferCompletionEffect( "
+            "onExternalConsumed = onExternalProfileRequestConsumed "
+            "request.startedOperationId == completed.id "
+            "onExternalConsumed(request.id, completed.id) "
             "if (request.startedOperationId != null) return@LaunchedEffect "
             "profileLibraryModel.state.value.activeOperationId "
             "onExternalProfileRequestStarted(request.id, operationId) "
@@ -205,6 +208,9 @@ def valid_sources() -> dict[str, str]:
         "ProfileBundleTest.kt": (
             "bundleRoundTripCarriesOnlyUserProfilesAndRepeatImportIsStable "
             "changedProfileWithCollidingIdentityReceivesANewUserIdentity "
+            "conflictingNamesAreRenamedAndRepeatImportRemainsStable "
+            "nameConflictsInsideOneBundleAreResolvedWithoutDroppingSettings "
+            "conflictSuffixKeepsMaximumLengthNamesValid "
             "malformedOrFutureBundleNeverChangesSavedProfiles "
             "unknownPerProfileFieldsAreDiscardedBeforeTheAtomicWrite "
             "providerInputIsBoundedAndHonorsCancellation "
@@ -350,8 +356,10 @@ def valid_sources() -> dict[str, str]:
         ),
         "PROFILE_BUNDLE_FORMAT.md": (
             "`.duckyprofiles` application/vnd.duckyslicer.profiles+json "
-            '"bundleVersion": 1 "profileSchemaVersion": 23 '
-            "exact profile duplicates are skipped additive and atomic 24 MiB 4,096 "
+            '"bundleVersion": 1 "profileSchemaVersion": 102 '
+            "exact profile duplicates are skipped "
+            "profile names are trimmed and compared case-insensitively `Name (2)` "
+            "recognizes an earlier conflict-adjusted copy additive and atomic 24 MiB 4,096 "
             "does not contain projects remote printer addresses `content://` "
             "Web, `file://`, unrelated JSON, and unrelated binary"
         ),
@@ -578,6 +586,24 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "out-of-scope data"):
             verify_resilience(sources)
 
+    def test_rejects_profile_bundle_without_conflict_safe_name_resolution(self) -> None:
+        sources = valid_sources()
+        sources["ProfileBundle.kt"] = sources["ProfileBundle.kt"].replace(
+            "resolveImportedName",
+            "reuse ambiguous imported name",
+        )
+        with self.assertRaisesRegex(VerificationError, "profile portability boundary"):
+            verify_resilience(sources)
+
+    def test_rejects_stale_public_profile_schema_documentation(self) -> None:
+        sources = valid_sources()
+        sources["PROFILE_BUNDLE_FORMAT.md"] = sources["PROFILE_BUNDLE_FORMAT.md"].replace(
+            '"profileSchemaVersion": 102',
+            '"profileSchemaVersion": 23',
+        )
+        with self.assertRaisesRegex(VerificationError, "public profile-bundle contract"):
+            verify_resilience(sources)
+
     def test_rejects_profile_transfer_without_provider_cancellation(self) -> None:
         sources = valid_sources()
         sources["ProfileLibraryViewModel.kt"] = sources["ProfileLibraryViewModel.kt"].replace(
@@ -596,8 +622,17 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
     def test_rejects_external_profile_request_consumed_without_operation_identity(self) -> None:
         sources = valid_sources()
         sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
-            "request.startedOperationId == completion.id",
+            "request.startedOperationId == completed.id",
             "request.uri != null",
+        )
+        with self.assertRaisesRegex(VerificationError, "external profile Activity contract"):
+            verify_resilience(sources)
+
+    def test_rejects_external_profile_consumer_not_bound_to_the_retained_owner(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "onExternalConsumed = onExternalProfileRequestConsumed",
+            "onExternalConsumed = { _, _ -> true }",
         )
         with self.assertRaisesRegex(VerificationError, "external profile Activity contract"):
             verify_resilience(sources)

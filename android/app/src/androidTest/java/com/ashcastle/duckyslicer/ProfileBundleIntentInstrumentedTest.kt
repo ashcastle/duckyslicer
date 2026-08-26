@@ -27,6 +27,28 @@ class ProfileBundleIntentInstrumentedTest {
     val blockingProviderProcess = BlockingProviderProcessRule()
 
     @Test
+    fun conflictingImportNoticeReportsAdjustedNames() {
+        val resources = InstrumentationRegistry.getInstrumentation().targetContext.resources
+        val completion = ProfileTransferCompletion(
+            id = 1L,
+            direction = ProfileTransferDirection.IMPORT,
+            outcome = ProfileTransferOutcome.SUCCEEDED,
+            importResult = ProfileBundleImportResult(
+                importedPrinters = 1,
+                importedFilaments = 1,
+                importedSlicing = 1,
+                skippedDuplicates = 0,
+                renamedConflicts = 2,
+            ),
+        )
+
+        assertEquals(
+            resources.getString(R.string.profiles_imported_with_renamed_conflicts, 3, 2),
+            profileTransferSuccessNotice(resources, completion, "unchanged", "exported"),
+        )
+    }
+
+    @Test
     fun externalProfileRequestBindsOneOperationAndRestoresAsRetryableAfterProcessLoss() {
         val intent = Intent(Intent.ACTION_VIEW)
             .setDataAndType(

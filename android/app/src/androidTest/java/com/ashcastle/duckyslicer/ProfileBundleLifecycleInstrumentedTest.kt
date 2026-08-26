@@ -203,11 +203,60 @@ class ProfileBundleLifecycleInstrumentedTest {
         }
     }
 
-    private fun profileBundleFixture(name: String): File {
+    @Test
+    fun providerBackedImportRenamesAConflictingProfileWithoutReplacingEitherVersion() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        resetTargetProfiles()
+        val targetStore = ProfileStore(context)
+        targetStore.saveFilament("Conflict material", SliceOptions())
+        val fixture = profileBundleFixture(
+            "conflict material",
+            SliceOptions().copy(nozzleTemp = 237, flowRatio = 0.96f),
+        )
+        prepareImport(BlockingImportProvider.METHOD_PREPARE, fixture)
+        try {
+            launchHarness().use { scenario ->
+                lateinit var retained: ProfileLibraryViewModel
+                scenario.onActivity { activity ->
+                    retained = ViewModelProvider(activity)[ProfileLibraryViewModel::class.java]
+                }
+                waitUntil("profile library did not load") {
+                    retained.state.value.catalogLoaded && !retained.state.value.busy
+                }
+                scenario.onActivity {
+                    assertTrue(retained.importBundle(BlockingImportProvider.URI))
+                }
+                waitForImportProvider { it.getBoolean(BlockingImportProvider.KEY_STARTED) }
+                releaseImportProvider()
+                waitUntil("conflicting profile import did not finish") {
+                    retained.state.value.transferCompletion?.outcome ==
+                        ProfileTransferOutcome.SUCCEEDED
+                }
+
+                val result = requireNotNull(
+                    retained.state.value.transferCompletion?.importResult,
+                )
+                assertEquals(1, result.importedTotal)
+                assertEquals(1, result.renamedConflicts)
+                val stored = ProfileStore(context).load().filaments.filterNot { it.builtIn }
+                assertEquals(2, stored.size)
+                assertEquals(220, stored.single { it.name == "Conflict material" }.nozzleTemp)
+                val imported = stored.single { it.name == "conflict material (2)" }
+                assertEquals(237, imported.nozzleTemp)
+                assertEquals(0.96f, imported.flowRatio)
+            }
+        } finally {
+            releaseImportProvider()
+            fixture.parentFile?.deleteRecursively()
+            resetTargetProfiles()
+        }
+    }
+
+    private fun profileBundleFixture(name: String, options: SliceOptions = SliceOptions()): File {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val directory = context.cacheDir.resolve("profile-bundle-${UUID.randomUUID()}")
         val source = ProfileStore(directory.resolve("user_profiles.json"))
-        source.saveFilament(name, SliceOptions())
+        source.saveFilament(name, options)
         return directory.resolve("fixture$PROFILE_BUNDLE_FILE_EXTENSION").apply {
             writeBytes(source.exportBundle())
         }

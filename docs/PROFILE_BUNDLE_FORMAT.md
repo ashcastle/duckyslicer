@@ -12,7 +12,7 @@ The top-level object contains exactly four fields:
 {
   "type": "com.ashcastle.duckyslicer.user-profiles",
   "bundleVersion": 1,
-  "profileSchemaVersion": 23,
+  "profileSchemaVersion": 102,
   "profiles": {
     "printers": [],
     "filaments": [],
@@ -30,8 +30,8 @@ Quality, Strength, Speed, Support, and Others process settings exposed by the ap
 The serializers and validators in `ProfileStore.kt` are the authoritative field
 definitions.
 
-Exports currently write profile schema 23. Bundle version 1 accepts supported profile
-schemas 1 through 23 and applies the same safe defaults used for an older private
+Exports currently write profile schema 102. Bundle version 1 accepts supported profile
+schemas 1 through 102 and applies the same safe defaults used for an older private
 profile store. A future bundle envelope or profile schema is rejected until an
 explicit migration is implemented.
 
@@ -46,6 +46,11 @@ re-encoding; unknown envelope fields are rejected.
 Import is additive and atomic:
 
 - exact profile duplicates are skipped;
+- profile names are trimmed and compared case-insensitively;
+- different profiles with the same name are preserved under the next available
+  suffix, such as `Name (2)`, and the import result reports how many names changed;
+- importing that same bundle again recognizes an earlier conflict-adjusted copy and
+  skips it instead of creating another suffix;
 - an incoming profile whose ID belongs to different content receives a new user ID;
 - if an imported printer ID changes, references from imported filament and slicing
   profiles are changed to that same printer ID;
