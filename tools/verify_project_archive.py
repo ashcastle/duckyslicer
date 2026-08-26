@@ -34,6 +34,7 @@ GCODE_MIME_TYPES = {
     "application/gcode",
 }
 PROJECT_MIME_TYPES = {"application/vnd.duckyslicer.project+zip"}
+PROFILE_MIME_TYPES = {"application/vnd.duckyslicer.profiles+json"}
 REQUIRED_STRINGS = {
     "cancel_project_import",
     "canceling_project_import",
@@ -734,12 +735,13 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         )
     expected_send_filters = [
         (expected_category, set(), PROJECT_MIME_TYPES, set(), set()),
+        (expected_category, set(), PROFILE_MIME_TYPES, set(), set()),
         (expected_category, set(), GCODE_MIME_TYPES, set(), set()),
         (expected_category, set(), MODEL_MIME_TYPES, set(), set()),
     ]
     if send_filters != expected_send_filters:
         raise VerificationError(
-            "AndroidManifest.xml must expose only explicit project, G-code, and model MIME SEND filters"
+            "AndroidManifest.xml must expose only explicit project, profile, G-code, and model MIME SEND filters"
         )
 
     main = sources["MainActivity.kt"]

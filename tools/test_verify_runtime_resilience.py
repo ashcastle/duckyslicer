@@ -75,7 +75,8 @@ def valid_sources() -> dict[str, str]:
             "cancellation.throwIfRequested() copy(builtIn = false)"
         ),
         "ProfileOpenRequest.kt": (
-            "intent.action != Intent.ACTION_VIEW ContentResolver.SCHEME_CONTENT "
+            "Intent.ACTION_VIEW Intent.ACTION_SEND sharedDocumentUriOrNull(intent) "
+            "ContentResolver.SCHEME_CONTENT "
             "PROFILE_BUNDLE_MIME_TYPE PROFILE_BUNDLE_FILE_EXTENSION "
             "PROFILE_BUNDLE_COMPATIBLE_MIME_TYPES application/json application/octet-stream "
             "class ExternalProfileRequestViewModel( SavedStateHandle "
@@ -305,8 +306,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "ProfileBundleIntentInstrumentedTest.kt": (
             "externalProfileRequestBindsOneOperationAndRestoresAsRetryableAfterProcessLoss "
-            "profileViewIntentRejectsNetworkFileAndUnrelatedDocuments "
-            "customProfileIntentSurvivesRecreationAndImportsExactlyOnce "
+            "profileDocumentIntentsAcceptOneContentStreamAndRejectUnsafeDocuments "
+            "sharedProfileIntentSurvivesRecreationAndImportsExactlyOnce "
+            "Intent.ACTION_SEND Intent.EXTRA_STREAM ClipData.newRawUri "
             "BlockingImportProvider.PROFILE_URI assertSame( scenario.recreate() "
             "retainedRequest.request.value == null"
         ),
@@ -385,6 +387,7 @@ def valid_sources() -> dict[str, str]:
             "profile names are trimmed and compared case-insensitively `Name (2)` "
             "recognizes an earlier conflict-adjusted copy additive and atomic 24 MiB 4,096 "
             "does not contain projects remote printer addresses `content://` "
+            "another app's Share sheet "
             "Web, `file://`, unrelated JSON, and unrelated binary"
         ),
         "strings.xml": (
@@ -657,6 +660,14 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         sources = valid_sources()
         sources["ProfileOpenRequest.kt"] += " https://example.invalid/profiles.duckyprofiles"
         with self.assertRaisesRegex(VerificationError, "unsafe surface"):
+            verify_resilience(sources)
+
+    def test_rejects_shared_profile_without_single_stream_parser(self) -> None:
+        sources = valid_sources()
+        sources["ProfileOpenRequest.kt"] = sources["ProfileOpenRequest.kt"].replace(
+            "sharedDocumentUriOrNull(intent)", "intent.data",
+        )
+        with self.assertRaisesRegex(VerificationError, "external profile-document boundary"):
             verify_resilience(sources)
 
     def test_rejects_external_profile_request_consumed_without_operation_identity(self) -> None:

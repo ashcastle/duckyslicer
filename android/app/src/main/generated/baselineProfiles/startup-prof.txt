@@ -943,7 +943,7 @@ HSPLcom/ashcastle/duckyslicer/ProfileLibraryViewModel;->recordSelection(Lcom/ash
 HSPLcom/ashcastle/duckyslicer/ProfileLibraryViewModel;->scheduleRecentPersistenceLocked$default(Lcom/ashcastle/duckyslicer/ProfileLibraryViewModel;Lcom/ashcastle/duckyslicer/ProfileRecents;JJILjava/lang/Object;)V
 HSPLcom/ashcastle/duckyslicer/ProfileLibraryViewModel;->scheduleRecentPersistenceLocked(Lcom/ashcastle/duckyslicer/ProfileRecents;JJ)V
 HSPLcom/ashcastle/duckyslicer/ProfileOpenRequestKt;-><clinit>()V
-HSPLcom/ashcastle/duckyslicer/ProfileOpenRequestKt;->profileBundleViewUriOrNull(Landroid/content/Intent;)Landroid/net/Uri;
+HSPLcom/ashcastle/duckyslicer/ProfileOpenRequestKt;->profileBundleDocumentUriOrNull(Landroid/content/Intent;)Landroid/net/Uri;
 HSPLcom/ashcastle/duckyslicer/ProfileRecentStore$load$result$1;-><init>(Ljava/lang/Object;)V
 HSPLcom/ashcastle/duckyslicer/ProfileRecentStore$load$result$1;->invoke(Ljava/lang/Object;)Ljava/lang/Object;
 HSPLcom/ashcastle/duckyslicer/ProfileRecentStore$load$result$1;->invoke(Lorg/json/JSONObject;)Lcom/ashcastle/duckyslicer/ProfileRecents;

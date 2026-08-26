@@ -72,8 +72,9 @@ remote printer addresses, OctoPrint or Moonraker access keys, or other credentia
 The JSON is neither signed nor encrypted; inspect a file before importing it if its
 origin is not trusted.
 
-On Android, a bundle can be selected from DuckySlicer's menu or opened from Files.
-External opening accepts only a granted `content://` URI with the custom MIME type,
+On Android, a bundle can be selected from DuckySlicer's menu, opened from Files, or
+sent from another app's Share sheet with the custom MIME type. External opening accepts
+only one granted `content://` URI with the custom MIME type,
 or a `.duckyprofiles` name reported as `application/json` or
 `application/octet-stream`. Web, `file://`, unrelated JSON, and unrelated binary
 documents are not accepted. Rotation retains the exact import; if the app process is

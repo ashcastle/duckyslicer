@@ -479,7 +479,9 @@ def verify_resilience(sources: dict[str, str]) -> None:
 
     profile_open = sources["ProfileOpenRequest.kt"]
     for marker in (
-        "intent.action != Intent.ACTION_VIEW",
+        "Intent.ACTION_VIEW",
+        "Intent.ACTION_SEND",
+        "sharedDocumentUriOrNull(intent)",
         "ContentResolver.SCHEME_CONTENT",
         "PROFILE_BUNDLE_MIME_TYPE",
         "PROFILE_BUNDLE_FILE_EXTENSION",
@@ -524,8 +526,11 @@ def verify_resilience(sources: dict[str, str]) -> None:
     profile_intent_test = sources["ProfileBundleIntentInstrumentedTest.kt"]
     for marker in (
         "externalProfileRequestBindsOneOperationAndRestoresAsRetryableAfterProcessLoss",
-        "profileViewIntentRejectsNetworkFileAndUnrelatedDocuments",
-        "customProfileIntentSurvivesRecreationAndImportsExactlyOnce",
+        "profileDocumentIntentsAcceptOneContentStreamAndRejectUnsafeDocuments",
+        "sharedProfileIntentSurvivesRecreationAndImportsExactlyOnce",
+        "Intent.ACTION_SEND",
+        "Intent.EXTRA_STREAM",
+        "ClipData.newRawUri",
         "BlockingImportProvider.PROFILE_URI",
         "assertSame(",
         "scenario.recreate()",
@@ -550,6 +555,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "does not contain projects",
         "remote printer addresses",
         "`content://`",
+        "another app's Share sheet",
         "Web, `file://`, unrelated JSON, and unrelated binary",
     ):
         if marker not in profile_format:

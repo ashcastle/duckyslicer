@@ -300,6 +300,11 @@ def _expected_main_filters() -> set[
         (
             ("android.intent.action.SEND",),
             ("android.intent.category.DEFAULT",),
+            ((("mimeType", "application/vnd.duckyslicer.profiles+json"),),),
+        ),
+        (
+            ("android.intent.action.SEND",),
+            ("android.intent.category.DEFAULT",),
             tuple(
                 sorted(
                     (

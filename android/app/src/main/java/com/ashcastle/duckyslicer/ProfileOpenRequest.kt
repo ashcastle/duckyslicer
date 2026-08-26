@@ -16,9 +16,13 @@ internal data class ExternalProfileRequest(
     val startedOperationId: Long? = null,
 )
 
-internal fun profileBundleViewUriOrNull(intent: Intent): Uri? {
-    if (intent.action != Intent.ACTION_VIEW) return null
-    val uri = intent.data ?: return null
+internal fun profileBundleDocumentUriOrNull(intent: Intent): Uri? {
+    if (intent.action != Intent.ACTION_VIEW && intent.action != Intent.ACTION_SEND) return null
+    val uri = when (intent.action) {
+        Intent.ACTION_VIEW -> intent.data
+        Intent.ACTION_SEND -> sharedDocumentUriOrNull(intent)
+        else -> null
+    } ?: return null
     if (!uri.scheme.equals(ContentResolver.SCHEME_CONTENT, ignoreCase = true)) return null
     val mimeType = intent.type
         ?.substringBefore(';')
@@ -55,7 +59,7 @@ internal class ExternalProfileRequestViewModel(
     val request: StateFlow<ExternalProfileRequest?> = mutableRequest.asStateFlow()
 
     fun enqueue(intent: Intent): Boolean {
-        val uri = profileBundleViewUriOrNull(intent) ?: return false
+        val uri = profileBundleDocumentUriOrNull(intent) ?: return false
         nextRequestId += 1L
         savedStateHandle[KEY_NEXT_REQUEST_ID] = nextRequestId
         savedStateHandle[KEY_REQUEST_ID] = nextRequestId

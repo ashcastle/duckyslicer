@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -50,11 +51,11 @@ class ProfileBundleIntentInstrumentedTest {
 
     @Test
     fun externalProfileRequestBindsOneOperationAndRestoresAsRetryableAfterProcessLoss() {
-        val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(
-                Uri.parse("content://example/Download/profiles.duckyprofiles"),
-                PROFILE_BUNDLE_MIME_TYPE,
-            )
+        val sharedUri = Uri.parse("content://example/Download/profiles.duckyprofiles")
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = PROFILE_BUNDLE_MIME_TYPE
+            putExtra(Intent.EXTRA_STREAM, sharedUri)
+        }
         val savedState = SavedStateHandle()
         val retained = ExternalProfileRequestViewModel(savedState)
 
@@ -82,7 +83,7 @@ class ProfileBundleIntentInstrumentedTest {
     }
 
     @Test
-    fun profileViewIntentRejectsNetworkFileAndUnrelatedDocuments() {
+    fun profileDocumentIntentsAcceptOneContentStreamAndRejectUnsafeDocuments() {
         val custom = Intent(Intent.ACTION_VIEW).setDataAndType(
             Uri.parse("content://example/document/no-extension"),
             PROFILE_BUNDLE_MIME_TYPE,
@@ -111,21 +112,55 @@ class ProfileBundleIntentInstrumentedTest {
             Uri.parse("content://example/Download/profiles.duckyprofiles"),
             "text/plain",
         )
+        val sharedUri = Uri.parse("content://example/Share/profiles.duckyprofiles")
+        val shared = Intent(Intent.ACTION_SEND).apply {
+            type = PROFILE_BUNDLE_MIME_TYPE
+            putExtra(Intent.EXTRA_STREAM, sharedUri)
+        }
+        val sharedByClip = Intent(Intent.ACTION_SEND).apply {
+            type = PROFILE_BUNDLE_MIME_TYPE
+            clipData = ClipData.newRawUri("profiles.duckyprofiles", sharedUri)
+        }
+        val conflictingShare = Intent(shared).apply {
+            clipData = ClipData.newRawUri(
+                "other.duckyprofiles",
+                Uri.parse("content://example/Share/other.duckyprofiles"),
+            )
+        }
+        val multipleShare = Intent(Intent.ACTION_SEND).apply {
+            type = PROFILE_BUNDLE_MIME_TYPE
+            clipData = ClipData.newRawUri("profiles.duckyprofiles", sharedUri).apply {
+                addItem(ClipData.Item(Uri.parse("content://example/Share/other.duckyprofiles")))
+            }
+        }
+        val networkShare = Intent(Intent.ACTION_SEND).apply {
+            type = PROFILE_BUNDLE_MIME_TYPE
+            putExtra(
+                Intent.EXTRA_STREAM,
+                Uri.parse("https://example.invalid/profiles.duckyprofiles"),
+            )
+        }
 
-        assertEquals(custom.data, profileBundleViewUriOrNull(custom))
-        assertEquals(compatible.data, profileBundleViewUriOrNull(compatible))
+        assertEquals(custom.data, profileBundleDocumentUriOrNull(custom))
+        assertEquals(compatible.data, profileBundleDocumentUriOrNull(compatible))
         assertEquals(
             compatibleWithParameter.data,
-            profileBundleViewUriOrNull(compatibleWithParameter),
+            profileBundleDocumentUriOrNull(compatibleWithParameter),
         )
-        assertNull(profileBundleViewUriOrNull(network))
-        assertNull(profileBundleViewUriOrNull(file))
-        assertNull(profileBundleViewUriOrNull(unrelatedName))
-        assertNull(profileBundleViewUriOrNull(unrelatedType))
+        assertEquals(sharedUri, profileBundleDocumentUriOrNull(shared))
+        assertEquals(sharedUri, profileBundleDocumentUriOrNull(sharedByClip))
+        assertNull(profileBundleDocumentUriOrNull(conflictingShare))
+        assertNull(profileBundleDocumentUriOrNull(multipleShare))
+        assertNull(profileBundleDocumentUriOrNull(networkShare))
+        assertNull(profileBundleDocumentUriOrNull(network))
+        assertNull(profileBundleDocumentUriOrNull(file))
+        assertNull(profileBundleDocumentUriOrNull(unrelatedName))
+        assertNull(profileBundleDocumentUriOrNull(unrelatedType))
 
         val packageManager = InstrumentationRegistry.getInstrumentation().targetContext.packageManager
         assertTrue(packageManager.resolvesMainActivity(custom))
         assertTrue(packageManager.resolvesMainActivity(compatible))
+        assertTrue(packageManager.resolvesMainActivity(shared))
         assertFalse(packageManager.resolvesMainActivity(network))
         assertFalse(packageManager.resolvesMainActivity(file))
         assertFalse(packageManager.resolvesMainActivity(unrelatedName))
@@ -133,18 +168,24 @@ class ProfileBundleIntentInstrumentedTest {
     }
 
     @Test
-    fun customProfileIntentSurvivesRecreationAndImportsExactlyOnce() {
+    fun sharedProfileIntentSurvivesRecreationAndImportsExactlyOnce() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
-        val importedName = "Files intent filament ${UUID.randomUUID()}"
+        val importedName = "Share intent filament ${UUID.randomUUID()}"
         val fixture = profileBundleFixture(importedName)
         resetTargetProfiles()
         prepareImport(fixture)
         try {
-            val intent = Intent(Intent.ACTION_VIEW)
-                .setPackage(context.packageName)
-                .setDataAndType(BlockingImportProvider.PROFILE_URI, PROFILE_BUNDLE_MIME_TYPE)
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                setPackage(context.packageName)
+                type = PROFILE_BUNDLE_MIME_TYPE
+                putExtra(Intent.EXTRA_STREAM, BlockingImportProvider.PROFILE_URI)
+                clipData = ClipData.newRawUri(
+                    "profiles.duckyprofiles",
+                    BlockingImportProvider.PROFILE_URI,
+                )
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
             ActivityScenario.launch<MainActivity>(intent).use { scenario ->
                 lateinit var retainedProfiles: ProfileLibraryViewModel
                 lateinit var retainedRequest: ExternalProfileRequestViewModel
@@ -172,7 +213,7 @@ class ProfileBundleIntentInstrumentedTest {
                 }
 
                 releaseImportProvider()
-                waitUntil("profile opened from Files was not committed") {
+                waitUntil("profile shared from another app was not committed") {
                     ProfileStore(context).load().filaments.count { it.name == importedName } == 1
                 }
                 waitUntil("completed external profile request was not consumed") {

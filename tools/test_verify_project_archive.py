@@ -524,6 +524,9 @@ def valid_sources() -> dict[str, str]:
             '<data android:mimeType="application/vnd.duckyslicer.project+zip" /></intent-filter>'
             '<intent-filter><action android:name="android.intent.action.SEND" />'
             '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="application/vnd.duckyslicer.profiles+json" /></intent-filter>'
+            '<intent-filter><action android:name="android.intent.action.SEND" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
             '<data android:mimeType="text/x.gcode" />'
             '<data android:mimeType="application/x-gcode" />'
             '<data android:mimeType="application/gcode" /></intent-filter>'
@@ -671,7 +674,7 @@ class VerifyProjectArchiveTest(unittest.TestCase):
             '<category android:name="android.intent.category.DEFAULT" />'
             '<data android:mimeType="*/*" /></intent-filter></activity>',
         )
-        with self.assertRaisesRegex(VerificationError, "explicit project, G-code, and model MIME SEND"):
+        with self.assertRaisesRegex(VerificationError, "explicit project, profile, G-code, and model MIME SEND"):
             verify_project_archive(sources)
 
     def test_rejects_missing_project_send_filter(self) -> None:
@@ -682,7 +685,18 @@ class VerifyProjectArchiveTest(unittest.TestCase):
             '<data android:mimeType="application/vnd.duckyslicer.project+zip" /></intent-filter>',
             "",
         )
-        with self.assertRaisesRegex(VerificationError, "explicit project, G-code, and model MIME SEND"):
+        with self.assertRaisesRegex(VerificationError, "explicit project, profile, G-code, and model MIME SEND"):
+            verify_project_archive(sources)
+
+    def test_rejects_missing_profile_send_filter(self) -> None:
+        sources = valid_sources()
+        sources["AndroidManifest.xml"] = sources["AndroidManifest.xml"].replace(
+            '<intent-filter><action android:name="android.intent.action.SEND" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="application/vnd.duckyslicer.profiles+json" /></intent-filter>',
+            "",
+        )
+        with self.assertRaisesRegex(VerificationError, "explicit project, profile, G-code, and model MIME SEND"):
             verify_project_archive(sources)
 
     def test_rejects_project_share_without_single_stream_parser(self) -> None:
@@ -703,7 +717,7 @@ class VerifyProjectArchiveTest(unittest.TestCase):
             '<data android:mimeType="application/gcode" /></intent-filter>',
             "",
         )
-        with self.assertRaisesRegex(VerificationError, "explicit project, G-code, and model MIME SEND"):
+        with self.assertRaisesRegex(VerificationError, "explicit project, profile, G-code, and model MIME SEND"):
             verify_project_archive(sources)
 
     def test_rejects_missing_single_top_delivery(self) -> None:
