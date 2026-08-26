@@ -337,11 +337,21 @@ internal class ProjectStore(
                 }
             })
         }
+        val linkedDocument = if (schemaVersion >= 79 && !root.isNull("linkedDocument")) {
+            val value = root.getJSONObject("linkedDocument")
+            normalizedLinkedProjectDocument(
+                uri = value.getString("uri"),
+                displayName = value.getString("displayName"),
+            ) ?: error("Invalid linked project document")
+        } else {
+            null
+        }
         return StoredProject(
             document = StoredProjectDocument(
                 snapshot = snapshot,
                 sliceOptions = plateOptions[snapshot.selectedPlateId],
                 plateOptions = plateOptions,
+                linkedDocument = linkedDocument,
             ),
             declaredModels = declaredModels,
         )
@@ -354,7 +364,11 @@ internal class ProjectStore(
     )
 
     @Synchronized
-    fun save(snapshot: ProjectSnapshot, plateOptions: Map<String, SliceOptions>) {
+    fun save(
+        snapshot: ProjectSnapshot,
+        plateOptions: Map<String, SliceOptions>,
+        linkedDocument: LinkedProjectDocument? = null,
+    ) {
         require(snapshot.allObjects.size <= MAX_PROJECT_OBJECTS) { "Project has too many objects" }
         require(snapshot.allObjects.map(ProjectObject::id).toSet().size == snapshot.allObjects.size) {
             "Project contains duplicate object ids"
@@ -386,6 +400,14 @@ internal class ProjectStore(
         val root = JSONObject()
             .put("schemaVersion", SCHEMA_VERSION)
             .put("selectedPlateId", snapshot.selectedPlateId)
+            .put(
+                "linkedDocument",
+                linkedDocument?.let { link ->
+                    JSONObject()
+                        .put("uri", link.uri)
+                        .put("displayName", link.displayName)
+                } ?: JSONObject.NULL,
+            )
             .put(
                 "plates",
                 JSONArray().also { values ->
@@ -663,6 +685,18 @@ internal class ProjectStore(
             require(selected == null || selected in ids)
             if (schemaVersion >= 2 && root.has("sliceOptions")) {
                 require(root.optJSONObject("sliceOptions")?.toProjectSliceOptionsOrNull() != null)
+            }
+        }
+        if (schemaVersion >= 79) {
+            require(root.has("linkedDocument"))
+            if (!root.isNull("linkedDocument")) {
+                val value = root.getJSONObject("linkedDocument")
+                require(
+                    normalizedLinkedProjectDocument(
+                        uri = value.getString("uri"),
+                        displayName = value.getString("displayName"),
+                    ) != null,
+                )
             }
         }
         root
@@ -1105,7 +1139,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 78
+        const val SCHEMA_VERSION = 79
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"
@@ -1137,6 +1171,7 @@ internal data class StoredProjectDocument(
     val plateOptions: Map<String, SliceOptions> = snapshot.plates.associate { plate ->
         plate.id to (sliceOptions ?: SliceOptions())
     },
+    val linkedDocument: LinkedProjectDocument? = null,
     val storageUnavailable: Boolean = false,
 ) {
     val activeSliceOptions: SliceOptions

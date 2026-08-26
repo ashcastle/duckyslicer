@@ -4,11 +4,13 @@ import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.res.AssetFileDescriptor;
 import android.database.Cursor;
+import android.database.MatrixCursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.OperationCanceledException;
 import android.os.ParcelFileDescriptor;
+import android.provider.OpenableColumns;
 
 import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
@@ -55,7 +57,21 @@ public final class BlockingExportProvider extends ContentProvider {
             String[] selectionArgs,
             String sortOrder
     ) {
-        return null;
+        String[] columns = projection == null
+                ? new String[]{OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE}
+                : projection;
+        MatrixCursor cursor = new MatrixCursor(columns, 1);
+        MatrixCursor.RowBuilder row = cursor.newRow();
+        for (String column : columns) {
+            if (OpenableColumns.DISPLAY_NAME.equals(column)) {
+                row.add("Linked-project.duckyproject");
+            } else if (OpenableColumns.SIZE.equals(column)) {
+                row.add(current.bytes);
+            } else {
+                row.add(null);
+            }
+        }
+        return cursor;
     }
 
     @Override

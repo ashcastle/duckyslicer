@@ -745,6 +745,9 @@
     <string name="new_project_started">New project started.</string>
     <string name="open_project">Open project</string>
     <string name="save_project">Save project</string>
+    <string name="save_project_as">Save project as…</string>
+    <string name="project_save_options">Project save options</string>
+    <string name="linked_project_file">File: %1$s</string>
     <string name="replace_project_title">Open another project?</string>
     <string name="replace_project_body">Your current project will be replaced. Save it first if you want to keep it.</string>
     <string name="project_opened">Project opened.</string>

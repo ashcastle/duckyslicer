@@ -589,6 +589,7 @@ private fun WorkspaceAccessibilityHarness(
         projectImporting = projectImporting,
         projectExporting = projectExporting,
         projectTransferCancellationRequested = false,
+        linkedProjectName = null,
         slicing = slicing,
         sliceCancellationRequested = false,
         sliceProgress = sliceProgress,

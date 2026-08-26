@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.ReportDrawnWhen
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -391,6 +392,301 @@ private fun addEmptyProjectPlate(
     return true
 }
 
+private fun saveProjectDocument(
+    projectTransferModel: ProjectTransferViewModel,
+    documentPicker: ActivityResultLauncher<String>,
+    saveAs: Boolean,
+) {
+    val current = projectTransferModel.state.value
+    if (saveAs) {
+        documentPicker.launch(
+            current.linkedDocument?.displayName ?: DEFAULT_PROJECT_ARCHIVE_NAME,
+        )
+        return
+    }
+    val started = projectTransferModel.saveLinkedProject(
+        current.history.current,
+        current.plateOptions,
+    )
+    val latest = projectTransferModel.state.value
+    if (
+        !started && !latest.busy &&
+        latest.completion == null && latest.editCompletion == null
+    ) {
+        documentPicker.launch(
+            current.linkedDocument?.displayName ?: DEFAULT_PROJECT_ARCHIVE_NAME,
+        )
+    }
+}
+
+private fun projectSaveAction(
+    projectTransferModel: ProjectTransferViewModel,
+    documentPicker: ActivityResultLauncher<String>,
+): (Boolean) -> Unit = { saveAs ->
+    saveProjectDocument(projectTransferModel, documentPicker, saveAs)
+}
+
+private class FacetPaintActions(
+    private val projectTransferModel: ProjectTransferViewModel,
+    private val onPreviewChanged: () -> Unit,
+) {
+    fun previewSupport(
+        objectId: String,
+        volumeId: String,
+        targets: List<FacetPaintTarget>,
+        state: SupportPaintState?,
+    ) {
+        val current = projectTransferModel.state.value.history
+        val projectObject = current.current.objects.firstOrNull { it.id == objectId }
+        val volume = projectObject?.volumes?.firstOrNull { it.id == volumeId }
+        if (
+            volume?.role?.acceptsFacetPaint == true &&
+            targets.isNotEmpty() &&
+            targets.all { it.facetIndex in 0 until volume.model.triangles }
+        ) {
+            val previousAnnotation = volume.orcaFacetAnnotations.support
+            val nextAnnotation = previousAnnotation.paintAll(
+                targets,
+                state?.code ?: 0,
+            ) { facetIndex ->
+                volume.supportPaint.facets[facetIndex]?.code ?: 0
+            }
+            val nextPaint = exactPaintFacetsToClear(
+                previousAnnotation,
+                nextAnnotation,
+                targets,
+            ).fold(volume.supportPaint) { paint, facetIndex ->
+                paint.paint(facetIndex, null)
+            }
+            val nextHistory = current.updateExactSupportPaint(
+                objectId,
+                volumeId,
+                nextPaint,
+                nextAnnotation,
+                recordHistory = false,
+            )
+            if (
+                nextHistory != current &&
+                projectTransferModel.updateHistory(current, nextHistory)
+            ) {
+                onPreviewChanged()
+            }
+        }
+    }
+
+    fun commitSupport(
+        objectId: String,
+        volumeId: String,
+        previousPaint: SupportPaint,
+        previousAnnotation: OrcaFacetAnnotation,
+    ) {
+        val current = projectTransferModel.state.value.history
+        projectTransferModel.updateHistory(
+            current,
+            current.commitExactSupportPaint(
+                objectId,
+                volumeId,
+                previousPaint,
+                previousAnnotation,
+            ),
+        )
+    }
+
+    fun previewSeam(
+        objectId: String,
+        volumeId: String,
+        targets: List<FacetPaintTarget>,
+        state: SeamPaintState?,
+    ) {
+        val current = projectTransferModel.state.value.history
+        val projectObject = current.current.objects.firstOrNull { it.id == objectId }
+        val volume = projectObject?.volumes?.firstOrNull { it.id == volumeId }
+        if (
+            volume?.role?.acceptsFacetPaint == true &&
+            targets.isNotEmpty() &&
+            targets.all { it.facetIndex in 0 until volume.model.triangles }
+        ) {
+            val previousAnnotation = volume.orcaFacetAnnotations.seam
+            val nextAnnotation = previousAnnotation.paintAll(
+                targets,
+                state?.code ?: 0,
+            ) { facetIndex ->
+                volume.seamPaint.facets[facetIndex]?.code ?: 0
+            }
+            val nextPaint = exactPaintFacetsToClear(
+                previousAnnotation,
+                nextAnnotation,
+                targets,
+            ).fold(volume.seamPaint) { paint, facetIndex ->
+                paint.paint(facetIndex, null)
+            }
+            val nextHistory = current.updateExactSeamPaint(
+                objectId,
+                volumeId,
+                nextPaint,
+                nextAnnotation,
+                recordHistory = false,
+            )
+            if (
+                nextHistory != current &&
+                projectTransferModel.updateHistory(current, nextHistory)
+            ) {
+                onPreviewChanged()
+            }
+        }
+    }
+
+    fun commitSeam(
+        objectId: String,
+        volumeId: String,
+        previousPaint: SeamPaint,
+        previousAnnotation: OrcaFacetAnnotation,
+    ) {
+        val current = projectTransferModel.state.value.history
+        projectTransferModel.updateHistory(
+            current,
+            current.commitExactSeamPaint(
+                objectId,
+                volumeId,
+                previousPaint,
+                previousAnnotation,
+            ),
+        )
+    }
+
+    fun previewMultiColor(
+        objectId: String,
+        volumeId: String,
+        targets: List<FacetPaintTarget>,
+        slot: Int?,
+    ) {
+        val session = projectTransferModel.state.value
+        val current = session.history
+        val projectObject = current.current.objects.firstOrNull { it.id == objectId }
+        val volume = projectObject?.volumes?.firstOrNull { it.id == volumeId }
+        val availableSlots = session.sliceOptions.resolvedFilamentSlots().indices
+        if (
+            volume != null &&
+            volume.role.acceptsFacetPaint &&
+            targets.isNotEmpty() &&
+            targets.all { it.facetIndex in 0 until volume.model.triangles } &&
+            (slot == null || slot in availableSlots)
+        ) {
+            val previousAnnotation = volume.orcaFacetAnnotations.multiColor
+            val nextAnnotation = previousAnnotation.paintAll(
+                targets,
+                slot?.plus(1) ?: 0,
+            ) { facetIndex ->
+                volume.multiColorPaint.facets[facetIndex]?.plus(1) ?: 0
+            }
+            val nextPaint = exactPaintFacetsToClear(
+                previousAnnotation,
+                nextAnnotation,
+                targets,
+            ).fold(volume.multiColorPaint) { paint, facetIndex ->
+                paint.paint(facetIndex, null)
+            }
+            val nextHistory = current.updateExactMultiColorPaint(
+                objectId,
+                volumeId,
+                nextPaint,
+                nextAnnotation,
+                recordHistory = false,
+            )
+            if (
+                nextHistory != current &&
+                projectTransferModel.updateHistory(current, nextHistory)
+            ) {
+                onPreviewChanged()
+            }
+        }
+    }
+
+    fun commitMultiColor(
+        objectId: String,
+        volumeId: String,
+        previousPaint: MultiColorPaint,
+        previousAnnotation: OrcaFacetAnnotation,
+    ) {
+        val current = projectTransferModel.state.value.history
+        projectTransferModel.updateHistory(
+            current,
+            current.commitExactMultiColorPaint(
+                objectId,
+                volumeId,
+                previousPaint,
+                previousAnnotation,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun rememberProjectDocumentCreator(
+    projectTransferModel: ProjectTransferViewModel,
+    enabled: Boolean,
+    onExportStarted: () -> Unit,
+): ActivityResultLauncher<String> = rememberLauncherForActivityResult(
+    ActivityResultContracts.CreateDocument(PROJECT_ARCHIVE_MIME_TYPE),
+) { uri ->
+    if (uri != null && enabled) {
+        val state = projectTransferModel.state.value
+        if (
+            projectTransferModel.exportProject(
+                uri,
+                state.history.current,
+                state.plateOptions,
+            )
+        ) {
+            onExportStarted()
+        }
+    }
+}
+
+@Composable
+private fun rememberModelDocumentCreator(
+    projectTransferModel: ProjectTransferViewModel,
+    enabled: Boolean,
+    onExportStarted: () -> Unit,
+): ActivityResultLauncher<String> = rememberLauncherForActivityResult(
+    ActivityResultContracts.CreateDocument(THREE_MF_DOCUMENT_MIME_TYPE),
+) { uri ->
+    if (uri != null && enabled) {
+        val state = projectTransferModel.state.value
+        val snapshot = state.history.current
+        val options = state.plateOptions[snapshot.selectedPlateId] ?: state.sliceOptions
+        if (projectTransferModel.exportThreeMf(uri, snapshot, options)) {
+            onExportStarted()
+        }
+    }
+}
+
+@Composable
+private fun ExternalProjectImportEffect(
+    request: ExternalProjectRequest?,
+    enabled: Boolean,
+    projectIsEmpty: Boolean,
+    projectTransferModel: ProjectTransferViewModel,
+    onImport: (Uri) -> Boolean,
+    onRequestStarted: (Long, Long) -> Boolean,
+    onConfirmationRequired: (ExternalProjectRequest) -> Unit,
+) {
+    LaunchedEffect(request?.id, request?.startedOperationId, enabled, projectIsEmpty) {
+        val pending = request ?: return@LaunchedEffect
+        if (pending.startedOperationId != null || !enabled) return@LaunchedEffect
+        if (projectIsEmpty) {
+            startExternalProjectImport(
+                pending,
+                projectTransferModel,
+                onImport,
+                onRequestStarted,
+            )
+        } else {
+            onConfirmationRequired(pending)
+        }
+    }
+}
+
 @Composable
 private fun DuckySlicerScreen(
     sliceOperationModel: SliceOperationViewModel,
@@ -604,6 +900,11 @@ private fun DuckySlicerScreen(
         layerPreview = null
         stalePreviewResult = null
         remoteOperationModel.invalidateUpload()
+    }
+
+    val facetPaintActions = FacetPaintActions(projectTransferModel) {
+        clearCompletedSlice()
+        notice = null
     }
 
     fun invalidateSliceAfterPreviewEdit() {
@@ -1025,75 +1326,37 @@ private fun DuckySlicerScreen(
         uri?.let(::importProject)
     }
 
-    LaunchedEffect(
-        externalProjectRequest?.id,
-        externalProjectRequest?.startedOperationId,
-        projectRestored,
-        projectHistory.current.allObjects.isNotEmpty(),
-        projectTransferBusy,
-        projectTransferState.completion?.id,
-        importing,
-        autoLaying,
-        arranging,
-        splitting,
-        cutting,
-        slicing,
-        previewLoading,
-    ) {
-        val request = externalProjectRequest ?: return@LaunchedEffect
-        if (request.startedOperationId != null) return@LaunchedEffect
-        if (
-            !projectRestored || projectTransferBusy || importing || autoLaying ||
-            arranging || splitting || cutting || slicing || previewLoading || projectTransferState.completion != null
-        ) return@LaunchedEffect
-        if (projectHistory.current.allObjects.isEmpty()) {
-            startExternalProjectImport(
-                request,
-                projectTransferModel,
-                ::importProject,
-                onExternalProjectRequestStarted,
-            )
-        } else {
-            externalProjectConfirmation = request
-        }
-    }
+    ExternalProjectImportEffect(
+        request = externalProjectRequest,
+        enabled = projectRestored && !projectTransferBusy && !importing && !autoLaying &&
+            !arranging && !splitting && !cutting && !slicing && !previewLoading &&
+            projectTransferState.completion == null,
+        projectIsEmpty = projectHistory.current.allObjects.isEmpty(),
+        projectTransferModel = projectTransferModel,
+        onImport = ::importProject,
+        onRequestStarted = onExternalProjectRequestStarted,
+        onConfirmationRequired = { externalProjectConfirmation = it },
+    )
 
-    val projectSavePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(PROJECT_ARCHIVE_MIME_TYPE),
-    ) { uri ->
-        if (
-            uri != null && projectRestored && !projectTransferBusy && !importing &&
-            !autoLaying && !arranging && !splitting && !cutting && !slicing && !previewLoading
-        ) {
-            if (
-                projectTransferModel.exportProject(
-                    uri,
-                    projectHistory.current,
-                    projectTransferState.plateOptions,
-                )
-            ) {
-                error = null
-                notice = null
-            }
-        }
-    }
-
-    val modelExportPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(THREE_MF_DOCUMENT_MIME_TYPE),
-    ) { uri ->
-        if (
-            uri != null && projectRestored && !projectTransferBusy && !importing &&
-            !autoLaying && !arranging && !splitting && !cutting && !slicing && !previewLoading
-        ) {
-            val snapshot = projectTransferModel.state.value.history.current
-            val options = projectTransferModel.state.value.plateOptions[snapshot.selectedPlateId]
-                ?: projectTransferModel.state.value.sliceOptions
-            if (projectTransferModel.exportThreeMf(uri, snapshot, options)) {
-                error = null
-                notice = null
-            }
-        }
-    }
+    val documentExportEnabled =
+        projectRestored && !projectTransferBusy && !importing && !autoLaying &&
+            !arranging && !splitting && !cutting && !slicing && !previewLoading
+    val projectSavePicker = rememberProjectDocumentCreator(
+        projectTransferModel = projectTransferModel,
+        enabled = documentExportEnabled,
+        onExportStarted = {
+            error = null
+            notice = null
+        },
+    )
+    val modelExportPicker = rememberModelDocumentCreator(
+        projectTransferModel = projectTransferModel,
+        enabled = documentExportEnabled,
+        onExportStarted = {
+            error = null
+            notice = null
+        },
+    )
 
     val stlExportPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(STL_DOCUMENT_MIME_TYPE),
@@ -1313,6 +1576,7 @@ private fun DuckySlicerScreen(
         projectImporting = projectImporting,
         projectExporting = projectExporting,
         projectTransferCancellationRequested = projectTransferCancellationRequested,
+        linkedProjectName = projectTransferState.linkedDocument?.displayName,
         slicing = slicing,
         sliceCancellationRequested = sliceCancellationRequested,
         sliceProgress = SliceProgress(sliceProgress, plateSliceBatchProgress),
@@ -1362,7 +1626,7 @@ private fun DuckySlicerScreen(
                 arrayOf(PROJECT_ARCHIVE_MIME_TYPE, "application/zip"),
             )
         },
-        onSaveProject = { projectSavePicker.launch(DEFAULT_PROJECT_ARCHIVE_NAME) },
+        onSaveProject = projectSaveAction(projectTransferModel, projectSavePicker),
         onExportModel = {
             val sourceName = projectHistory.current.selectedObject
                 ?.primaryModelPart?.model?.fileName
@@ -1591,108 +1855,10 @@ private fun DuckySlicerScreen(
         onCancelProjectEdit = projectTransferModel::cancelActiveEdit,
         onCancelProjectImport = projectTransferModel::cancelProjectImport,
         onCancelProjectExport = projectTransferModel::cancelProjectExport,
-        onSupportPaintPreview = { objectId, volumeId, targets, state ->
-            val current = projectTransferModel.state.value.history
-            val projectObject = current.current.objects.firstOrNull { it.id == objectId }
-            val volume = projectObject?.volumes?.firstOrNull { it.id == volumeId }
-            if (
-                volume?.role?.acceptsFacetPaint == true &&
-                targets.isNotEmpty() &&
-                targets.all { it.facetIndex in 0 until volume.model.triangles }
-            ) {
-                val previousAnnotation = volume.orcaFacetAnnotations.support
-                val nextAnnotation = previousAnnotation.paintAll(
-                    targets,
-                    state?.code ?: 0,
-                ) { facetIndex ->
-                    volume.supportPaint.facets[facetIndex]?.code ?: 0
-                }
-                val nextPaint = exactPaintFacetsToClear(
-                    previousAnnotation,
-                    nextAnnotation,
-                    targets,
-                ).fold(volume.supportPaint) { paint, facetIndex ->
-                    paint.paint(facetIndex, null)
-                }
-                val nextHistory = current.updateExactSupportPaint(
-                    objectId,
-                    volumeId,
-                    nextPaint,
-                    nextAnnotation,
-                    recordHistory = false,
-                )
-                if (
-                    nextHistory != current &&
-                    projectTransferModel.updateHistory(current, nextHistory)
-                ) {
-                    clearCompletedSlice()
-                    notice = null
-                }
-            }
-        },
-        onSupportPaintCommitted = { objectId, volumeId, previousPaint, previousAnnotation ->
-            val current = projectTransferModel.state.value.history
-            projectTransferModel.updateHistory(
-                current,
-                current.commitExactSupportPaint(
-                    objectId,
-                    volumeId,
-                    previousPaint,
-                    previousAnnotation,
-                ),
-            )
-        },
-        onSeamPaintPreview = { objectId, volumeId, targets, state ->
-            val current = projectTransferModel.state.value.history
-            val projectObject = current.current.objects.firstOrNull { it.id == objectId }
-            val volume = projectObject?.volumes?.firstOrNull { it.id == volumeId }
-            if (
-                volume?.role?.acceptsFacetPaint == true &&
-                targets.isNotEmpty() &&
-                targets.all { it.facetIndex in 0 until volume.model.triangles }
-            ) {
-                val previousAnnotation = volume.orcaFacetAnnotations.seam
-                val nextAnnotation = previousAnnotation.paintAll(
-                    targets,
-                    state?.code ?: 0,
-                ) { facetIndex ->
-                    volume.seamPaint.facets[facetIndex]?.code ?: 0
-                }
-                val nextPaint = exactPaintFacetsToClear(
-                    previousAnnotation,
-                    nextAnnotation,
-                    targets,
-                ).fold(volume.seamPaint) { paint, facetIndex ->
-                    paint.paint(facetIndex, null)
-                }
-                val nextHistory = current.updateExactSeamPaint(
-                    objectId,
-                    volumeId,
-                    nextPaint,
-                    nextAnnotation,
-                    recordHistory = false,
-                )
-                if (
-                    nextHistory != current &&
-                    projectTransferModel.updateHistory(current, nextHistory)
-                ) {
-                    clearCompletedSlice()
-                    notice = null
-                }
-            }
-        },
-        onSeamPaintCommitted = { objectId, volumeId, previousPaint, previousAnnotation ->
-            val current = projectTransferModel.state.value.history
-            projectTransferModel.updateHistory(
-                current,
-                current.commitExactSeamPaint(
-                    objectId,
-                    volumeId,
-                    previousPaint,
-                    previousAnnotation,
-                ),
-            )
-        },
+        onSupportPaintPreview = facetPaintActions::previewSupport,
+        onSupportPaintCommitted = facetPaintActions::commitSupport,
+        onSeamPaintPreview = facetPaintActions::previewSeam,
+        onSeamPaintCommitted = facetPaintActions::commitSeam,
         onBrimPointsChanged = { objectId, brimPoints ->
             val current = projectTransferModel.state.value.history
             val nextHistory = current.updateBrimPoints(objectId, brimPoints)
@@ -1702,61 +1868,8 @@ private fun DuckySlicerScreen(
                 error = null
             }
         },
-        onMultiColorPaintPreview = { objectId, volumeId, targets, slot ->
-            val session = projectTransferModel.state.value
-            val current = session.history
-            val projectObject = current.current.objects.firstOrNull { it.id == objectId }
-            val volume = projectObject?.volumes?.firstOrNull { it.id == volumeId }
-            val availableSlots = session.sliceOptions.resolvedFilamentSlots().indices
-            if (
-                volume != null &&
-                volume.role.acceptsFacetPaint &&
-                targets.isNotEmpty() &&
-                targets.all { it.facetIndex in 0 until volume.model.triangles } &&
-                (slot == null || slot in availableSlots)
-            ) {
-                val previousAnnotation = volume.orcaFacetAnnotations.multiColor
-                val nextAnnotation = previousAnnotation.paintAll(
-                    targets,
-                    slot?.plus(1) ?: 0,
-                ) { facetIndex ->
-                    volume.multiColorPaint.facets[facetIndex]?.plus(1) ?: 0
-                }
-                val nextPaint = exactPaintFacetsToClear(
-                    previousAnnotation,
-                    nextAnnotation,
-                    targets,
-                ).fold(volume.multiColorPaint) { paint, facetIndex ->
-                    paint.paint(facetIndex, null)
-                }
-                val nextHistory = current.updateExactMultiColorPaint(
-                    objectId,
-                    volumeId,
-                    nextPaint,
-                    nextAnnotation,
-                    recordHistory = false,
-                )
-                if (
-                    nextHistory != current &&
-                    projectTransferModel.updateHistory(current, nextHistory)
-                ) {
-                    clearCompletedSlice()
-                    notice = null
-                }
-            }
-        },
-        onMultiColorPaintCommitted = { objectId, volumeId, previousPaint, previousAnnotation ->
-            val current = projectTransferModel.state.value.history
-            projectTransferModel.updateHistory(
-                current,
-                current.commitExactMultiColorPaint(
-                    objectId,
-                    volumeId,
-                    previousPaint,
-                    previousAnnotation,
-                ),
-            )
-        },
+        onMultiColorPaintPreview = facetPaintActions::previewMultiColor,
+        onMultiColorPaintCommitted = facetPaintActions::commitMultiColor,
         onVariableLayerHeightsChanged = { variableLayerHeights ->
             val current = projectTransferModel.state.value.history
             val nextHistory = current.updateSelectedVariableLayerHeights(

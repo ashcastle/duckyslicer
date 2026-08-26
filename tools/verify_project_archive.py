@@ -35,6 +35,9 @@ REQUIRED_STRINGS = {
     "canceling_project_export",
     "open_project",
     "save_project",
+    "save_project_as",
+    "project_save_options",
+    "linked_project_file",
     "replace_project_title",
     "replace_project_body",
     "project_opened",
@@ -97,6 +100,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "OrcaFacetAnnotations.kt",
         "ProjectVolumeSemantics.kt",
         "ProjectStore.kt",
+        "ProjectDocumentLink.kt",
         "ModelOpenRequest.kt",
         "ProjectOpenRequest.kt",
         "OrcaPrimitive.kt",
@@ -225,12 +229,16 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
             "beginCommit: () -> Unit = {}",
             "beginCommit()",
-            "SCHEMA_VERSION = 78",
+            "SCHEMA_VERSION = 79",
             "schemaVersion >= 70",
             "schemaVersion >= 75",
             "schemaVersion >= 76",
             "schemaVersion >= 77",
             "schemaVersion >= 78",
+            "schemaVersion >= 79",
+            '"linkedDocument",',
+            'root.has("linkedDocument")',
+            "normalizedLinkedProjectDocument",
             'put("name", plate.name ?: JSONObject.NULL)',
             "normalizedProjectPlateName",
             'put("layerPauseEvents", plate.layerPauseEvents.toProjectJson())',
@@ -242,6 +250,22 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             'put("heightRangeModifiers", heightRangeModifiers.toProjectJson())',
             'put("role", role.name)',
             'put("config", config.toJson())',
+        ),
+    )
+    _require_markers(
+        "ProjectDocumentLink.kt",
+        sources["ProjectDocumentLink.kt"],
+        (
+            "data class LinkedProjectDocument",
+            "ContentResolver.SCHEME_CONTENT",
+            "takePersistableUriPermission",
+            "FLAG_GRANT_WRITE_URI_PERMISSION",
+            "persistedUriPermissions",
+            "permission.isWritePermission",
+            "linkedProjectDocument(uri: Uri)",
+            "OpenableColumns.DISPLAY_NAME",
+            "MAX_PROJECT_DOCUMENT_URI_LENGTH = 4_096",
+            "MAX_PROJECT_DOCUMENT_NAME_LENGTH = 200",
         ),
     )
     _require_markers(
@@ -352,6 +376,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "val history: ProjectHistoryState",
             "val sliceOptions: SliceOptions",
             "val plateOptions: Map<String, SliceOptions>",
+            "val linkedDocument: LinkedProjectDocument?",
             "val restored: Boolean",
             "val sessionRevision: Long",
             "val persistedRevision: Long",
@@ -364,7 +389,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "fun updateHistory(",
             "fun updateSession(",
             "projectStore.loadProject()",
-            "projectStore.save(document.history.current, document.plateOptions)",
+            "document.linkedDocument",
             "PROJECT_SAVE_DEBOUNCE_MILLIS = 400L",
             "pendingPersistence?.join()",
             "fun flushPersistence()",
@@ -396,6 +421,10 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "hasUnpersistedSession()",
             "hasPersistableChanges(allowActiveTransfer = true)",
             "deleteFailedCreatedDocument(application, uri)",
+            "fun saveLinkedProject(",
+            "deleteFailedDocument = false",
+            "retainProjectDocumentWritePermission(uri)",
+            "withLinkedDocument(linkedDocument)",
             "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
             "catch (failure: CancellationException)",
             "consumeCompletion",
@@ -405,6 +434,17 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "fun editAuxiliaryVolume(",
             "editOrcaAuxiliaryVolume(",
             "replaceSelectedAuxiliaryVolume",
+        ),
+    )
+    _require_markers(
+        "PROJECT_FORMAT.md",
+        sources["PROJECT_FORMAT.md"],
+        (
+            "Save project as",
+            "private app state",
+            "never a resolved local path",
+            "is not written into the portable archive",
+            "revokes the provider permission",
         ),
     )
     if "catch (_: Throwable)" in transfer or "catch (failure: Throwable)" in transfer:
@@ -648,7 +688,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "projectOpenPicker = rememberLauncherForActivityResult",
             "ActivityResultContracts.OpenDocument()",
-            "projectSavePicker = rememberLauncherForActivityResult",
+            "rememberProjectDocumentCreator(",
             "ActivityResultContracts.CreateDocument(PROJECT_ARCHIVE_MIME_TYPE)",
             "SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED",
             "override fun onNewIntent(intent: Intent)",
@@ -661,6 +701,11 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "override fun onStop()",
             "projectTransferModel.flushPersistence()",
             "ProjectTransferViewModel",
+            "projectTransferState.linkedDocument?.displayName",
+            "projectTransferModel.saveLinkedProject(",
+            "!started && !latest.busy",
+            "latest.completion == null && latest.editCompletion == null",
+            "onSaveProject = projectSaveAction(",
             "projectTransferState.completion",
             "projectHistory = projectTransferState.history",
             "sliceOptions = projectTransferState.sliceOptions",
@@ -718,6 +763,10 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "ProjectSheet(",
             "onOpenProject",
             "onSaveProject",
+            "linkedProjectName",
+            "R.string.linked_project_file",
+            "R.string.project_save_options",
+            "R.string.save_project_as",
             "onPlateSelected",
             "onAddPlate",
             "onDuplicatePlate",
@@ -744,7 +793,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "R.string.canceling_project_import",
             "R.string.cancel_project_export",
             "R.string.canceling_project_export",
-            "if (exporting) onCancelProjectExport() else onSaveProject()",
+            "if (exporting) onCancelProjectExport() else onSaveProject(false)",
+            "onSaveProject(true)",
             "AuxiliaryVolumesSheet(",
             "AuxiliaryShapeSheet(",
             "CREATABLE_AUXILIARY_VOLUME_ROLES",
@@ -873,6 +923,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "withUpdatedSession",
             "projectExportCancellationIsBoundToTheExactActiveTransfer",
             "projectImportCancellationIsBoundToTheExactActiveTransfer",
+            "linkedProjectDocumentsRequireBoundedContentUrisAndSafeNames",
+            "bindingAProjectDocumentIsRevisionTrackedAndIdempotent",
             "switchingPlatesRestoresEachPlatesIndependentSliceOptions",
             "duplicatedPlateStartsWithTheSourcePlatesExactSliceOptions",
         ),
@@ -935,11 +987,22 @@ def verify_project_archive(sources: dict[str, str]) -> None:
     )
     if "com.ashcastle.duckyslicer.test.blocking-import" not in sources["AndroidTestManifest.xml"]:
         raise VerificationError("AndroidTestManifest.xml is missing the blocking import provider")
+    if (
+        "com.ashcastle.duckyslicer.test.blocking-export" not in sources["AndroidTestManifest.xml"]
+        or 'android:grantUriPermissions="true"' not in sources["AndroidTestManifest.xml"]
+    ):
+        raise VerificationError("AndroidTestManifest.xml is missing the grantable export provider")
     _require_markers(
         "CreatedDocumentLifecycleInstrumentedTest.kt",
         sources["CreatedDocumentLifecycleInstrumentedTest.kt"],
         (
             "failedProjectArchiveExportDeletesTheNewDocument",
+            "failedLinkedProjectExportPreservesTheExistingDocument",
+            "deleteFailedDocument = false",
+            "persistedProjectDocumentLinkSurvivesOwnerRecreationAndSavesDirectly",
+            "retainProjectDocumentWritePermission(uri)",
+            "restored.saveLinkedProject(",
+            "releasePersistableUriPermission(",
             "BlockingExportProvider.METHOD_PREPARE_FAILURE",
             "model.exportProject(",
             "BlockingExportProvider.KEY_DELETED",
@@ -961,6 +1024,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "CancellationSignal signal",
             "signal.setOnCancelListener(target.release::countDown)",
             "signal.throwIfCanceled()",
+            "OpenableColumns.DISPLAY_NAME",
+            "Linked-project.duckyproject",
         ),
     )
     _require_markers(
@@ -969,6 +1034,10 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "cancelProjectImportActionIsReachable",
             "cancelProjectExportActionIsReachable",
+            "projectActionsAreVisibleAndOpeningConfirmsReplacement",
+            "R.string.project_save_options",
+            "R.string.save_project_as",
+            "Save project as must be reachable from the split action",
             "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions",
             "plateSwitcherDuplicatesTheSelectedPlateAndSelectsTheCopy",
             "plateSwitcherRenamesAndReordersTheSelectedPlate",
@@ -1051,6 +1120,9 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "ProjectStore.kt": (package / "ProjectStore.kt").read_text(encoding="utf-8"),
+        "ProjectDocumentLink.kt": (package / "ProjectDocumentLink.kt").read_text(
+            encoding="utf-8"
+        ),
         "ModelOpenRequest.kt": (package / "ModelOpenRequest.kt").read_text(encoding="utf-8"),
         "ProjectOpenRequest.kt": (package / "ProjectOpenRequest.kt").read_text(encoding="utf-8"),
         "OrcaPrimitive.kt": (package / "OrcaPrimitive.kt").read_text(encoding="utf-8"),

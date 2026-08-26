@@ -18,7 +18,8 @@ def valid_sources() -> dict[str, str]:
             "val activeTransferDirection: ProjectTransferDirection? "
             "restored.storageUnavailable "
             "!current.persistenceBlocked "
-            "projectStore.save(document.history.current, document.plateOptions) "
+            "projectStore.save( document.history.current document.plateOptions "
+            "document.linkedDocument "
             "pendingPersistence?.join() fun flushPersistence() "
             "override fun onCleared() hasPersistableChanges "
             "fun autoLaySelectedModel() fun arrangeProjectObjects() "
@@ -417,6 +418,14 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         sources = valid_sources()
         sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
             "!current.persistenceBlocked", "true"
+        )
+        with self.assertRaisesRegex(VerificationError, "autosave"):
+            verify_resilience(sources)
+
+    def test_rejects_autosave_that_drops_the_linked_project_document(self) -> None:
+        sources = valid_sources()
+        sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
+            "document.linkedDocument", "forget linked project document"
         )
         with self.assertRaisesRegex(VerificationError, "autosave"):
             verify_resilience(sources)

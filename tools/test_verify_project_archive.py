@@ -101,8 +101,10 @@ def valid_sources() -> dict[str, str]:
                 "checkCancellation: () -> Unit = {}",
                 "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
                 "beginCommit: () -> Unit = {} beginCommit()",
-                'SCHEMA_VERSION = 78 schemaVersion >= 70 schemaVersion >= 75 '
+                'SCHEMA_VERSION = 79 schemaVersion >= 70 schemaVersion >= 75 '
                 'schemaVersion >= 76 schemaVersion >= 77 schemaVersion >= 78 '
+                'schemaVersion >= 79 "linkedDocument", root.has("linkedDocument") '
+                'normalizedLinkedProjectDocument '
                 'put("name", plate.name ?: JSONObject.NULL) normalizedProjectPlateName '
                 'put("heightRangeModifiers", heightRangeModifiers.toProjectJson()) '
                 'put("layerPauseEvents", plate.layerPauseEvents.toProjectJson()) '
@@ -113,6 +115,14 @@ def valid_sources() -> dict[str, str]:
                 'getJSONArray("layerCustomGCodeEvents").toLayerCustomGCodeEvents() '
                 'put("role", role.name) put("config", config.toJson())',
             )
+        ),
+        "ProjectDocumentLink.kt": (
+            "data class LinkedProjectDocument ContentResolver.SCHEME_CONTENT "
+            "takePersistableUriPermission FLAG_GRANT_WRITE_URI_PERMISSION "
+            "persistedUriPermissions permission.isWritePermission "
+            "linkedProjectDocument(uri: Uri) OpenableColumns.DISPLAY_NAME "
+            "MAX_PROJECT_DOCUMENT_URI_LENGTH = 4_096 "
+            "MAX_PROJECT_DOCUMENT_NAME_LENGTH = 200"
         ),
         "ModelOpenRequest.kt": (
             "Intent.ACTION_VIEW Intent.ACTION_SEND ContentResolver.SCHEME_CONTENT "
@@ -162,6 +172,7 @@ def valid_sources() -> dict[str, str]:
                 "ProjectTransferState(busy = true)",
                 "val history: ProjectHistoryState val sliceOptions: SliceOptions "
                 "val plateOptions: Map<String, SliceOptions> "
+                "val linkedDocument: LinkedProjectDocument? "
                 "val restored: Boolean val sessionRevision: Long "
                 "val persistedRevision: Long "
                 "val activeTransferId: Long? "
@@ -172,7 +183,7 @@ def valid_sources() -> dict[str, str]:
                 "fun ProjectTransferState.withCompletedTransfer(",
                 "fun updateHistory( fun updateSession(",
                 "projectStore.loadProject()",
-                "projectStore.save(document.history.current, document.plateOptions)",
+                "document.linkedDocument",
                 "PROJECT_SAVE_DEBOUNCE_MILLIS = 400L",
                 "pendingPersistence?.join() fun flushPersistence() "
                 "override fun onCleared() hasPersistableChanges",
@@ -193,6 +204,9 @@ def valid_sources() -> dict[str, str]:
                 "completionWasClaimed() hasUnpersistedSession() "
                 "hasPersistableChanges(allowActiveTransfer = true) "
                 "deleteFailedCreatedDocument(application, uri) "
+                "fun saveLinkedProject( deleteFailedDocument = false "
+                "retainProjectDocumentWritePermission(uri) "
+                "withLinkedDocument(linkedDocument) "
                 "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
                 "catch (failure: CancellationException) consumeCompletion",
                 "fun createAuxiliaryPrimitive( createOrcaAuxiliaryPrimitive( "
@@ -211,7 +225,7 @@ def valid_sources() -> dict[str, str]:
             (
                 "projectOpenPicker = rememberLauncherForActivityResult",
                 "ActivityResultContracts.OpenDocument()",
-                "projectSavePicker = rememberLauncherForActivityResult",
+                "rememberProjectDocumentCreator(",
                 "ActivityResultContracts.CreateDocument(PROJECT_ARCHIVE_MIME_TYPE)",
                 "SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED",
                 "override fun onNewIntent(intent: Intent)",
@@ -222,7 +236,11 @@ def valid_sources() -> dict[str, str]:
                 "startExternalProjectImport( "
                 "activeTransferDirection == ProjectTransferDirection.IMPORT",
                 "override fun onStop() projectTransferModel.flushPersistence()",
-                "ProjectTransferViewModel projectTransferState.completion ProjectReplacementDialog(",
+                "ProjectTransferViewModel projectTransferState.completion ProjectReplacementDialog( "
+                "projectTransferState.linkedDocument?.displayName "
+                "projectTransferModel.saveLinkedProject( !started && !latest.busy "
+                "latest.completion == null && latest.editCompletion == null "
+                "onSaveProject = projectSaveAction(",
                 "projectHistory = projectTransferState.history "
                 "sliceOptions = projectTransferState.sliceOptions "
                 "projectPlates = projectHistory.current.plates "
@@ -249,7 +267,9 @@ def valid_sources() -> dict[str, str]:
                 "onConsumeCompletion(completed.id)"
             ),
         "WorkspaceScreen.kt": (
-            "ProjectSheet( onOpenProject onSaveProject onPlateSelected onAddPlate "
+            "ProjectSheet( onOpenProject onSaveProject linkedProjectName "
+            "R.string.linked_project_file R.string.project_save_options R.string.save_project_as "
+            "onPlateSelected onAddPlate "
             "onDuplicatePlate onRemovePlate PlateSwitcher( canDuplicateSelectedPlate "
             "onRenamePlate onMovePlate R.string.duplicate_plate R.string.rename_plate "
             "R.string.move_plate_previous R.string.move_plate_next R.string.plates "
@@ -260,7 +280,8 @@ def valid_sources() -> dict[str, str]:
             "onCancelProjectImport: () -> Unit onCancelProjectExport: () -> Unit "
             "R.string.cancel_project_import R.string.canceling_project_import "
             "R.string.cancel_project_export R.string.canceling_project_export "
-            "if (exporting) onCancelProjectExport() else onSaveProject() "
+            "if (exporting) onCancelProjectExport() else onSaveProject(false) "
+            "onSaveProject(true) "
             "AuxiliaryVolumesSheet( AuxiliaryShapeSheet( "
             "CREATABLE_AUXILIARY_VOLUME_ROLES onRemoveAuxiliaryVolume "
             "AuxiliaryVolumeEditSheet( onEditAuxiliaryVolume R.string.apply_region_changes "
@@ -297,6 +318,8 @@ def valid_sources() -> dict[str, str]:
             "staleOrBusySessionMutationIsRejected withUpdatedSession "
             "projectExportCancellationIsBoundToTheExactActiveTransfer "
             "projectImportCancellationIsBoundToTheExactActiveTransfer"
+            " linkedProjectDocumentsRequireBoundedContentUrisAndSafeNames "
+            "bindingAProjectDocumentIsRevisionTrackedAndIdempotent "
             " switchingPlatesRestoresEachPlatesIndependentSliceOptions "
             "duplicatedPlateStartsWithTheSourcePlatesExactSliceOptions"
         ),
@@ -319,6 +342,11 @@ def valid_sources() -> dict[str, str]:
         ),
         "CreatedDocumentLifecycleInstrumentedTest.kt": (
             "failedProjectArchiveExportDeletesTheNewDocument "
+            "failedLinkedProjectExportPreservesTheExistingDocument "
+            "deleteFailedDocument = false "
+            "persistedProjectDocumentLinkSurvivesOwnerRecreationAndSavesDirectly "
+            "retainProjectDocumentWritePermission(uri) restored.saveLinkedProject( "
+            "releasePersistableUriPermission( "
             "BlockingExportProvider.METHOD_PREPARE_FAILURE model.exportProject( "
             "BlockingExportProvider.KEY_DELETED "
             "projectExportCancellationSurvivesRecreationAndDeletesThePartialDocument "
@@ -339,7 +367,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "BlockingExportProvider.java": (
             "openAssetFile( CancellationSignal signal "
-            "signal.setOnCancelListener(target.release::countDown) signal.throwIfCanceled()"
+            "signal.setOnCancelListener(target.release::countDown) signal.throwIfCanceled() "
+            "OpenableColumns.DISPLAY_NAME Linked-project.duckyproject"
         ),
         "BlockingImportProvider.java": (
             "openAssetFile( CancellationSignal signal "
@@ -348,6 +377,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "AccessibilityInstrumentedTest.kt": (
             "cancelProjectImportActionIsReachable cancelProjectExportActionIsReachable "
+            "projectActionsAreVisibleAndOpeningConfirmsReplacement R.string.project_save_options "
+            "R.string.save_project_as Save project as must be reachable from the split action "
             "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions "
             "plateSwitcherDuplicatesTheSelectedPlateAndSelectsTheCopy R.string.duplicate_plate "
             "plateSwitcherRenamesAndReordersTheSelectedPlate R.string.rename_plate "
@@ -445,7 +476,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "AndroidTestManifest.xml": (
             '<manifest><application><provider android:authorities="'
-            'com.ashcastle.duckyslicer.test.blocking-import" /></application></manifest>'
+            'com.ashcastle.duckyslicer.test.blocking-import" />'
+            '<provider android:authorities="com.ashcastle.duckyslicer.test.blocking-export" '
+            'android:grantUriPermissions="true" /></application></manifest>'
         ),
         "PRIVACY.md": (
             "Exported DuckySlicer project files contain plate organization, model geometry\n"
@@ -469,6 +502,8 @@ def valid_sources() -> dict[str, str]:
             "A failed import leaves the current project unchanged and removes staged data "
             "it in Files. External opening accepts only a granted `content://` URI "
             "requires confirmation before the current project is replaced "
+            "Save project as private app state never a resolved local path "
+            "is not written into the portable archive revokes the provider permission "
             "bound to that exact import operation "
             "Activity recreation never opens the same request twice "
             "the URI is restored without an in-memory operation claim "

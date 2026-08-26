@@ -745,6 +745,9 @@
     <string name="new_project_started">새 프로젝트를 시작했습니다.</string>
     <string name="open_project">프로젝트 열기</string>
     <string name="save_project">프로젝트 저장</string>
+    <string name="save_project_as">다른 이름으로 프로젝트 저장…</string>
+    <string name="project_save_options">프로젝트 저장 옵션</string>
+    <string name="linked_project_file">파일: %1$s</string>
     <string name="replace_project_title">다른 프로젝트를 열까요?</string>
     <string name="replace_project_body">현재 프로젝트가 바뀝니다. 보관하려면 먼저 저장하세요.</string>
     <string name="project_opened">프로젝트를 열었습니다.</string>

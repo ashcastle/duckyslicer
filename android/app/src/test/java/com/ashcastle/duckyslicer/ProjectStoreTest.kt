@@ -26,6 +26,29 @@ class ProjectStoreTest {
     }
 
     @Test
+    fun linkedProjectDocumentSurvivesDurableStorageButNotPortableArchiveMetadata() =
+        withStore { root, store ->
+            val snapshot = ProjectSnapshot()
+            val options = snapshot.plates.associate { it.id to SliceOptions() }
+            val link = LinkedProjectDocument(
+                uri = "content://documents/projects/DuckySlicer-project.duckyproject",
+                displayName = "DuckySlicer-project.duckyproject",
+            )
+
+            store.save(snapshot, options, link)
+
+            val restored = store.loadProject()
+            val persisted = JSONObject(File(root, "current_project.json").readText())
+            assertEquals(link, restored.linkedDocument)
+            assertEquals(link.uri, persisted.getJSONObject("linkedDocument").getString("uri"))
+
+            val output = ByteArrayOutputStream()
+            store.exportArchive(snapshot, options, output)
+            val archiveText = output.toString(Charsets.ISO_8859_1.name())
+            assertFalse(archiveText.contains(link.uri))
+        }
+
+    @Test
     fun renamedObjectDisplayNameSurvivesDurableStorage() = withStore { _, store ->
         val modelFile = store.createModelDestination("original.stl").apply {
             writeText("solid renamed")
@@ -204,11 +227,12 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(78, persisted.getInt("schemaVersion"))
+        assertEquals(79, persisted.getInt("schemaVersion"))
         assertEquals(
-            setOf("schemaVersion", "selectedPlateId", "plates"),
+            setOf("schemaVersion", "selectedPlateId", "linkedDocument", "plates"),
             persisted.keys().asSequence().toSet(),
         )
+        assertTrue(persisted.isNull("linkedDocument"))
         val persistedPlate = persisted.getJSONArray("plates").getJSONObject(0)
         assertEquals(
             setOf(

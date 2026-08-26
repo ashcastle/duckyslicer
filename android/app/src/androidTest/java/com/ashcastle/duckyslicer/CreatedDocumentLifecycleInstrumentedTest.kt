@@ -1,6 +1,7 @@
 package com.ashcastle.duckyslicer
 
 import android.app.Application
+import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import androidx.lifecycle.ViewModelProvider
@@ -197,6 +198,140 @@ class CreatedDocumentLifecycleInstrumentedTest {
             assertTrue(status.getBoolean(BlockingExportProvider.KEY_COMPLETED))
         } finally {
             store.clear()
+            releaseProvider()
+        }
+    }
+
+    @Test
+    fun failedLinkedProjectExportPreservesTheExistingDocument() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        resolver.call(
+            BlockingExportProvider.URI,
+            BlockingExportProvider.METHOD_PREPARE_FAILURE,
+            null,
+            null,
+        )
+        val store = ViewModelStore()
+        try {
+            val application = context.applicationContext as Application
+            val model = ViewModelProvider(
+                store,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[ProjectTransferViewModel::class.java]
+            waitUntil("project session did not restore") {
+                model.state.value.restored && !model.state.value.busy
+            }
+
+            assertTrue(
+                model.exportProject(
+                    BlockingExportProvider.URI,
+                    ProjectSnapshot(),
+                    model.state.value.plateOptions,
+                    deleteFailedDocument = false,
+                ),
+            )
+            waitUntil("failed linked project export did not complete") {
+                model.state.value.completion != null
+            }
+            assertTrue(model.state.value.completion is ProjectTransferCompletion.Failed)
+            val status = waitForProvider {
+                it.getBoolean(BlockingExportProvider.KEY_COMPLETED)
+            }
+            assertFalse(status.getBoolean(BlockingExportProvider.KEY_DELETED))
+        } finally {
+            store.clear()
+            releaseProvider()
+        }
+    }
+
+    @Test
+    fun persistedProjectDocumentLinkSurvivesOwnerRecreationAndSavesDirectly() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val testContext = instrumentation.context
+        val resolver = context.contentResolver
+        val uri = BlockingExportProvider.URI
+        val grantFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        testContext.grantUriPermission(context.packageName, uri, grantFlags)
+        assertTrue(resolver.retainProjectDocumentWritePermission(uri))
+
+        var firstStore: ViewModelStore? = ViewModelStore()
+        var secondStore: ViewModelStore? = null
+        try {
+            resolver.call(uri, BlockingExportProvider.METHOD_PREPARE, null, null)
+            releaseProvider()
+            val application = context.applicationContext as Application
+            val first = ViewModelProvider(
+                checkNotNull(firstStore),
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[ProjectTransferViewModel::class.java]
+            waitUntil("project session did not restore") {
+                first.state.value.restored && !first.state.value.busy
+            }
+            assertTrue(
+                first.exportProject(
+                    uri,
+                    first.state.value.history.current,
+                    first.state.value.plateOptions,
+                ),
+            )
+            waitUntil("linked project export did not complete") {
+                first.state.value.completion is ProjectTransferCompletion.Exported
+            }
+            assertEquals(uri, first.state.value.linkedDocument?.contentUri)
+            assertEquals(
+                "Linked-project.duckyproject",
+                first.state.value.linkedDocument?.displayName,
+            )
+            first.consumeCompletion(checkNotNull(first.state.value.completion).id)
+            first.flushPersistence()
+            waitUntil("project document link was not persisted") {
+                first.state.value.sessionRevision == first.state.value.persistedRevision
+            }
+            checkNotNull(firstStore).clear()
+            firstStore = null
+
+            resolver.call(uri, BlockingExportProvider.METHOD_PREPARE, null, null)
+            releaseProvider()
+            secondStore = ViewModelStore()
+            val restored = ViewModelProvider(
+                secondStore,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[ProjectTransferViewModel::class.java]
+            waitUntil("linked project session did not restore") {
+                restored.state.value.restored && !restored.state.value.busy
+            }
+            assertEquals(uri, restored.state.value.linkedDocument?.contentUri)
+            assertTrue(
+                restored.saveLinkedProject(
+                    restored.state.value.history.current,
+                    restored.state.value.plateOptions,
+                ),
+            )
+            waitUntil("direct linked project save did not complete") {
+                restored.state.value.completion is ProjectTransferCompletion.Exported
+            }
+            val status = waitForProvider {
+                it.getBoolean(BlockingExportProvider.KEY_COMPLETED)
+            }
+            assertTrue(status.getInt(BlockingExportProvider.KEY_BYTES) > 0)
+            assertFalse(status.getBoolean(BlockingExportProvider.KEY_DELETED))
+        } finally {
+            firstStore?.clear()
+            secondStore?.clear()
+            runCatching {
+                resolver.releasePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            testContext.revokeUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
             releaseProvider()
         }
     }

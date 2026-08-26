@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -515,6 +516,7 @@ internal fun WorkspaceScreen(
     projectImporting: Boolean,
     projectExporting: Boolean,
     projectTransferCancellationRequested: Boolean,
+    linkedProjectName: String?,
     slicing: Boolean,
     sliceCancellationRequested: Boolean,
     sliceProgress: SliceProgress,
@@ -535,7 +537,7 @@ internal fun WorkspaceScreen(
     onEditAuxiliaryVolume: (OrcaAuxiliaryVolumeEditDraft) -> Unit,
     onNewProject: () -> Unit,
     onOpenProject: () -> Unit,
-    onSaveProject: () -> Unit,
+    onSaveProject: (Boolean) -> Unit,
     onExportModel: () -> Unit,
     onExportSelectedStl: () -> Unit,
     onPlateSelected: (String) -> Unit,
@@ -1218,6 +1220,7 @@ internal fun WorkspaceScreen(
                     importing = projectImporting,
                     exporting = projectExporting,
                     cancellationRequested = projectTransferCancellationRequested,
+                    linkedProjectName = linkedProjectName,
                     onObjectSelected = onObjectSelected,
                     canDuplicateObject = projectPlates.sumOf { it.objects.size } <
                         ProjectStore.MAX_PROJECT_OBJECTS,
@@ -7737,6 +7740,7 @@ private fun ProjectSheet(
     importing: Boolean,
     exporting: Boolean,
     cancellationRequested: Boolean,
+    linkedProjectName: String?,
     onObjectSelected: (String) -> Unit,
     canDuplicateObject: Boolean,
     onDuplicateObject: (String) -> Unit,
@@ -7746,7 +7750,7 @@ private fun ProjectSheet(
     onRemoveObject: (String) -> Unit,
     onNewProject: () -> Unit,
     onOpenProject: () -> Unit,
-    onSaveProject: () -> Unit,
+    onSaveProject: (Boolean) -> Unit,
     onCancelProjectImport: () -> Unit,
     onCancelProjectExport: () -> Unit,
     modifier: Modifier = Modifier,
@@ -7759,6 +7763,10 @@ private fun ProjectSheet(
     var copyObjectId by remember { mutableStateOf<String?>(null) }
     var moveObjectId by remember { mutableStateOf<String?>(null) }
     var removeObjectId by remember { mutableStateOf<String?>(null) }
+    var saveMenuExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(busy, importing, exporting) {
+        if (busy || importing || exporting) saveMenuExpanded = false
+    }
     WorkspaceCard(modifier) {
         Text(
             stringResource(R.string.tab_project),
@@ -7770,6 +7778,14 @@ private fun ProjectSheet(
             else stringResource(R.string.object_count, objects.size),
             color = Color(0xFFC8C9C2),
         )
+        linkedProjectName?.let { name ->
+            Text(
+                stringResource(R.string.linked_project_file, name),
+                color = Color(0xFFC8C9C2),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         objects.forEach { projectObject ->
             val selected = projectObject.id == selectedObjectId
             val displayName = projectObject.primaryModelPart.model.fileName
@@ -7927,33 +7943,61 @@ private fun ProjectSheet(
                     ),
                 )
             }
-            Button(
-                onClick = {
-                    if (exporting) onCancelProjectExport() else onSaveProject()
-                },
-                enabled = if (exporting) !cancellationRequested else !busy && !importing,
-                colors = primaryButtonColors(),
-                modifier = Modifier.weight(1f),
-            ) {
-                if (exporting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = WorkspaceBlack,
-                        strokeWidth = 2.dp,
+            Row(Modifier.weight(1f)) {
+                Button(
+                    onClick = {
+                        if (exporting) onCancelProjectExport() else onSaveProject(false)
+                    },
+                    enabled = if (exporting) !cancellationRequested else !busy && !importing,
+                    colors = primaryButtonColors(),
+                    shape = RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    if (exporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = WorkspaceBlack,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(Icons.Default.SaveAlt, contentDescription = null)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        stringResource(
+                            when {
+                                cancellationRequested -> R.string.canceling_project_export
+                                exporting -> R.string.cancel_project_export
+                                else -> R.string.save_project
+                            },
+                        ),
                     )
-                } else {
-                    Icon(Icons.Default.SaveAlt, contentDescription = null)
                 }
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    stringResource(
-                        when {
-                            cancellationRequested -> R.string.canceling_project_export
-                            exporting -> R.string.cancel_project_export
-                            else -> R.string.save_project
-                        },
-                    ),
-                )
+                Box {
+                    Button(
+                        onClick = { saveMenuExpanded = true },
+                        enabled = !busy && !importing && !exporting,
+                        colors = primaryButtonColors(),
+                        shape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        modifier = Modifier.widthIn(min = 48.dp),
+                    ) {
+                        Icon(Icons.Default.ExpandMore, stringResource(R.string.project_save_options))
+                    }
+                    DropdownMenu(
+                        expanded = saveMenuExpanded,
+                        onDismissRequest = { saveMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.save_project_as)) },
+                            leadingIcon = { Icon(Icons.Default.SaveAlt, contentDescription = null) },
+                            onClick = {
+                                saveMenuExpanded = false
+                                onSaveProject(true)
+                            },
+                        )
+                    }
+                }
             }
         }
     }

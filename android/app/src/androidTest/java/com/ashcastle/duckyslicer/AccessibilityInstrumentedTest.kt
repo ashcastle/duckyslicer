@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
@@ -607,21 +608,41 @@ class AccessibilityInstrumentedTest {
         val newLabel = context.getString(R.string.new_project)
         val openLabel = context.getString(R.string.open_project)
         val saveLabel = context.getString(R.string.save_project)
+        val saveOptionsLabel = context.getString(R.string.project_save_options)
+        val saveAsLabel = context.getString(R.string.save_project_as)
         val confirmation = context.getString(R.string.replace_project_title)
         launchHarness(AccessibilityHarnessActivity.SCREEN_PROJECT).use {
-            val nodes = waitForNodes(setOf(newLabel, openLabel, saveLabel))
+            val nodes = waitForNodes(setOf(newLabel, openLabel, saveLabel, saveOptionsLabel))
             val newProject = nodes.firstOrNull {
                 it.isClickable && it.effectiveLabel().contains(newLabel)
             }
             val open = nodes.firstOrNull { it.isClickable && it.effectiveLabel().contains(openLabel) }
             val save = nodes.firstOrNull { it.isClickable && it.effectiveLabel().contains(saveLabel) }
+            val saveOptions = nodes.firstOrNull {
+                it.isClickable && it.effectiveLabel() == saveOptionsLabel
+            }
             assertNotNull("New project must be an explicit action", newProject)
             assertNotNull("Open project must be an explicit action", open)
             assertNotNull("Save project must be an explicit action", save)
+            assertNotNull("Save project options must be an explicit action", saveOptions)
             assertTrue(checkNotNull(newProject).isFocusable)
             assertTrue(checkNotNull(open).isFocusable)
             assertTrue(checkNotNull(save).isFocusable)
-            assertTrue(open.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(checkNotNull(saveOptions).isFocusable)
+            assertTrue(saveOptions.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(
+                "Save project as must be reachable from the split action",
+                waitForNodes(setOf(saveAsLabel)).any {
+                    it.isClickable && it.effectiveLabel().contains(saveAsLabel)
+                },
+            )
+            assertTrue(
+                InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(
+                    AccessibilityService.GLOBAL_ACTION_BACK,
+                ),
+            )
+            val reopened = scrollUntilClickable(openLabel)
+            assertTrue(reopened.performAction(AccessibilityNodeInfo.ACTION_CLICK))
             assertTrue(
                 "Replacing a non-empty project must require confirmation",
                 waitForNodes(setOf(confirmation)).any { it.effectiveLabel().contains(confirmation) },

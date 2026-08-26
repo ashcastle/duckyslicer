@@ -13,6 +13,35 @@ import org.junit.Test
 
 class ProjectTransferStateTest {
     @Test
+    fun linkedProjectDocumentsRequireBoundedContentUrisAndSafeNames() {
+        assertEquals(
+            LinkedProjectDocument("content://documents/projects/duck", "Duck project.duckyproject"),
+            normalizedLinkedProjectDocument(
+                " content://documents/projects/duck ",
+                " Duck/project.duckyproject ",
+            ),
+        )
+        assertNull(normalizedLinkedProjectDocument("file:///private/project", "Project"))
+        assertNull(normalizedLinkedProjectDocument("content://documents/project", "\u0000/"))
+    }
+
+    @Test
+    fun bindingAProjectDocumentIsRevisionTrackedAndIdempotent() {
+        val link = LinkedProjectDocument(
+            "content://documents/projects/duck",
+            "Duck.duckyproject",
+        )
+        val state = ProjectTransferState(restored = true, sessionRevision = 4)
+
+        val linked = state.withLinkedDocument(link)
+
+        assertEquals(link, linked.linkedDocument)
+        assertEquals(5, linked.sessionRevision)
+        assertEquals(linked, linked.withLinkedDocument(link))
+        assertEquals(6, linked.withLinkedDocument(null).sessionRevision)
+    }
+
+    @Test
     fun binaryStlValidationRequiresExactTrianglePayloadLength() {
         val directory = Files.createTempDirectory("duckyslicer-stl-validation-").toFile()
         try {
@@ -174,6 +203,10 @@ class ProjectTransferStateTest {
                 "second-plate" to secondOptions,
             ),
             restored = true,
+            linkedDocument = LinkedProjectDocument(
+                "content://documents/projects/original",
+                "Original.duckyproject",
+            ),
             sessionRevision = 5,
             persistedRevision = 5,
         )
@@ -185,6 +218,7 @@ class ProjectTransferStateTest {
         assertFalse(updated.history.canUndo)
         assertFalse(updated.history.canRedo)
         assertEquals(secondOptions, updated.sliceOptions)
+        assertNull(updated.linkedDocument)
         assertEquals(
             mapOf(updated.history.current.selectedPlateId to secondOptions),
             updated.plateOptions,

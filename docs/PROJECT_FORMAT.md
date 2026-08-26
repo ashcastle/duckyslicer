@@ -59,6 +59,12 @@ MIME type, or a `.duckyproject` name reported as a ZIP-compatible type. Web, `fi
 and unrelated binary URIs are not accepted. Opening into a non-empty workspace always
 requires confirmation before the current project is replaced.
 
+When an Android document provider grants persistent write access, DuckySlicer remembers
+that document in private app state. **Save** then updates the same document, while **Save project as**
+opens the system document picker for a new destination. The remembered link is a bounded
+`content://` URI and display name, never a resolved local path. It is not written into the portable archive,
+and it is cleared when a new project starts or Android revokes the provider permission.
+
 ## Import boundary
 
 Project files are untrusted input. The importer accepts only the manifest and numbered
