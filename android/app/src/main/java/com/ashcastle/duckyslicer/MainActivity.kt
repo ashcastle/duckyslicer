@@ -1299,7 +1299,7 @@ private fun DuckySlicerScreen(
             splitting || cutting || slicing || previewLoading ||
             projectTransferState.editCompletion != null
         ) return@LaunchedEffect
-        if (projectTransferModel.importModels(request.uri)) {
+        if (projectTransferModel.importModels(request.uris)) {
             val operation = projectTransferModel.state.value.activeEdit
             if (
                 operation?.kind != ProjectEditKind.MODEL_IMPORT ||

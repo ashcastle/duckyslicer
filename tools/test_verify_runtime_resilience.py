@@ -181,7 +181,7 @@ def valid_sources() -> dict[str, str]:
             "projectTransferModel.cutSelectedModel(heightRatio, placeOnCut) "
             "projectTransferModel.createPrimitive(primitive, sizeMm, displayName) "
             "projectTransferModel.importModels(uris) "
-            "projectTransferModel.importModels(request.uri) "
+            "projectTransferModel.importModels(request.uris) "
             "projectTransferModel::cancelActiveEdit "
             "ViewModelProvider(this)[PlateSliceBatchViewModel::class.java] "
             "plateSliceBatchModel.state.collectAsStateWithLifecycle() "
@@ -517,7 +517,7 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
     def test_rejects_external_model_open_bypassing_retained_import(self) -> None:
         sources = valid_sources()
         sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
-            "projectTransferModel.importModels(request.uri)",
+            "projectTransferModel.importModels(request.uris)",
             "import the external model in the Activity",
         )
         with self.assertRaisesRegex(VerificationError, "retained project edit dispatch"):

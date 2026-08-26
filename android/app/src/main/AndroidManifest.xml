@@ -181,6 +181,20 @@
                 <data android:mimeType="model/obj" />
                 <data android:mimeType="application/x-tgif" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="model/stl" />
+                <data android:mimeType="application/sla" />
+                <data android:mimeType="application/vnd.ms-pki.stl" />
+                <data android:mimeType="model/3mf" />
+                <data android:mimeType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />
+                <data android:mimeType="application/vnd.ms-3mfdocument" />
+                <data android:mimeType="model/obj" />
+                <data android:mimeType="application/x-tgif" />
+            </intent-filter>
         </activity>
     </application>
 

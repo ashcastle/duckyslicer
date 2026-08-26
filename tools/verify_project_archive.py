@@ -534,10 +534,14 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "Intent.ACTION_VIEW",
             "Intent.ACTION_SEND",
+            "Intent.ACTION_SEND_MULTIPLE",
             "ContentResolver.SCHEME_CONTENT",
             "MODEL_DOCUMENT_MIME_TYPES",
             "MODEL_DOCUMENT_COMPATIBLE_MIME_TYPES",
             "clipData.itemCount != 1",
+            "sharedDocumentUrisOrNull(intent)",
+            "ProjectStore.MAX_PROJECT_OBJECTS",
+            "uris.distinct().size != uris.size",
             "SavedStateHandle",
             "startedOperationId",
         ),
@@ -742,6 +746,55 @@ def verify_project_archive(sources: dict[str, str]) -> None:
     if send_filters != expected_send_filters:
         raise VerificationError(
             "AndroidManifest.xml must expose only explicit project, profile, G-code, and model MIME SEND filters"
+        )
+
+    send_multiple_filters: list[
+        tuple[set[str], set[str], set[str], set[str], set[str]]
+    ] = []
+    for intent_filter in main_activity.findall("intent-filter"):
+        actions = {
+            value
+            for action in intent_filter.findall("action")
+            if (value := action.attrib.get(f"{ANDROID_NAMESPACE}name"))
+        }
+        if "android.intent.action.SEND_MULTIPLE" not in actions:
+            continue
+        categories = {
+            value
+            for category in intent_filter.findall("category")
+            if (value := category.attrib.get(f"{ANDROID_NAMESPACE}name"))
+        }
+        data = intent_filter.findall("data")
+        send_multiple_filters.append(
+            (
+                categories,
+                {
+                    value
+                    for item in data
+                    if (value := item.attrib.get(f"{ANDROID_NAMESPACE}scheme"))
+                },
+                {
+                    value
+                    for item in data
+                    if (value := item.attrib.get(f"{ANDROID_NAMESPACE}mimeType"))
+                },
+                {
+                    value
+                    for item in data
+                    if (value := item.attrib.get(f"{ANDROID_NAMESPACE}host"))
+                },
+                {
+                    value
+                    for item in data
+                    if (value := item.attrib.get(f"{ANDROID_NAMESPACE}pathPattern"))
+                },
+            )
+        )
+    if send_multiple_filters != [
+        (expected_category, set(), MODEL_MIME_TYPES, set(), set())
+    ]:
+        raise VerificationError(
+            "AndroidManifest.xml must expose only the explicit model MIME SEND_MULTIPLE filter"
         )
 
     main = sources["MainActivity.kt"]

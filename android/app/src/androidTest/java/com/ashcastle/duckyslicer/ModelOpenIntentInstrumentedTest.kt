@@ -28,8 +28,17 @@ class ModelOpenIntentInstrumentedTest {
 
     @Test
     fun externalModelRequestBindsOneOperationAndRestoresAsRetryableAfterProcessLoss() {
-        val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(BlockingImportProvider.MODEL_URI, "model/stl")
+        val sharedUris = arrayListOf(
+            Uri.parse("content://example/first.stl"),
+            Uri.parse("content://example/second.stl"),
+        )
+        val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "model/stl"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, sharedUris)
+            clipData = ClipData.newRawUri("first", sharedUris.first()).apply {
+                addItem(ClipData.Item(sharedUris.last()))
+            }
+        }
         val savedState = SavedStateHandle()
         val retained = ExternalModelRequestViewModel(savedState)
 
@@ -49,7 +58,7 @@ class ModelOpenIntentInstrumentedTest {
         val restoredAfterProcessLoss = ExternalModelRequestViewModel(savedState)
         val restored = requireNotNull(restoredAfterProcessLoss.request.value)
         assertEquals(second.id, restored.id)
-        assertEquals(second.uri, restored.uri)
+        assertEquals(sharedUris, restored.uris)
         assertNull(restored.startedOperationId)
         assertTrue(restoredAfterProcessLoss.discardUnstarted(restored.id))
         assertNull(restoredAfterProcessLoss.request.value)
@@ -82,6 +91,17 @@ class ModelOpenIntentInstrumentedTest {
             type = "model/stl"
             clipData = ClipData.newRawUri("duck", Uri.parse("content://example/duck.stl"))
         }
+        val sharedMultipleUris = arrayListOf(
+            Uri.parse("content://example/one.stl"),
+            Uri.parse("content://example/two.stl"),
+        )
+        val sharedMultiple = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "model/stl"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, sharedMultipleUris)
+            clipData = ClipData.newRawUri("one", sharedMultipleUris.first()).apply {
+                addItem(ClipData.Item(sharedMultipleUris.last()))
+            }
+        }
         val network = Intent(Intent.ACTION_VIEW).setDataAndType(
             Uri.parse("https://example.invalid/private.stl"),
             "model/stl",
@@ -104,6 +124,40 @@ class ModelOpenIntentInstrumentedTest {
                 addItem(ClipData.Item(Uri.parse("content://example/two.stl")))
             }
         }
+        val conflictingMultiple = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "model/stl"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, sharedMultipleUris)
+            clipData = ClipData.newRawUri("different", Uri.parse("content://example/other.stl"))
+        }
+        val duplicateMultiple = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "model/stl"
+            putParcelableArrayListExtra(
+                Intent.EXTRA_STREAM,
+                arrayListOf(sharedMultipleUris.first(), sharedMultipleUris.first()),
+            )
+        }
+        val networkMultiple = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "model/stl"
+            putParcelableArrayListExtra(
+                Intent.EXTRA_STREAM,
+                arrayListOf(sharedMultipleUris.first(), Uri.parse("https://example.invalid/two.stl")),
+            )
+        }
+        val malformedMultiple = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "model/stl"
+            putStringArrayListExtra(Intent.EXTRA_STREAM, arrayListOf("not-a-content-uri"))
+        }
+        val tooManyMultiple = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "model/stl"
+            putParcelableArrayListExtra(
+                Intent.EXTRA_STREAM,
+                ArrayList<Uri>(ProjectStore.MAX_PROJECT_OBJECTS + 1).apply {
+                    repeat(ProjectStore.MAX_PROJECT_OBJECTS + 1) { index ->
+                        add(Uri.parse("content://example/model-$index.stl"))
+                    }
+                },
+            )
+        }
 
         assertEquals(explicit.data, modelDocumentUriOrNull(explicit))
         assertEquals(
@@ -114,17 +168,25 @@ class ModelOpenIntentInstrumentedTest {
         assertEquals(compatibleThreeMfZip.data, modelDocumentUriOrNull(compatibleThreeMfZip))
         assertEquals(sharedUri, modelDocumentUriOrNull(shared))
         assertEquals(sharedByClip.clipData?.getItemAt(0)?.uri, modelDocumentUriOrNull(sharedByClip))
+        assertEquals(sharedMultipleUris, modelDocumentUrisOrNull(sharedMultiple))
+        assertNull(modelDocumentUriOrNull(sharedMultiple))
         assertNull(modelDocumentUriOrNull(network))
         assertNull(modelDocumentUriOrNull(file))
         assertNull(modelDocumentUriOrNull(unrelated))
         assertNull(modelDocumentUriOrNull(misleadingZip))
         assertNull(modelDocumentUriOrNull(multiple))
+        assertNull(modelDocumentUrisOrNull(conflictingMultiple))
+        assertNull(modelDocumentUrisOrNull(duplicateMultiple))
+        assertNull(modelDocumentUrisOrNull(networkMultiple))
+        assertNull(modelDocumentUrisOrNull(malformedMultiple))
+        assertNull(modelDocumentUrisOrNull(tooManyMultiple))
 
         val packageManager = InstrumentationRegistry.getInstrumentation().targetContext.packageManager
         assertTrue(packageManager.resolvesMainActivity(explicit))
         assertTrue(packageManager.resolvesMainActivity(compatible))
         assertTrue(packageManager.resolvesMainActivity(compatibleThreeMfZip))
         assertTrue(packageManager.resolvesMainActivity(shared))
+        assertTrue(packageManager.resolvesMainActivity(sharedMultiple))
         assertFalse(packageManager.resolvesMainActivity(network))
         assertFalse(packageManager.resolvesMainActivity(file))
         assertFalse(packageManager.resolvesMainActivity(unrelated))

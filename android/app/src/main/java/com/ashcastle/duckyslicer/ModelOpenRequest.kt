@@ -12,34 +12,45 @@ import kotlinx.coroutines.flow.asStateFlow
 
 internal data class ExternalModelRequest(
     val id: Long,
-    val uri: Uri,
+    val uris: List<Uri>,
     val startedOperationId: Long? = null,
 )
 
-internal fun modelDocumentUriOrNull(intent: Intent): Uri? {
-    if (intent.action != Intent.ACTION_VIEW && intent.action != Intent.ACTION_SEND) return null
-    val uri = when (intent.action) {
-        Intent.ACTION_VIEW -> intent.data
-        Intent.ACTION_SEND -> sharedDocumentUriOrNull(intent)
+internal fun modelDocumentUrisOrNull(intent: Intent): List<Uri>? {
+    val uris = when (intent.action) {
+        Intent.ACTION_VIEW -> intent.data?.let(::listOf)
+        Intent.ACTION_SEND -> sharedDocumentUriOrNull(intent)?.let(::listOf)
+        Intent.ACTION_SEND_MULTIPLE -> sharedDocumentUrisOrNull(intent)
         else -> null
     } ?: return null
-    if (!uri.scheme.equals(ContentResolver.SCHEME_CONTENT, ignoreCase = true)) return null
+    if (uris.isEmpty() || uris.size > ProjectStore.MAX_PROJECT_OBJECTS) return null
+    if (uris.distinct().size != uris.size) return null
     val mimeType = intent.type
         ?.substringBefore(';')
         ?.trim()
         ?.lowercase(Locale.ROOT)
         ?: return null
-    val extension = uri.lastPathSegment
-        ?.substringAfterLast('.', missingDelimiterValue = "")
-        ?.lowercase(Locale.ROOT)
     val explicitlySupported = mimeType in MODEL_DOCUMENT_MIME_TYPES
-    val compatibleByName = when (extension) {
-        "stl", "obj" -> mimeType == "application/octet-stream"
-        "3mf" -> mimeType in MODEL_DOCUMENT_COMPATIBLE_MIME_TYPES
-        else -> false
+    return uris.takeIf { documents ->
+        documents.all { uri ->
+            if (!uri.scheme.equals(ContentResolver.SCHEME_CONTENT, ignoreCase = true)) {
+                return@all false
+            }
+            val extension = uri.lastPathSegment
+                ?.substringAfterLast('.', missingDelimiterValue = "")
+                ?.lowercase(Locale.ROOT)
+            val compatibleByName = when (extension) {
+                "stl", "obj" -> mimeType == "application/octet-stream"
+                "3mf" -> mimeType in MODEL_DOCUMENT_COMPATIBLE_MIME_TYPES
+                else -> false
+            }
+            explicitlySupported || compatibleByName
+        }
     }
-    return uri.takeIf { explicitlySupported || compatibleByName }
 }
+
+internal fun modelDocumentUriOrNull(intent: Intent): Uri? =
+    modelDocumentUrisOrNull(intent)?.singleOrNull()
 
 @Suppress("DEPRECATION")
 internal fun sharedDocumentUriOrNull(intent: Intent): Uri? {
@@ -49,33 +60,72 @@ internal fun sharedDocumentUriOrNull(intent: Intent): Uri? {
         clipData.itemCount != 1 -> return null
         else -> clipData.getItemAt(0).uri ?: return null
     }
-    val extraUri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+    val extraUri = if (intent.hasExtra(Intent.EXTRA_STREAM)) {
+        val extra = try {
+            intent.extras?.get(Intent.EXTRA_STREAM)
+        } catch (_: RuntimeException) {
+            return null
+        }
+        extra as? Uri ?: return null
+    } else {
+        null
+    }
     if (clipUri != null && extraUri != null && clipUri != extraUri) return null
     return clipUri ?: extraUri
 }
 
-/** Retains one externally opened model and binds it to exactly one import operation. */
+@Suppress("DEPRECATION")
+internal fun sharedDocumentUrisOrNull(intent: Intent): List<Uri>? {
+    val clipData = intent.clipData
+    val clipUris = when {
+        clipData == null -> null
+        clipData.itemCount !in 1..ProjectStore.MAX_PROJECT_OBJECTS -> return null
+        else -> {
+            val values = ArrayList<Uri>(clipData.itemCount)
+            for (index in 0 until clipData.itemCount) {
+                values += clipData.getItemAt(index).uri ?: return null
+            }
+            values
+        }
+    }
+    val extraUris = if (intent.hasExtra(Intent.EXTRA_STREAM)) {
+        val extra = try {
+            intent.extras?.get(Intent.EXTRA_STREAM)
+        } catch (_: RuntimeException) {
+            return null
+        }
+        if (extra !is ArrayList<*> || extra.any { it !is Uri }) return null
+        extra.filterIsInstance<Uri>()
+    } else {
+        null
+    }
+    if (extraUris != null && extraUris.size !in 1..ProjectStore.MAX_PROJECT_OBJECTS) return null
+    if (clipUris != null && extraUris != null && clipUris != extraUris) return null
+    return clipUris ?: extraUris
+}
+
+/** Retains one externally opened model batch and binds it to exactly one import operation. */
 internal class ExternalModelRequestViewModel(
     private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     private var nextRequestId = savedStateHandle[KEY_NEXT_REQUEST_ID] ?: 0L
     private val mutableRequest = MutableStateFlow(
-        savedStateHandle.get<String>(KEY_REQUEST_URI)?.let { value ->
+        savedStateHandle.get<ArrayList<String>>(KEY_REQUEST_URIS)?.let { values ->
             ExternalModelRequest(
                 id = savedStateHandle[KEY_REQUEST_ID] ?: nextRequestId,
-                uri = Uri.parse(value),
+                uris = values.map(Uri::parse),
             )
         },
     )
     val request: StateFlow<ExternalModelRequest?> = mutableRequest.asStateFlow()
 
     fun enqueue(intent: Intent): Boolean {
-        val uri = modelDocumentUriOrNull(intent) ?: return false
+        val uris = modelDocumentUrisOrNull(intent) ?: return false
         nextRequestId += 1L
         savedStateHandle[KEY_NEXT_REQUEST_ID] = nextRequestId
         savedStateHandle[KEY_REQUEST_ID] = nextRequestId
-        savedStateHandle[KEY_REQUEST_URI] = uri.toString()
-        mutableRequest.value = ExternalModelRequest(nextRequestId, uri)
+        savedStateHandle[KEY_REQUEST_URIS] = ArrayList(uris.map(Uri::toString))
+        mutableRequest.value = ExternalModelRequest(nextRequestId, uris)
         return true
     }
 
@@ -103,14 +153,14 @@ internal class ExternalModelRequestViewModel(
     }
 
     private fun clear() {
-        savedStateHandle[KEY_REQUEST_URI] = null
+        savedStateHandle[KEY_REQUEST_URIS] = null
         mutableRequest.value = null
     }
 
     private companion object {
         const val KEY_NEXT_REQUEST_ID = "external_model_next_request_id"
         const val KEY_REQUEST_ID = "external_model_request_id"
-        const val KEY_REQUEST_URI = "external_model_request_uri"
+        const val KEY_REQUEST_URIS = "external_model_request_uris"
     }
 }
 

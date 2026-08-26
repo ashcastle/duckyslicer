@@ -133,9 +133,11 @@ def valid_sources() -> dict[str, str]:
             "permission.isReadPermission"
         ),
         "ModelOpenRequest.kt": (
-            "Intent.ACTION_VIEW Intent.ACTION_SEND ContentResolver.SCHEME_CONTENT "
+            "Intent.ACTION_VIEW Intent.ACTION_SEND Intent.ACTION_SEND_MULTIPLE "
+            "sharedDocumentUrisOrNull(intent) ContentResolver.SCHEME_CONTENT "
             "MODEL_DOCUMENT_MIME_TYPES MODEL_DOCUMENT_COMPATIBLE_MIME_TYPES "
-            "clipData.itemCount != 1 SavedStateHandle startedOperationId"
+            "clipData.itemCount != 1 ProjectStore.MAX_PROJECT_OBJECTS "
+            "uris.distinct().size != uris.size SavedStateHandle startedOperationId"
         ),
         "OrcaFacetAnnotations.kt": (
             "data class OrcaFacetAnnotation MAX_ANNOTATED_TRIANGLES = 100_000 "
@@ -540,6 +542,16 @@ def valid_sources() -> dict[str, str]:
             '<data android:mimeType="application/vnd.ms-3mfdocument" />'
             '<data android:mimeType="model/obj" />'
             '<data android:mimeType="application/x-tgif" /></intent-filter>'
+            '<intent-filter><action android:name="android.intent.action.SEND_MULTIPLE" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="model/stl" />'
+            '<data android:mimeType="application/sla" />'
+            '<data android:mimeType="application/vnd.ms-pki.stl" />'
+            '<data android:mimeType="model/3mf" />'
+            '<data android:mimeType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />'
+            '<data android:mimeType="application/vnd.ms-3mfdocument" />'
+            '<data android:mimeType="model/obj" />'
+            '<data android:mimeType="application/x-tgif" /></intent-filter>'
             "</activity></application></manifest>"
         ),
         "AndroidTestManifest.xml": (
@@ -677,6 +689,31 @@ class VerifyProjectArchiveTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "explicit project, profile, G-code, and model MIME SEND"):
             verify_project_archive(sources)
 
+    def test_rejects_an_additional_broad_send_multiple_filter(self) -> None:
+        sources = valid_sources()
+        sources["AndroidManifest.xml"] = sources["AndroidManifest.xml"].replace(
+            "</activity>",
+            '<intent-filter><action android:name="android.intent.action.SEND_MULTIPLE" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="*/*" /></intent-filter></activity>',
+        )
+        with self.assertRaisesRegex(VerificationError, "explicit model MIME SEND_MULTIPLE"):
+            verify_project_archive(sources)
+
+    def test_rejects_missing_model_send_multiple_filter(self) -> None:
+        sources = valid_sources()
+        start = (
+            '<intent-filter><action android:name="android.intent.action.SEND_MULTIPLE" />'
+        )
+        start_index = sources["AndroidManifest.xml"].index(start)
+        end_index = sources["AndroidManifest.xml"].index("</intent-filter>", start_index)
+        sources["AndroidManifest.xml"] = (
+            sources["AndroidManifest.xml"][:start_index]
+            + sources["AndroidManifest.xml"][end_index + len("</intent-filter>"):]
+        )
+        with self.assertRaisesRegex(VerificationError, "explicit model MIME SEND_MULTIPLE"):
+            verify_project_archive(sources)
+
     def test_rejects_missing_project_send_filter(self) -> None:
         sources = valid_sources()
         sources["AndroidManifest.xml"] = sources["AndroidManifest.xml"].replace(
@@ -703,6 +740,14 @@ class VerifyProjectArchiveTest(unittest.TestCase):
         sources = valid_sources()
         sources["ProjectOpenRequest.kt"] = sources["ProjectOpenRequest.kt"].replace(
             "sharedDocumentUriOrNull(intent)", "intent.data",
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_model_multi_share_without_bounded_stream_parser(self) -> None:
+        sources = valid_sources()
+        sources["ModelOpenRequest.kt"] = sources["ModelOpenRequest.kt"].replace(
+            "sharedDocumentUrisOrNull(intent)", "intent.clipData",
         )
         with self.assertRaisesRegex(VerificationError, "safeguards"):
             verify_project_archive(sources)

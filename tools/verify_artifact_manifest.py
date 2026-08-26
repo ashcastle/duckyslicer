@@ -333,6 +333,24 @@ def _expected_main_filters() -> set[
                 )
             ),
         ),
+        (
+            ("android.intent.action.SEND_MULTIPLE",),
+            ("android.intent.category.DEFAULT",),
+            tuple(
+                sorted(
+                    (
+                        (("mimeType", "application/sla"),),
+                        (("mimeType", "application/vnd.ms-3mfdocument"),),
+                        (("mimeType", "application/vnd.ms-package.3dmanufacturing-3dmodel+xml"),),
+                        (("mimeType", "application/vnd.ms-pki.stl"),),
+                        (("mimeType", "application/x-tgif"),),
+                        (("mimeType", "model/3mf"),),
+                        (("mimeType", "model/obj"),),
+                        (("mimeType", "model/stl"),),
+                    )
+                )
+            ),
+        ),
     }
 
 

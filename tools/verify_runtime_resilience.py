@@ -152,7 +152,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "projectTransferModel.cutSelectedModel(heightRatio, placeOnCut)",
         "projectTransferModel.createPrimitive(primitive, sizeMm, displayName)",
         "projectTransferModel.importModels(uris)",
-        "projectTransferModel.importModels(request.uri)",
+        "projectTransferModel.importModels(request.uris)",
         "projectTransferModel::cancelActiveEdit",
     ):
         if marker not in main:
