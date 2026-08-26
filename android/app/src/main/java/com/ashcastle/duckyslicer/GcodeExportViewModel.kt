@@ -3,12 +3,14 @@ package com.ashcastle.duckyslicer
 import android.app.Application
 import android.content.ContentResolver
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.io.Serializable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,20 +27,64 @@ internal enum class GcodeExportResult {
 internal data class GcodeExportCompletion(
     val id: Long,
     val result: GcodeExportResult,
+    val totalFiles: Int,
 )
+
+internal data class GcodeExportEntry(
+    val displayName: String,
+    val outcome: SliceOutcome,
+) : Serializable {
+    init {
+        require(displayName == safeGcodeFileName(displayName)) {
+            "Invalid G-code export name"
+        }
+    }
+}
+
+internal data class GcodeExportBatch(
+    val entries: List<GcodeExportEntry>,
+) : Serializable {
+    init {
+        require(entries.size in 2..MAX_PROJECT_PLATES) { "Invalid G-code export batch" }
+        require(entries.map(GcodeExportEntry::displayName).toSet().size == entries.size) {
+            "Duplicate G-code export name"
+        }
+    }
+}
 
 internal data class GcodeExportState(
     val activeId: Long? = null,
     val cancellationRequested: Boolean = false,
+    val completedFiles: Int = 0,
+    val totalFiles: Int = 0,
     val completion: GcodeExportCompletion? = null,
 ) {
     val busy: Boolean
         get() = activeId != null
+
+    val currentFile: Int?
+        get() = if (busy && totalFiles > 1) (completedFiles + 1).coerceAtMost(totalFiles) else null
+
+    init {
+        require(totalFiles in 0..MAX_PROJECT_PLATES) { "Invalid G-code export total" }
+        require(completedFiles in 0..totalFiles) { "Invalid G-code export progress" }
+        require(busy == (totalFiles > 0)) { "G-code export identity is incomplete" }
+        require(!cancellationRequested || busy) { "Inactive G-code export cannot be canceling" }
+    }
 }
 
-internal fun GcodeExportState.withStartedExport(operationId: Long): GcodeExportState? {
+internal fun GcodeExportState.withStartedExport(
+    operationId: Long,
+    totalFiles: Int = 1,
+): GcodeExportState? {
     if (busy || completion != null) return null
-    return copy(activeId = operationId, cancellationRequested = false)
+    if (totalFiles !in 1..MAX_PROJECT_PLATES) return null
+    return copy(
+        activeId = operationId,
+        cancellationRequested = false,
+        completedFiles = 0,
+        totalFiles = totalFiles,
+    )
 }
 
 internal fun GcodeExportState.withCancellationRequested(operationId: Long): GcodeExportState? {
@@ -54,8 +100,19 @@ internal fun GcodeExportState.withCompletedExport(
     return copy(
         activeId = null,
         cancellationRequested = false,
-        completion = GcodeExportCompletion(operationId, result),
+        completedFiles = 0,
+        totalFiles = 0,
+        completion = GcodeExportCompletion(operationId, result, totalFiles),
     )
+}
+
+internal fun GcodeExportState.withExportProgress(
+    operationId: Long,
+    completedFiles: Int,
+): GcodeExportState? {
+    if (activeId != operationId || completion != null) return null
+    if (completedFiles !in this.completedFiles..totalFiles) return null
+    return copy(completedFiles = completedFiles)
 }
 
 private data class ActiveGcodeExport(
@@ -80,30 +137,93 @@ internal class GcodeExportViewModel(application: Application) : AndroidViewModel
         ) {
             return false
         }
+        return startExport(
+            totalFiles = 1,
+            export = { cancellation, onFileCompleted ->
+                copyArtifact(application.contentResolver, uri, outcome.output, cancellation)
+                onFileCompleted()
+            },
+            rollback = { deleteFailedCreatedDocument(application, uri) },
+        )
+    }
+
+    @Synchronized
+    fun exportAll(treeUri: Uri, batch: GcodeExportBatch): Boolean {
+        val application = getApplication<Application>()
+        if (
+            treeUri.scheme != ContentResolver.SCHEME_CONTENT ||
+            !DocumentsContract.isTreeUri(treeUri) ||
+            batch.entries.any { !it.outcome.isRestorableFrom(application.filesDir) }
+        ) {
+            return false
+        }
+        val createdDocuments = ArrayList<Uri>(batch.entries.size)
+        return startExport(
+            totalFiles = batch.entries.size,
+            export = { cancellation, onFileCompleted ->
+                val resolver = application.contentResolver
+                val parent = DocumentsContract.buildDocumentUriUsingTree(
+                    treeUri,
+                    DocumentsContract.getTreeDocumentId(treeUri),
+                )
+                batch.entries.forEach { entry ->
+                    cancellation.throwIfRequested()
+                    val destination = requireNotNull(
+                        DocumentsContract.createDocument(
+                            resolver,
+                            parent,
+                            GCODE_DOCUMENT_MIME_TYPE,
+                            entry.displayName,
+                        ),
+                    ) { "G-code document could not be created" }
+                    createdDocuments += destination
+                    copyArtifact(resolver, destination, entry.outcome.output, cancellation)
+                    onFileCompleted()
+                }
+            },
+            rollback = {
+                createdDocuments.asReversed().forEach { uri ->
+                    deleteFailedCreatedDocument(application, uri)
+                }
+            },
+        )
+    }
+
+    private fun startExport(
+        totalFiles: Int,
+        export: (DocumentTransferCancellation, () -> Unit) -> Unit,
+        rollback: () -> Unit,
+    ): Boolean {
         val operationId = ++nextOperationId
-        val started = mutableState.value.withStartedExport(operationId) ?: return false
+        val started = mutableState.value.withStartedExport(operationId, totalFiles) ?: return false
         val cancellation = DocumentTransferCancellation()
         activeExport = ActiveGcodeExport(operationId, cancellation)
         mutableState.value = started
         viewModelScope.launch(Dispatchers.IO) {
             val result = try {
-                copyArtifact(application.contentResolver, uri, outcome.output, cancellation)
+                var completedFiles = 0
+                export(cancellation) {
+                    completedFiles += 1
+                    synchronized(this@GcodeExportViewModel) {
+                        mutableState.value.withExportProgress(operationId, completedFiles)
+                            ?.let { progress -> mutableState.value = progress }
+                    }
+                }
                 cancellation.complete()
                 GcodeExportResult.SAVED
             } catch (scopeCancellation: CancellationException) {
                 cancellation.cancel()
-                deleteFailedCreatedDocument(application, uri)
+                runCatching(rollback)
                 GcodeExportResult.CANCELED
             } catch (failure: Exception) {
+                runCatching(rollback)
                 if (
                     cancellation.wasRequested() ||
                     failure is DocumentTransferCancelledException
                 ) {
-                    deleteFailedCreatedDocument(application, uri)
                     GcodeExportResult.CANCELED
                 } else {
                     if (BuildConfig.DEBUG) Log.e(LOG_TAG, "G-code export failed", failure)
-                    deleteFailedCreatedDocument(application, uri)
                     supportEvents.record(SupportEvent.GCODE_EXPORT_FAILED)
                     GcodeExportResult.FAILED
                 }

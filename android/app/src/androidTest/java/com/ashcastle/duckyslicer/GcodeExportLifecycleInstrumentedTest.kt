@@ -166,6 +166,123 @@ class GcodeExportLifecycleInstrumentedTest {
         }
     }
 
+    @Test
+    fun allPlateExportSurvivesRecreationAndCreatesEveryNamedDocument() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        prepareBatchProvider(BatchExportDocumentsProvider.METHOD_PREPARE_BLOCK_SECOND)
+        val fixture = batchFixture()
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                lateinit var retainedModel: GcodeExportViewModel
+                scenario.onActivity { activity ->
+                    retainedModel = ViewModelProvider(activity)[GcodeExportViewModel::class.java]
+                    assertTrue(retainedModel.exportAll(BatchExportDocumentsProvider.TREE_URI, fixture))
+                }
+                waitForBatchProvider { it.getBoolean(BatchExportDocumentsProvider.KEY_SECOND_OPEN_STARTED) }
+                assertEquals(2, retainedModel.state.value.currentFile)
+
+                scenario.recreate()
+                scenario.onActivity { recreated ->
+                    assertSame(
+                        retainedModel,
+                        ViewModelProvider(recreated)[GcodeExportViewModel::class.java],
+                    )
+                    assertFalse(
+                        retainedModel.exportAll(BatchExportDocumentsProvider.TREE_URI, fixture),
+                    )
+                }
+                resolver.call(
+                    BatchExportDocumentsProvider.TREE_URI,
+                    BatchExportDocumentsProvider.METHOD_RELEASE,
+                    null,
+                    null,
+                )
+                waitForExport(retainedModel)
+
+                val status = waitForBatchProvider {
+                    it.getStringArrayList(BatchExportDocumentsProvider.KEY_FILES)?.size == 2
+                }
+                assertEquals(
+                    fixture.entries.map(GcodeExportEntry::displayName),
+                    status.getStringArrayList(BatchExportDocumentsProvider.KEY_FILES),
+                )
+                assertEquals(
+                    fixture.entries.map { it.outcome.output.readText() },
+                    status.getStringArrayList(BatchExportDocumentsProvider.KEY_CONTENTS),
+                )
+                assertEquals(2, requireNotNull(retainedModel.state.value.completion).totalFiles)
+            }
+        } finally {
+            resolver.call(
+                BatchExportDocumentsProvider.TREE_URI,
+                BatchExportDocumentsProvider.METHOD_RELEASE,
+                null,
+                null,
+            )
+            fixture.entries.forEach { it.outcome.output.delete() }
+            prepareBatchProvider(BatchExportDocumentsProvider.METHOD_PREPARE_SUCCESS)
+        }
+    }
+
+    @Test
+    fun laterBatchFailureDeletesEarlierDocumentsAndKeepsPrivateArtifacts() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val application = context.applicationContext as Application
+        prepareBatchProvider(BatchExportDocumentsProvider.METHOD_PREPARE_FAIL_SECOND)
+        val fixture = batchFixture()
+        val store = ViewModelStore()
+        try {
+            val model = ViewModelProvider(
+                store,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[GcodeExportViewModel::class.java]
+            assertTrue(model.exportAll(BatchExportDocumentsProvider.TREE_URI, fixture))
+            waitForExport(model)
+
+            assertEquals(GcodeExportResult.FAILED, requireNotNull(model.state.value.completion).result)
+            assertTrue(batchProviderFiles().isEmpty())
+            assertTrue(fixture.entries.all { it.outcome.output.isFile })
+        } finally {
+            store.clear()
+            fixture.entries.forEach { it.outcome.output.delete() }
+            prepareBatchProvider(BatchExportDocumentsProvider.METHOD_PREPARE_SUCCESS)
+        }
+    }
+
+    @Test
+    fun batchCancellationDeletesEveryDocumentCreatedByThatOperation() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val application = context.applicationContext as Application
+        prepareBatchProvider(BatchExportDocumentsProvider.METHOD_PREPARE_BLOCK_SECOND)
+        val fixture = batchFixture()
+        val store = ViewModelStore()
+        try {
+            val model = ViewModelProvider(
+                store,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[GcodeExportViewModel::class.java]
+            assertTrue(model.exportAll(BatchExportDocumentsProvider.TREE_URI, fixture))
+            waitForBatchProvider { it.getBoolean(BatchExportDocumentsProvider.KEY_SECOND_OPEN_STARTED) }
+            assertTrue(model.cancelActiveExport())
+            waitForExport(model)
+
+            assertEquals(GcodeExportResult.CANCELED, requireNotNull(model.state.value.completion).result)
+            assertTrue(batchProviderFiles().isEmpty())
+            assertTrue(fixture.entries.all { it.outcome.output.isFile })
+        } finally {
+            store.clear()
+            context.contentResolver.call(
+                BatchExportDocumentsProvider.TREE_URI,
+                BatchExportDocumentsProvider.METHOD_RELEASE,
+                null,
+                null,
+            )
+            fixture.entries.forEach { it.outcome.output.delete() }
+            prepareBatchProvider(BatchExportDocumentsProvider.METHOD_PREPARE_SUCCESS)
+        }
+    }
+
     private fun waitForExport(model: GcodeExportViewModel) {
         val deadline = SystemClock.elapsedRealtime() + WAIT_TIMEOUT_MILLIS
         while (SystemClock.elapsedRealtime() < deadline) {
@@ -193,6 +310,70 @@ class GcodeExportLifecycleInstrumentedTest {
         }
         throw AssertionError("Timed out waiting for blocking export provider: $latest")
     }
+
+    private fun prepareBatchProvider(method: String) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.targetContext.contentResolver.call(
+            BatchExportDocumentsProvider.TREE_URI,
+            method,
+            null,
+            null,
+        )
+    }
+
+    private fun waitForBatchProvider(condition: (Bundle) -> Boolean): Bundle {
+        val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
+        val deadline = SystemClock.elapsedRealtime() + WAIT_TIMEOUT_MILLIS
+        var latest = Bundle.EMPTY
+        while (SystemClock.elapsedRealtime() < deadline) {
+            latest = requireNotNull(
+                resolver.call(
+                    BatchExportDocumentsProvider.TREE_URI,
+                    BatchExportDocumentsProvider.METHOD_STATUS,
+                    null,
+                    null,
+                ),
+            )
+            if (condition(latest)) return latest
+            SystemClock.sleep(WAIT_POLL_MILLIS)
+        }
+        throw AssertionError("Timed out waiting for batch export provider: $latest")
+    }
+
+    private fun batchFixture(): GcodeExportBatch {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val outputRoot = File(context.filesDir, SliceArtifactStore.OUTPUT_DIRECTORY)
+            .apply(File::mkdirs)
+        return GcodeExportBatch(
+            listOf(
+                GcodeExportEntry(
+                    "plate-01-first.gcode",
+                    SliceOutcome(
+                        outputRoot.resolve("batch-first.gcode").apply { writeText("G1 X1 E1\n") },
+                        1,
+                        1f,
+                        1f,
+                        1f,
+                    ),
+                ),
+                GcodeExportEntry(
+                    "plate-02-second.gcode",
+                    SliceOutcome(
+                        outputRoot.resolve("batch-second.gcode").apply { writeText("G1 X2 E2\n") },
+                        1,
+                        1f,
+                        1f,
+                        1f,
+                    ),
+                ),
+            ),
+        )
+    }
+
+    private fun batchProviderFiles(): List<String> = requireNotNull(
+        waitForBatchProvider { true }
+            .getStringArrayList(BatchExportDocumentsProvider.KEY_FILES),
+    )
 
     private fun buildPayload(): ByteArray {
         val line = "G1 X10 Y10 E1.25\n".toByteArray()

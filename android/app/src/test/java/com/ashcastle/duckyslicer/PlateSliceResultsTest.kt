@@ -80,6 +80,52 @@ class PlateSliceResultsTest {
         assertEquals(listOf("first-plate"), snapshot.sliceablePlateIds(options - "second-plate"))
     }
 
+    @Test
+    fun completeExportBatchFollowsPlateOrderAndUsesDistinctSafeNames() {
+        val firstObject = projectObject("first-object")
+        val secondObject = projectObject("second-object")
+        val snapshot = ProjectSnapshot(
+            selectedPlateId = "second-plate",
+            plates = listOf(
+                ProjectPlate("first-plate", listOf(firstObject), firstObject.id),
+                ProjectPlate("empty-plate"),
+                ProjectPlate("second-plate", listOf(secondObject), secondObject.id),
+            ),
+        )
+        val first = outcome("first.gcode", 10).copy(suggestedName = "same/model.gcode")
+        val second = outcome("second.gcode", 20).copy(suggestedName = "same/model.gcode")
+        val results = PlateSliceResults()
+            .put("second-plate", second)
+            .put("first-plate", first)
+
+        val batch = requireNotNull(results.completeExportBatch(snapshot))
+
+        assertEquals(
+            listOf("plate-01-model.gcode", "plate-03-model.gcode"),
+            batch.entries.map(GcodeExportEntry::displayName),
+        )
+        assertEquals(listOf(first, second), batch.entries.map(GcodeExportEntry::outcome))
+        assertNull(results.clear("second-plate").completeExportBatch(snapshot))
+    }
+
+    @Test
+    fun exportBatchRequiresAtLeastTwoPrintablePlates() {
+        val onlyObject = projectObject("only-object")
+        val snapshot = ProjectSnapshot(
+            plates = listOf(
+                ProjectPlate("plate-1", listOf(onlyObject), onlyObject.id),
+                ProjectPlate("plate-2"),
+            ),
+            selectedPlateId = "plate-1",
+        )
+
+        assertNull(
+            PlateSliceResults()
+                .put("plate-1", outcome("only.gcode", 10))
+                .completeExportBatch(snapshot),
+        )
+    }
+
     private fun outcome(name: String, layers: Int) = SliceOutcome(
         output = File("/tmp/$name"),
         layers = layers,

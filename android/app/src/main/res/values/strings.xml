@@ -55,6 +55,9 @@
     <string name="slice_model">Slice</string>
     <string name="slice_all_plates">Slice all plates</string>
     <string name="all_plates_sliced">All plates sliced.</string>
+    <string name="export_all_gcode">Export all G-code</string>
+    <string name="exporting_gcode_files">Exporting file %1$d of %2$d…</string>
+    <string name="all_gcode_saved">All G-code files saved.</string>
     <string name="slice_again">Slice again</string>
     <string name="save_gcode">Save G-code</string>
     <string name="preview_error">Couldn’t show this layer.</string>

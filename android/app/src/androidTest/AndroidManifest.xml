@@ -12,5 +12,10 @@
             android:name="com.ashcastle.duckyslicer.BlockingImportProvider"
             android:authorities="com.ashcastle.duckyslicer.test.blocking-import"
             android:exported="true" />
+        <provider
+            android:name="com.ashcastle.duckyslicer.BatchExportDocumentsProvider"
+            android:authorities="com.ashcastle.duckyslicer.test.batch-export"
+            android:exported="true"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

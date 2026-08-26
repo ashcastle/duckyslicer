@@ -518,8 +518,8 @@ internal fun WorkspaceScreen(
     sliceCancellationRequested: Boolean,
     sliceProgress: SliceProgress,
     previewLoading: Boolean,
-    exportingGcode: Boolean,
-    gcodeExportCancellationRequested: Boolean,
+    gcodeExportState: GcodeExportState,
+    canExportAllGcode: Boolean,
     error: String?,
     notice: String?,
     canUndo: Boolean,
@@ -576,7 +576,7 @@ internal fun WorkspaceScreen(
     onRemoveModel: (String) -> Unit,
     onSlice: (Boolean) -> Unit,
     onCancelSlice: () -> Unit,
-    onSave: () -> Unit,
+    onSave: (Boolean) -> Unit,
     onCancelGcodeExport: () -> Unit,
     onSliceOptionsChanged: (SliceOptions) -> Unit,
     onSavePrinterProfile: (String, SliceOptions) -> Unit,
@@ -612,6 +612,8 @@ internal fun WorkspaceScreen(
     onRemoteResume: () -> Unit,
     onRemoteCancel: () -> Unit,
 ) = BoxWithConstraints {
+    val exportingGcode = gcodeExportState.busy
+    val gcodeExportCancellationRequested = gcodeExportState.cancellationRequested
     val selectedObject = projectObjects.firstOrNull { it.id == selectedObjectId }
     val stringResourceBrimPlacementHint = stringResource(R.string.brim_point_invalid)
     val selectedSingleVolume = selectedObject?.singleVolumeOrNull
@@ -855,8 +857,11 @@ internal fun WorkspaceScreen(
                 canExportModel = projectObjects.isNotEmpty(),
                 canExportSelectedStl = selectedObjectId != null,
                 canExport = sliceOutcome != null && !exportingGcode,
+                canExportAll = canExportAllGcode && !exportingGcode,
                 exportingGcode = exportingGcode,
                 gcodeExportCancellationRequested = gcodeExportCancellationRequested,
+                exportCurrentFile = gcodeExportState.currentFile,
+                exportTotalFiles = gcodeExportState.totalFiles,
                 onImport = onChoose,
                 onImportProfiles = onImportProfiles,
                 onExportProfiles = onExportProfiles,
@@ -864,7 +869,8 @@ internal fun WorkspaceScreen(
                 onAddShape = { showPrimitivePicker = true },
                 onExportModel = onExportModel,
                 onExportSelectedStl = onExportSelectedStl,
-                onExport = onSave,
+                onExport = { onSave(false) },
+                onExportAll = { onSave(true) },
                 onCancelGcodeExport = onCancelGcodeExport,
                 canArrange = projectObjects.size > 1 &&
                     projectObjects.sumOf { it.volumes.size } <= ProjectStore.MAX_PROJECT_VOLUMES,
@@ -1047,10 +1053,14 @@ internal fun WorkspaceScreen(
             if (selectedTab == WorkspaceTab.PREVIEW) {
                 PreviewExportSplitButton(
                     canExport = sliceOutcome != null && !exportingGcode,
+                    canExportAll = canExportAllGcode && !exportingGcode,
                     exporting = exportingGcode,
                     cancellationRequested = gcodeExportCancellationRequested,
+                    exportCurrentFile = gcodeExportState.currentFile,
+                    exportTotalFiles = gcodeExportState.totalFiles,
                     canSend = sliceOutcome != null && selectedRemoteDeviceId != null && !remoteBusy,
-                    onExport = onSave,
+                    onExport = { onSave(false) },
+                    onExportAll = { onSave(true) },
                     onCancelExport = onCancelGcodeExport,
                     onSend = onRemoteUpload,
                     modifier = Modifier
@@ -3372,8 +3382,11 @@ private fun WorkspaceMenu(
     canExportModel: Boolean,
     canExportSelectedStl: Boolean,
     canExport: Boolean,
+    canExportAll: Boolean,
     exportingGcode: Boolean,
     gcodeExportCancellationRequested: Boolean,
+    exportCurrentFile: Int?,
+    exportTotalFiles: Int,
     canArrange: Boolean,
     onImport: () -> Unit,
     onImportProfiles: () -> Unit,
@@ -3383,6 +3396,7 @@ private fun WorkspaceMenu(
     onExportModel: () -> Unit,
     onExportSelectedStl: () -> Unit,
     onExport: () -> Unit,
+    onExportAll: () -> Unit,
     onCancelGcodeExport: () -> Unit,
     onArrange: () -> Unit,
     onCancelProjectEdit: () -> Unit,
@@ -3392,6 +3406,9 @@ private fun WorkspaceMenu(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val menuDescription = stringResource(R.string.menu)
+    val exportProgressDescription = exportCurrentFile?.let { current ->
+        stringResource(R.string.exporting_gcode_files, current, exportTotalFiles)
+    }
     Box(modifier) {
         Surface(
             color = Color.Black.copy(alpha = 0.68f),
@@ -3401,9 +3418,12 @@ private fun WorkspaceMenu(
         ) {
             IconButton(
                 onClick = { expanded = true },
-                modifier = Modifier.semantics { contentDescription = menuDescription },
+                modifier = Modifier.semantics {
+                    contentDescription = menuDescription
+                    exportProgressDescription?.let { stateDescription = it }
+                },
             ) {
-                if (importing || editingBusy || profileTransferDirection != null) {
+                if (importing || editingBusy || profileTransferDirection != null || exportingGcode) {
                     CircularProgressIndicator(Modifier.size(22.dp), color = WorkspaceYellow, strokeWidth = 2.dp)
                 } else {
                     Icon(Icons.Default.Menu, contentDescription = null)
@@ -3548,13 +3568,21 @@ private fun WorkspaceMenu(
             DropdownMenuItem(
                 text = {
                     Text(
-                        stringResource(
-                            when {
-                                gcodeExportCancellationRequested -> R.string.canceling_gcode_export
-                                exportingGcode -> R.string.cancel_gcode_export
-                                else -> R.string.export_gcode
-                            },
-                        ),
+                        if (exportCurrentFile != null) {
+                            stringResource(
+                                R.string.exporting_gcode_files,
+                                exportCurrentFile,
+                                exportTotalFiles,
+                            )
+                        } else {
+                            stringResource(
+                                when {
+                                    gcodeExportCancellationRequested -> R.string.canceling_gcode_export
+                                    exportingGcode -> R.string.cancel_gcode_export
+                                    else -> R.string.export_gcode
+                                },
+                            )
+                        },
                     )
                 },
                 leadingIcon = {
@@ -3570,6 +3598,16 @@ private fun WorkspaceMenu(
                     if (exportingGcode) onCancelGcodeExport() else onExport()
                 },
             )
+            if (canExportAll) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.export_all_gcode)) },
+                    leadingIcon = { Icon(Icons.Default.Folder, null) },
+                    onClick = {
+                        expanded = false
+                        onExportAll()
+                    },
+                )
+            }
         }
     }
 }
@@ -3577,80 +3615,106 @@ private fun WorkspaceMenu(
 @Composable
 private fun PreviewExportSplitButton(
     canExport: Boolean,
+    canExportAll: Boolean,
     exporting: Boolean,
     cancellationRequested: Boolean,
+    exportCurrentFile: Int?,
+    exportTotalFiles: Int,
     canSend: Boolean,
     onExport: () -> Unit,
+    onExportAll: () -> Unit,
     onCancelExport: () -> Unit,
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val exportOptionsLabel = stringResource(R.string.export_options)
+    val exportProgressLabel = exportCurrentFile?.let { current ->
+        stringResource(R.string.exporting_gcode_files, current, exportTotalFiles)
+    }
     Box(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .width(48.dp)
-                    .height(50.dp)
-                    .clickable(
-                        enabled = canExport,
-                        onClickLabel = exportOptionsLabel,
-                        role = Role.Button,
-                        onClick = { expanded = true },
-                    ),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                Surface(
-                    color = Color.Black.copy(alpha = 0.68f),
-                    contentColor = Color(0xFFF4F4EE),
-                    shape = RoundedCornerShape(topStart = 50.dp, bottomStart = 50.dp),
-                    modifier = Modifier.width(34.dp).height(50.dp),
+        Column(horizontalAlignment = Alignment.End) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .width(48.dp)
+                        .height(50.dp)
+                        .clickable(
+                            enabled = canExport,
+                            onClickLabel = exportOptionsLabel,
+                            role = Role.Button,
+                            onClick = { expanded = true },
+                        ),
+                    contentAlignment = Alignment.CenterEnd,
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Default.ArrowDropDown,
-                            contentDescription = exportOptionsLabel,
-                        )
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.68f),
+                        contentColor = Color(0xFFF4F4EE),
+                        shape = RoundedCornerShape(topStart = 50.dp, bottomStart = 50.dp),
+                        modifier = Modifier.width(34.dp).height(50.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.ArrowDropDown,
+                                contentDescription = exportOptionsLabel,
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.width(2.dp))
+                Surface(
+                    color = WorkspaceYellow,
+                    contentColor = WorkspaceBlack,
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.size(50.dp),
+                ) {
+                    IconButton(
+                        enabled = if (exporting) !cancellationRequested else canExport,
+                        onClick = { if (exporting) onCancelExport() else onExport() },
+                        modifier = Modifier.semantics {
+                            exportProgressLabel?.let { stateDescription = it }
+                        },
+                    ) {
+                        if (exporting) {
+                            Box(contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                    color = WorkspaceBlack,
+                                    strokeWidth = 2.dp,
+                                )
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = stringResource(
+                                        if (cancellationRequested) {
+                                            R.string.canceling_gcode_export
+                                        } else {
+                                            R.string.cancel_gcode_export
+                                        },
+                                    ),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        } else {
+                            Icon(
+                                Icons.Default.SaveAlt,
+                                contentDescription = stringResource(R.string.export_gcode),
+                            )
+                        }
                     }
                 }
             }
-            Spacer(Modifier.width(2.dp))
-            Surface(
-                color = WorkspaceYellow,
-                contentColor = WorkspaceBlack,
-                shape = RoundedCornerShape(50),
-                modifier = Modifier.size(50.dp),
-            ) {
-                IconButton(
-                    enabled = if (exporting) !cancellationRequested else canExport,
-                    onClick = { if (exporting) onCancelExport() else onExport() },
+            exportProgressLabel?.let { progress ->
+                Surface(
+                    color = Color.Black.copy(alpha = 0.72f),
+                    contentColor = Color(0xFFF4F4EE),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.padding(top = 6.dp),
                 ) {
-                    if (exporting) {
-                        Box(contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(28.dp),
-                                color = WorkspaceBlack,
-                                strokeWidth = 2.dp,
-                            )
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = stringResource(
-                                    if (cancellationRequested) {
-                                        R.string.canceling_gcode_export
-                                    } else {
-                                        R.string.cancel_gcode_export
-                                    },
-                                ),
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
-                    } else {
-                        Icon(
-                            Icons.Default.SaveAlt,
-                            contentDescription = stringResource(R.string.export_gcode),
-                        )
-                    }
+                    Text(
+                        progress,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
                 }
             }
         }
@@ -3658,13 +3722,21 @@ private fun PreviewExportSplitButton(
             DropdownMenuItem(
                 text = {
                     Text(
-                        stringResource(
-                            when {
-                                cancellationRequested -> R.string.canceling_gcode_export
-                                exporting -> R.string.cancel_gcode_export
-                                else -> R.string.export_gcode
-                            },
-                        ),
+                        if (exportCurrentFile != null) {
+                            stringResource(
+                                R.string.exporting_gcode_files,
+                                exportCurrentFile,
+                                exportTotalFiles,
+                            )
+                        } else {
+                            stringResource(
+                                when {
+                                    cancellationRequested -> R.string.canceling_gcode_export
+                                    exporting -> R.string.cancel_gcode_export
+                                    else -> R.string.export_gcode
+                                },
+                            )
+                        },
                     )
                 },
                 leadingIcon = {
@@ -3676,6 +3748,16 @@ private fun PreviewExportSplitButton(
                     if (exporting) onCancelExport() else onExport()
                 },
             )
+            if (canExportAll) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.export_all_gcode)) },
+                    leadingIcon = { Icon(Icons.Default.Folder, null) },
+                    onClick = {
+                        expanded = false
+                        onExportAll()
+                    },
+                )
+            }
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.send_gcode)) },
                 leadingIcon = { Icon(Icons.Default.UploadFile, null) },

@@ -29,7 +29,13 @@ internal fun WorkspaceStatusEffects(
         val completion = gcodeExportState.completion ?: return@LaunchedEffect
         when (completion.result) {
             GcodeExportResult.SAVED -> onPresentation(
-                resources.getString(R.string.gcode_saved),
+                resources.getString(
+                    if (completion.totalFiles > 1) {
+                        R.string.all_gcode_saved
+                    } else {
+                        R.string.gcode_saved
+                    },
+                ),
                 null,
             )
             GcodeExportResult.CANCELED -> onPresentation(

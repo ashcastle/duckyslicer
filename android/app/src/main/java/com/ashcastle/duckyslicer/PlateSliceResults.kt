@@ -75,3 +75,25 @@ internal fun ProjectSnapshot.sliceablePlateIds(
 ): List<String> = plates.mapNotNull { plate ->
     plate.id.takeIf { plate.objects.isNotEmpty() && plateOptions.containsKey(plate.id) }
 }
+
+internal fun PlateSliceResults.completeExportBatch(
+    snapshot: ProjectSnapshot,
+): GcodeExportBatch? {
+    val printablePlates = snapshot.plates.withIndex().filter { it.value.objects.isNotEmpty() }
+    if (printablePlates.size < 2) return null
+    val entries = printablePlates.map { indexedPlate ->
+        val plate = indexedPlate.value
+        val result = resultFor(plate.id) ?: return null
+        GcodeExportEntry(
+            displayName = plateGcodeFileName(indexedPlate.index + 1, result.outcome.suggestedName),
+            outcome = result.outcome,
+        )
+    }
+    return GcodeExportBatch(entries)
+}
+
+internal fun plateGcodeFileName(plateNumber: Int, suggestedName: String): String {
+    require(plateNumber in 1..MAX_PROJECT_PLATES) { "Invalid plate number" }
+    val base = safeGcodeFileName(suggestedName).removeSuffix(".gcode")
+    return safeGcodeFileName("plate-${plateNumber.toString().padStart(2, '0')}-$base")
+}

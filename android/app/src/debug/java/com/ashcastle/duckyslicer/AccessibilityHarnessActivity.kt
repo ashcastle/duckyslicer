@@ -129,6 +129,37 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             ),
                             exportingGcode = true,
                         )
+                        SCREEN_GCODE_EXPORT_ALL -> WorkspaceAccessibilityHarness(
+                            selectedTab = WorkspaceTab.PREVIEW,
+                            projectObjects = listOf(accessibilityProjectObject()),
+                            sliceOutcome = SliceOutcome(
+                                File(cacheDir, "accessibility-export-all.gcode"),
+                                10,
+                                60f,
+                                1_000f,
+                                3f,
+                            ),
+                            plateCount = 2,
+                            allPlatesHaveObjects = true,
+                        )
+                        SCREEN_GCODE_EXPORT_ALL_PROGRESS -> WorkspaceAccessibilityHarness(
+                            selectedTab = WorkspaceTab.PREVIEW,
+                            projectObjects = listOf(accessibilityProjectObject()),
+                            sliceOutcome = SliceOutcome(
+                                File(cacheDir, "accessibility-export-all-progress.gcode"),
+                                10,
+                                60f,
+                                1_000f,
+                                3f,
+                            ),
+                            plateCount = 3,
+                            allPlatesHaveObjects = true,
+                            gcodeExportState = GcodeExportState(
+                                activeId = 1L,
+                                completedFiles = 1,
+                                totalFiles = 3,
+                            ),
+                        )
                         SCREEN_PROJECT_EXPORT -> WorkspaceAccessibilityHarness(
                             selectedTab = WorkspaceTab.PROJECT,
                             projectExporting = true,
@@ -188,6 +219,8 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_LAY_ON_FACE = "lay-on-face"
         const val SCREEN_LAY_ON_FACE_FAILURE = "lay-on-face-failure"
         const val SCREEN_GCODE_EXPORT = "gcode-export"
+        const val SCREEN_GCODE_EXPORT_ALL = "gcode-export-all"
+        const val SCREEN_GCODE_EXPORT_ALL_PROGRESS = "gcode-export-all-progress"
         const val SCREEN_PROJECT_EXPORT = "project-export"
         const val SCREEN_PROJECT_IMPORT = "project-import"
         const val SCREEN_PROFILE_IMPORT = "profile-import"
@@ -470,6 +503,11 @@ private fun WorkspaceAccessibilityHarness(
     projectObjects: List<ProjectObject> = emptyList(),
     sliceOutcome: SliceOutcome? = null,
     exportingGcode: Boolean = false,
+    gcodeExportState: GcodeExportState = if (exportingGcode) {
+        GcodeExportState(activeId = 1L, totalFiles = 1)
+    } else {
+        GcodeExportState()
+    },
     projectImporting: Boolean = false,
     projectExporting: Boolean = false,
     profileTransferDirection: ProfileTransferDirection? = null,
@@ -555,8 +593,8 @@ private fun WorkspaceAccessibilityHarness(
         sliceCancellationRequested = false,
         sliceProgress = sliceProgress,
         previewLoading = false,
-        exportingGcode = exportingGcode,
-        gcodeExportCancellationRequested = false,
+        gcodeExportState = gcodeExportState,
+        canExportAllGcode = plateCount >= 2 && allPlatesHaveObjects && sliceOutcome != null,
         error = null,
         notice = harnessNotice,
         canUndo = layOnFaceUndoTransform != null,
@@ -715,7 +753,9 @@ private fun WorkspaceAccessibilityHarness(
             if (allPlates) harnessNotice = TEST_SLICE_ALL_REQUESTED_LABEL
         },
         onCancelSlice = {},
-        onSave = {},
+        onSave = { allPlates ->
+            if (allPlates) harnessNotice = TEST_EXPORT_ALL_REQUESTED_LABEL
+        },
         onCancelGcodeExport = {},
         onSliceOptionsChanged = {},
         onSavePrinterProfile = { _, _ -> },
@@ -841,3 +881,4 @@ internal const val TEST_LAY_ON_FACE_UNDONE_LABEL = "Accessibility face placement
 internal const val TEST_TRANSFORM_COMMITTED_LABEL = "Accessibility transform committed"
 internal const val TEST_SUPPORT_PAINTED_LABEL = "Accessibility support painted"
 internal const val TEST_SLICE_ALL_REQUESTED_LABEL = "Accessibility all plates requested"
+internal const val TEST_EXPORT_ALL_REQUESTED_LABEL = "Accessibility all G-code requested"

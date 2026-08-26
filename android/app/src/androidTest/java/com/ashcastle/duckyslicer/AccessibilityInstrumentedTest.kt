@@ -832,6 +832,39 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun allPlateGcodeExportIsExplicitAndReportsFileProgress() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val exportOptions = context.getString(R.string.export_options)
+        val exportAll = context.getString(R.string.export_all_gcode)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_GCODE_EXPORT_ALL).use {
+            val options = waitForNode(exportOptions) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == exportOptions
+            }
+            assertTrue(options.isFocusable)
+            assertTrue(options.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val action = waitForNode(exportAll) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == exportAll
+            }
+            assertTrue(action.isFocusable)
+            assertTrue(action.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNode(TEST_EXPORT_ALL_REQUESTED_LABEL) {
+                it.effectiveLabel() == TEST_EXPORT_ALL_REQUESTED_LABEL
+            }
+        }
+
+        val progress = context.getString(R.string.exporting_gcode_files, 2, 3)
+        val cancel = context.getString(R.string.cancel_gcode_export)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_GCODE_EXPORT_ALL_PROGRESS).use {
+            waitForNode(progress) { it.effectiveLabel() == progress }
+            val cancelAction = waitForNode(cancel) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == cancel
+            }
+            assertTrue(cancelAction.isFocusable)
+            assertEquals(progress, cancelAction.stateDescription?.toString())
+        }
+    }
+
+    @Test
     fun largeTextLandscapeKeepsMenuClearOfScrollableWorkspaceSheet() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val menuLabel = context.getString(R.string.menu)

@@ -55,6 +55,9 @@
     <string name="slice_model">슬라이스</string>
     <string name="slice_all_plates">모든 플레이트 슬라이스</string>
     <string name="all_plates_sliced">모든 플레이트를 슬라이스했습니다.</string>
+    <string name="export_all_gcode">모든 G-code 내보내기</string>
+    <string name="exporting_gcode_files">파일 %1$d/%2$d 내보내는 중…</string>
+    <string name="all_gcode_saved">모든 G-code 파일을 저장했습니다.</string>
     <string name="slice_again">다시 슬라이스</string>
     <string name="save_gcode">G-code 저장</string>
     <string name="preview_error">이 레이어를 표시하지 못했습니다.</string>

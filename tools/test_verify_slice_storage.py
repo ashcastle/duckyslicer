@@ -30,11 +30,15 @@ def valid_sources() -> dict[str, str]:
             "CreateDocument(GCODE_DOCUMENT_MIME_TYPE) "
             "ViewModelProvider(this)[GcodeExportViewModel::class.java] "
             "var pendingGcodeExport by rememberSaveable pendingGcodeExport = requested "
-            "gcodeExportModel.export(uri, requested.outcome) gcodeExportModel::cancelActiveExport"
+            "gcodeExportModel.export(uri, requested.outcome) "
+            "ActivityResultContracts.OpenDocumentTree() var pendingGcodeBatch by rememberSaveable "
+            "gcodeExportModel.exportAll(uri, requested) gcodeExportModel::cancelActiveExport"
         ),
         "WorkspaceScreen.kt": (
-            "gcodeExportCancellationRequested: Boolean onCancelGcodeExport: () -> Unit "
+            "gcodeExportState: GcodeExportState canExportAllGcode: Boolean "
+            "onCancelGcodeExport: () -> Unit "
             "R.string.cancel_gcode_export R.string.canceling_gcode_export "
+            "R.string.export_all_gcode R.string.exporting_gcode_files "
             "if (exporting) onCancelExport() else onExport()"
         ),
         "SliceOperationViewModel.kt": "SliceArtifactLease.acquire(outcome.output)",
@@ -55,7 +59,16 @@ def valid_sources() -> dict[str, str]:
             "copyCancellable( fun cancelActiveExport(): Boolean override fun onCleared() "
             "if (activeExport?.id == operationId) activeExport = null "
             "deleteFailedCreatedDocument(application, uri) "
-            "SupportEvent.GCODE_EXPORT_FAILED"
+            "SupportEvent.GCODE_EXPORT_FAILED "
+            "fun exportAll(treeUri: Uri, batch: GcodeExportBatch): Boolean "
+            "DocumentsContract.isTreeUri(treeUri) DocumentsContract.buildDocumentUriUsingTree( "
+            "DocumentsContract.createDocument( createdDocuments.asReversed() "
+            "batch.entries.any { !it.outcome.isRestorableFrom(application.filesDir) } "
+            "withExportProgress(operationId, completedFiles)"
+        ),
+        "PlateSliceResults.kt": (
+            "fun PlateSliceResults.completeExportBatch( snapshot.plates.withIndex() "
+            "resultFor(plate.id) ?: return null plateGcodeFileName(indexedPlate.index + 1"
         ),
         "RemoteDevice.kt": "SliceArtifactLease.acquire(gcode)",
         "SliceArtifactStoreTest.kt": (
@@ -78,8 +91,20 @@ def valid_sources() -> dict[str, str]:
             "finalOwnerClearStopsItsCopyAndDeletesThePartialDocument "
             "assertSame( assertFalse(retainedModel.export( retainedModel.cancelActiveExport() "
             "store.clear() KEY_DELETED KEY_SHA256"
+            " allPlateExportSurvivesRecreationAndCreatesEveryNamedDocument"
+            " laterBatchFailureDeletesEarlierDocumentsAndKeepsPrivateArtifacts"
+            " batchCancellationDeletesEveryDocumentCreatedByThatOperation"
+            " BatchExportDocumentsProvider.TREE_URI"
         ),
-        "AccessibilityInstrumentedTest.kt": "cancelGcodeExportActionIsReachable",
+        "BatchExportDocumentsProvider.java": (
+            'extends ContentProvider METHOD_CREATE_DOCUMENT = "android:createDocument" '
+            "openAssetFile( MODE_FAIL_SECOND MODE_BLOCK_SECOND createDocument( "
+            "deleteDocument( signal.setOnCancelListener"
+        ),
+        "AccessibilityInstrumentedTest.kt": (
+            "cancelGcodeExportActionIsReachable "
+            "allPlateGcodeExportIsExplicitAndReportsFileProgress"
+        ),
         "SECURITY.md": "G-code reader lease RLIMIT_FSIZE",
         "CONTRIBUTING.md": "G-code reader lease RLIMIT_FSIZE",
     }
@@ -129,6 +154,14 @@ class VerifySliceStorageTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "retained G-code export"):
             verify_slice_storage(sources)
 
+    def test_rejects_non_atomic_batch_cleanup(self) -> None:
+        sources = valid_sources()
+        sources["GcodeExportViewModel.kt"] = sources["GcodeExportViewModel.kt"].replace(
+            "createdDocuments.asReversed()", "leave earlier batch files"
+        )
+        with self.assertRaisesRegex(VerificationError, "retained G-code export"):
+            verify_slice_storage(sources)
+
     def test_rejects_non_interruptible_gcode_export(self) -> None:
         sources = valid_sources()
         sources["GcodeExportViewModel.kt"] = sources["GcodeExportViewModel.kt"].replace(
@@ -149,6 +182,14 @@ class VerifySliceStorageTest(unittest.TestCase):
         sources = valid_sources()
         sources["AccessibilityInstrumentedTest.kt"] = "missing accessibility regression"
         with self.assertRaisesRegex(VerificationError, "accessible G-code"):
+            verify_slice_storage(sources)
+
+    def test_rejects_missing_accessible_all_plate_export_regression(self) -> None:
+        sources = valid_sources()
+        sources["AccessibilityInstrumentedTest.kt"] = sources[
+            "AccessibilityInstrumentedTest.kt"
+        ].replace("allPlateGcodeExportIsExplicitAndReportsFileProgress", "missing batch export")
+        with self.assertRaisesRegex(VerificationError, "accessible all-plate"):
             verify_slice_storage(sources)
 
     def test_rejects_text_plain_gcode_export(self) -> None:

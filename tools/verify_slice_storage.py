@@ -25,10 +25,12 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "SliceOperationViewModel.kt",
         "CreatedDocument.kt",
         "GcodeExportViewModel.kt",
+        "PlateSliceResults.kt",
         "RemoteDevice.kt",
         "SliceArtifactStoreTest.kt",
         "NativeEngineInstrumentedTest.kt",
         "GcodeExportLifecycleInstrumentedTest.kt",
+        "BatchExportDocumentsProvider.java",
         "AccessibilityInstrumentedTest.kt",
         "SECURITY.md",
         "CONTRIBUTING.md",
@@ -130,6 +132,13 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "override fun onCleared()",
         "deleteFailedCreatedDocument(application, uri)",
         "SupportEvent.GCODE_EXPORT_FAILED",
+        "fun exportAll(treeUri: Uri, batch: GcodeExportBatch): Boolean",
+        "DocumentsContract.isTreeUri(treeUri)",
+        "DocumentsContract.buildDocumentUriUsingTree(",
+        "DocumentsContract.createDocument(",
+        "createdDocuments.asReversed()",
+        "batch.entries.any { !it.outcome.isRestorableFrom(application.filesDir) }",
+        "withExportProgress(operationId, completedFiles)",
     ):
         if marker not in exporter:
             raise VerificationError(f"retained G-code export contract is missing: {marker}")
@@ -138,6 +147,9 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "var pendingGcodeExport by rememberSaveable",
         "pendingGcodeExport = requested",
         "gcodeExportModel.export(uri, requested.outcome)",
+        "ActivityResultContracts.OpenDocumentTree()",
+        "var pendingGcodeBatch by rememberSaveable",
+        "gcodeExportModel.exportAll(uri, requested)",
         "gcodeExportModel::cancelActiveExport",
     ):
         if marker not in main_activity:
@@ -150,10 +162,13 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         if forbidden in main_activity:
             raise VerificationError("G-code export is still owned by the Activity composition")
     for marker in (
-        "gcodeExportCancellationRequested: Boolean",
+        "gcodeExportState: GcodeExportState",
+        "canExportAllGcode: Boolean",
         "onCancelGcodeExport: () -> Unit",
         "R.string.cancel_gcode_export",
         "R.string.canceling_gcode_export",
+        "R.string.export_all_gcode",
+        "R.string.exporting_gcode_files",
         "if (exporting) onCancelExport() else onExport()",
     ):
         if marker not in workspace:
@@ -167,6 +182,15 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         raise VerificationError("G-code export does not use the binary document contract")
     if 'CreateDocument("text/plain")' in main_activity:
         raise VerificationError("G-code export reverted to a .txt-producing MIME type")
+    plate_results = sources["PlateSliceResults.kt"]
+    for marker in (
+        "fun PlateSliceResults.completeExportBatch(",
+        "snapshot.plates.withIndex()",
+        "resultFor(plate.id) ?: return null",
+        "plateGcodeFileName(indexedPlate.index + 1",
+    ):
+        if marker not in plate_results:
+            raise VerificationError(f"complete plate export selection is missing: {marker}")
     if "SliceArtifactLease.acquire(gcode)" not in sources["RemoteDevice.kt"]:
         raise VerificationError("remote upload does not lease its G-code")
 
@@ -200,11 +224,32 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "store.clear()",
         "KEY_DELETED",
         "KEY_SHA256",
+        "allPlateExportSurvivesRecreationAndCreatesEveryNamedDocument",
+        "laterBatchFailureDeletesEarlierDocumentsAndKeepsPrivateArtifacts",
+        "batchCancellationDeletesEveryDocumentCreatedByThatOperation",
+        "BatchExportDocumentsProvider.TREE_URI",
     ):
         if marker not in export_tests:
             raise VerificationError(f"retained G-code export regression is missing: {marker}")
+    provider = sources["BatchExportDocumentsProvider.java"]
+    for marker in (
+        "extends ContentProvider",
+        'METHOD_CREATE_DOCUMENT = "android:createDocument"',
+        "openAssetFile(",
+        "MODE_FAIL_SECOND",
+        "MODE_BLOCK_SECOND",
+        "createDocument(",
+        "deleteDocument(",
+        "signal.setOnCancelListener",
+    ):
+        if marker not in provider:
+            raise VerificationError(f"batch export test provider is incomplete: {marker}")
     if "cancelGcodeExportActionIsReachable" not in sources["AccessibilityInstrumentedTest.kt"]:
         raise VerificationError("accessible G-code export cancellation regression is missing")
+    if "allPlateGcodeExportIsExplicitAndReportsFileProgress" not in sources[
+        "AccessibilityInstrumentedTest.kt"
+    ]:
+        raise VerificationError("accessible all-plate G-code export regression is missing")
 
     for document in ("SECURITY.md", "CONTRIBUTING.md"):
         if "G-code" not in sources[document] or "lease" not in sources[document].lower():
@@ -236,6 +281,7 @@ def read_sources() -> dict[str, str]:
         "GcodeExportViewModel.kt": (main / "GcodeExportViewModel.kt").read_text(
             encoding="utf-8"
         ),
+        "PlateSliceResults.kt": (main / "PlateSliceResults.kt").read_text(encoding="utf-8"),
         "RemoteDevice.kt": (main / "RemoteDevice.kt").read_text(encoding="utf-8"),
         "SliceArtifactStoreTest.kt": (tests / "SliceArtifactStoreTest.kt").read_text(
             encoding="utf-8"
@@ -245,6 +291,9 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "GcodeExportLifecycleInstrumentedTest.kt": (
             device_tests / "GcodeExportLifecycleInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "BatchExportDocumentsProvider.java": (
+            device_tests / "BatchExportDocumentsProvider.java"
         ).read_text(encoding="utf-8"),
         "AccessibilityInstrumentedTest.kt": (
             device_tests / "AccessibilityInstrumentedTest.kt"
