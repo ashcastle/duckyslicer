@@ -31,9 +31,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import java.util.UUID
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 private val DuckyColors = darkColorScheme(
     primary = Color(0xFFF6C945),
@@ -353,6 +359,7 @@ private fun DuckySlicerScreen(
     onExternalProjectRequestConsumed: (Long) -> Unit,
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val resources = LocalResources.current
     val modelReadError = stringResource(R.string.model_read_error)
     val modelTooLargeError = stringResource(R.string.model_too_large_error)
@@ -1379,6 +1386,35 @@ private fun DuckySlicerScreen(
     }
 
     fun selectedRemoteDevice(): RemoteDeviceProfile? = remoteOperationState.selectedProfile()
+
+    LaunchedEffect(
+        lifecycleOwner,
+        selectedTab,
+        selectedRemoteDeviceId,
+        appSettings.connectionTimeoutSeconds,
+    ) {
+        val profileId = selectedRemoteDeviceId
+        if (selectedTab != WorkspaceTab.DEVICE || profileId == null) return@LaunchedEffect
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            try {
+                while (currentCoroutineContext().isActive) {
+                    val current = remoteOperationModel.state.value
+                    remoteOperationModel.refreshInBackground(
+                        profileId,
+                        appSettings.connectionTimeoutSeconds,
+                    )
+                    delay(
+                        remoteMonitoringIntervalMillis(
+                            current.statusFor(profileId),
+                            current.messageFor(profileId),
+                        ),
+                    )
+                }
+            } finally {
+                remoteOperationModel.stopBackgroundRefresh(profileId)
+            }
+        }
+    }
 
     WorkspaceScreen(
         selectedTab = selectedTab,

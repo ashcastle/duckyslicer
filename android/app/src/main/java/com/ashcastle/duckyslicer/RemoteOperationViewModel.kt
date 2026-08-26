@@ -119,6 +119,11 @@ internal sealed interface RemoteOperationOutcome {
     ) : RemoteOperationOutcome
 }
 
+internal sealed interface RemoteBackgroundRefreshOutcome {
+    data class Refreshed(val status: RemoteDeviceStatus) : RemoteBackgroundRefreshOutcome
+    data class Failed(val message: RemoteOperationMessage) : RemoteBackgroundRefreshOutcome
+}
+
 internal fun RemoteOperationState.beginRemoteOperation(
     nextOperationId: Long,
     profileId: String,
@@ -286,9 +291,41 @@ internal fun RemoteOperationState.invalidateRemoteUpload(): RemoteOperationState
     )
 }
 
+internal fun RemoteOperationState.withBackgroundRefreshOutcome(
+    profileId: String,
+    outcome: RemoteBackgroundRefreshOutcome,
+): RemoteOperationState {
+    if (busy || selectedProfileId != profileId) return this
+    return when (outcome) {
+        is RemoteBackgroundRefreshOutcome.Refreshed -> {
+            val clearConnectionError = messageProfileId == profileId &&
+                message in setOf(
+                    RemoteOperationMessage.ACCESS_DENIED,
+                    RemoteOperationMessage.CONNECTION_FAILED,
+                )
+            copy(
+                status = RemoteStatusSnapshot(profileId, outcome.status),
+                messageProfileId = messageProfileId.takeUnless { clearConnectionError },
+                message = message.takeUnless { clearConnectionError },
+            )
+        }
+        is RemoteBackgroundRefreshOutcome.Failed -> copy(
+            status = status?.takeUnless { it.profileId == profileId },
+            messageProfileId = profileId,
+            message = outcome.message,
+        )
+    }
+}
+
 private data class ActiveRemoteRequest(
     val operationId: Long,
     val kind: RemoteNetworkOperationKind,
+    val cancellation: RemoteRequestCancellation,
+)
+
+private data class ActiveBackgroundRemoteRefresh(
+    val requestId: Long,
+    val profileId: String,
     val cancellation: RemoteRequestCancellation,
 )
 
@@ -316,6 +353,8 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
     val state: StateFlow<RemoteOperationState> = mutableState.asStateFlow()
     private var nextOperationId = 1L
     private val activeRemoteRequest = AtomicReference<ActiveRemoteRequest?>(null)
+    private var nextBackgroundRefreshId = 0L
+    private val activeBackgroundRefresh = AtomicReference<ActiveBackgroundRemoteRefresh?>(null)
 
     init {
         loadProfiles(operationId = 1L)
@@ -340,6 +379,68 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
         clearStatusOnFailure = true,
     ) { client, credential, _, cancellation ->
         RemoteOperationOutcome.Refreshed(client.status(profile, credential, cancellation))
+    }
+
+    @Synchronized
+    fun refreshInBackground(profileId: String, timeoutSeconds: Int): Boolean {
+        val current = mutableState.value
+        val profile = current.selectedProfile()?.takeIf { it.id == profileId } ?: return false
+        if (current.busy || activeBackgroundRefresh.get() != null) return false
+        val active = ActiveBackgroundRemoteRefresh(
+            requestId = ++nextBackgroundRefreshId,
+            profileId = profile.id,
+            cancellation = RemoteRequestCancellation(),
+        )
+        check(activeBackgroundRefresh.compareAndSet(null, active)) {
+            "remote_background_request_lifecycle_invalid"
+        }
+        viewModelScope.launch {
+            val outcome = try {
+                withContext(Dispatchers.IO) {
+                    val client = RemoteDeviceClient(timeoutSeconds.coerceIn(5, 60) * 1_000)
+                    val credential = remoteDeviceStore.credential(profile)
+                    try {
+                        RemoteBackgroundRefreshOutcome.Refreshed(
+                            client.status(profile, credential, active.cancellation),
+                        )
+                    } finally {
+                        active.cancellation.close()
+                    }
+                }
+            } catch (_: RemoteRequestCancelledException) {
+                null
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Exception) {
+                val unauthorized = failure is RemoteDeviceException &&
+                    failure.statusCode in setOf(401, 403)
+                supportEvents.record(
+                    if (unauthorized) {
+                        SupportEvent.REMOTE_AUTH_FAILED
+                    } else {
+                        SupportEvent.REMOTE_CONNECTION_FAILED
+                    },
+                )
+                RemoteBackgroundRefreshOutcome.Failed(
+                    if (unauthorized) {
+                        RemoteOperationMessage.ACCESS_DENIED
+                    } else {
+                        RemoteOperationMessage.CONNECTION_FAILED
+                    },
+                )
+            }
+            finishBackgroundRefresh(active, outcome)
+        }
+        return true
+    }
+
+    @Synchronized
+    fun stopBackgroundRefresh(profileId: String? = null): Boolean {
+        val active = activeBackgroundRefresh.get() ?: return false
+        if (profileId != null && active.profileId != profileId) return false
+        if (!activeBackgroundRefresh.compareAndSet(active, null)) return false
+        active.cancellation.cancel()
+        return true
     }
 
     fun upload(
@@ -433,7 +534,9 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
             ?.cancel()
     }
 
+    @Synchronized
     fun selectionChanged(profileId: String) {
+        stopBackgroundRefresh()
         mutableState.update { it.changeRemoteSelection(profileId) }
     }
 
@@ -496,6 +599,7 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
         operation: () -> RemoteOperationOutcome,
     ): Boolean {
         if (mutableState.value.busy) return false
+        stopBackgroundRefresh()
         val operationId = ++nextOperationId
         mutableState.value = mutableState.value.beginRemoteOperation(operationId, profileId)
         viewModelScope.launch {
@@ -537,6 +641,7 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
         ) -> RemoteOperationOutcome,
     ): Boolean {
         if (mutableState.value.busy) return false
+        stopBackgroundRefresh()
         val operationId = ++nextOperationId
         val activeRequest = ActiveRemoteRequest(
             operationId,
@@ -615,7 +720,20 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
         )
     }
 
+    @Synchronized
+    private fun finishBackgroundRefresh(
+        active: ActiveBackgroundRemoteRefresh,
+        outcome: RemoteBackgroundRefreshOutcome?,
+    ) {
+        if (!activeBackgroundRefresh.compareAndSet(active, null) || outcome == null) return
+        mutableState.value = mutableState.value.withBackgroundRefreshOutcome(
+            active.profileId,
+            outcome,
+        )
+    }
+
     override fun onCleared() {
+        activeBackgroundRefresh.getAndSet(null)?.cancellation?.cancel()
         activeRemoteRequest.getAndSet(null)?.cancellation?.cancel()
         super.onCleared()
     }

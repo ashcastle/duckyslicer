@@ -43,8 +43,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -179,7 +183,7 @@ internal fun DeviceSheet(
             if (selected != null) {
                 val localizedStatus = status?.displayState()
                 val normalizedState = status?.state?.lowercase().orEmpty()
-                val printIsActive = normalizedState.contains("print") || normalizedState.contains("pause")
+                val printIsActive = status?.isPrintActive() == true
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -201,6 +205,21 @@ internal fun DeviceSheet(
                     IconButton(onClick = onRefresh, enabled = !busy) {
                         Icon(Icons.Default.Refresh, stringResource(R.string.refresh_device))
                     }
+                }
+                status?.progressPercent?.let { progress ->
+                    val progressDescription = stringResource(R.string.print_progress, progress)
+                    LinearProgressIndicator(
+                        progress = { progress / 100f },
+                        modifier = Modifier.fillMaxWidth().clearAndSetSemantics {
+                            contentDescription = progressDescription
+                            progressBarRangeInfo = ProgressBarRangeInfo(
+                                current = progress / 100f,
+                                range = 0f..1f,
+                            )
+                        },
+                        color = Color(0xFFF6C945),
+                        trackColor = Color(0xFF494A44),
+                    )
                 }
                 status?.let { RemoteDeviceTelemetry(it) }
 

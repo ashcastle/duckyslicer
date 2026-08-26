@@ -773,6 +773,7 @@
     <string name="remote_temperature_current_target">%1$.1f / %2$.1f °C</string>
     <string name="remote_elapsed_time">경과 %1$s</string>
     <string name="remote_remaining_time">남은 시간 %1$s</string>
+    <string name="print_progress">출력 진행률 %1$d%%</string>
     <string name="refresh_device">새로고침</string>
     <string name="send_gcode">G-code 보내기</string>
     <string name="slice_before_sending">보내기 전에 모델을 슬라이스하세요</string>

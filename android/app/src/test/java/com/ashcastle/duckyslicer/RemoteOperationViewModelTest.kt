@@ -167,6 +167,89 @@ class RemoteOperationViewModelTest {
     }
 
     @Test
+    fun backgroundRefreshUpdatesOnlyAnIdleMatchingSelection() {
+        val previous = RemoteOperationState(
+            profiles = listOf(testRemoteProfile("printer-a")),
+            profilesLoaded = true,
+            selectedProfileId = "printer-a",
+            messageProfileId = "printer-a",
+            message = RemoteOperationMessage.STARTED,
+        )
+        val refreshed = previous.withBackgroundRefreshOutcome(
+            "printer-a",
+            RemoteBackgroundRefreshOutcome.Refreshed(RemoteDeviceStatus("printing")),
+        )
+        val foreground = previous.beginRemoteOperation(
+            20,
+            "printer-a",
+            RemoteNetworkOperationKind.COMMAND,
+        )
+
+        assertEquals("printing", refreshed.statusFor("printer-a")?.state)
+        assertEquals(RemoteOperationMessage.STARTED, refreshed.messageFor("printer-a"))
+        assertEquals(
+            foreground,
+            foreground.withBackgroundRefreshOutcome(
+                "printer-a",
+                RemoteBackgroundRefreshOutcome.Refreshed(RemoteDeviceStatus("paused")),
+            ),
+        )
+        assertEquals(
+            previous,
+            previous.withBackgroundRefreshOutcome(
+                "printer-b",
+                RemoteBackgroundRefreshOutcome.Refreshed(RemoteDeviceStatus("paused")),
+            ),
+        )
+    }
+
+    @Test
+    fun backgroundFailureRemovesStaleStatusAndARecoveryClearsItsError() {
+        val selected = RemoteOperationState(
+            profiles = listOf(testRemoteProfile("printer-a")),
+            profilesLoaded = true,
+            selectedProfileId = "printer-a",
+            status = RemoteStatusSnapshot("printer-a", RemoteDeviceStatus("printing")),
+        )
+        val failed = selected.withBackgroundRefreshOutcome(
+            "printer-a",
+            RemoteBackgroundRefreshOutcome.Failed(RemoteOperationMessage.CONNECTION_FAILED),
+        )
+        val recovered = failed.withBackgroundRefreshOutcome(
+            "printer-a",
+            RemoteBackgroundRefreshOutcome.Refreshed(RemoteDeviceStatus("idle")),
+        )
+
+        assertNull(failed.statusFor("printer-a"))
+        assertEquals(RemoteOperationMessage.CONNECTION_FAILED, failed.messageFor("printer-a"))
+        assertEquals("idle", recovered.statusFor("printer-a")?.state)
+        assertNull(recovered.messageFor("printer-a"))
+    }
+
+    @Test
+    fun remoteMonitoringUsesActiveInitialAndIdleCadences() {
+        assertEquals(
+            INITIAL_REMOTE_MONITORING_INTERVAL_MILLIS,
+            remoteMonitoringIntervalMillis(null, null),
+        )
+        assertEquals(
+            ACTIVE_REMOTE_MONITORING_INTERVAL_MILLIS,
+            remoteMonitoringIntervalMillis(RemoteDeviceStatus("paused"), null),
+        )
+        assertEquals(
+            IDLE_REMOTE_MONITORING_INTERVAL_MILLIS,
+            remoteMonitoringIntervalMillis(RemoteDeviceStatus("Operational"), null),
+        )
+        assertEquals(
+            IDLE_REMOTE_MONITORING_INTERVAL_MILLIS,
+            remoteMonitoringIntervalMillis(
+                RemoteDeviceStatus("printing"),
+                RemoteOperationMessage.CONNECTION_FAILED,
+            ),
+        )
+    }
+
+    @Test
     fun profileSaveSelectsTheDurableResultAndClearsOldPrinterState() {
         val old = RemoteDeviceProfile(
             "printer-a",
@@ -230,4 +313,11 @@ class RemoteOperationViewModelTest {
         assertNull(completed.upload)
         assertEquals(RemoteOperationMessage.PROFILE_DELETED, completed.messageFor(first.id))
     }
+
+    private fun testRemoteProfile(id: String) = RemoteDeviceProfile(
+        id = id,
+        name = id,
+        kind = RemoteDeviceKind.OCTOPRINT,
+        baseUrl = "http://127.0.0.1:5000",
+    )
 }

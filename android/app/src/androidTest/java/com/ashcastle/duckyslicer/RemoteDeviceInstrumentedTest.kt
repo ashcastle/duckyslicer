@@ -227,6 +227,101 @@ class RemoteDeviceInstrumentedTest {
     }
 
     @Test
+    fun backgroundRefreshDoesNotBlockUiAndYieldsToManualRefresh() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val profileId = "background-refresh-${UUID.randomUUID()}"
+        val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        val requestAccepted = CountDownLatch(1)
+        val connectionClosed = CountDownLatch(1)
+        val serverFailure = AtomicReference<Throwable?>(null)
+        val worker = Thread {
+            runCatching {
+                server.accept().use { socket ->
+                    socket.soTimeout = 5_000
+                    val input = BufferedInputStream(socket.getInputStream())
+                    val received = StringBuilder()
+                    var current: Int
+                    while (input.read().also { current = it } >= 0) {
+                        received.append(current.toChar())
+                        if (received.endsWith("\r\n\r\n")) break
+                    }
+                    requestAccepted.countDown()
+                    try {
+                        while (input.read() >= 0) {
+                            // Wait for the exact background request to be disconnected.
+                        }
+                    } finally {
+                        connectionClosed.countDown()
+                    }
+                }
+            }.onFailure(serverFailure::set)
+        }.apply { start() }
+        val store = RemoteDeviceStore(context)
+        val profile = store.save(
+            RemoteDeviceDraft(
+                id = profileId,
+                name = "Background refresh",
+                kind = RemoteDeviceKind.OCTOPRINT,
+                baseUrl = "http://127.0.0.1:${server.localPort}",
+            ),
+        )
+        val retainedModel = AtomicReference<RemoteOperationViewModel>()
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    retainedModel.set(
+                        ViewModelProvider(activity)[RemoteOperationViewModel::class.java],
+                    )
+                }
+                val model = retainedModel.get()
+                waitForRemoteState(model, "Remote profiles did not finish loading") {
+                    it.profilesLoaded && !it.busy
+                }
+                scenario.onActivity {
+                    model.selectionChanged(profile.id)
+                    assertTrue(model.refreshInBackground(profile.id, timeoutSeconds = 30))
+                    assertFalse("Background monitoring must not enter foreground busy state", model.state.value.busy)
+                    assertFalse("Duplicate background monitoring was accepted", model.refreshInBackground(profile.id, 30))
+                }
+                assertTrue(
+                    "Background refresh did not reach its printer socket",
+                    requestAccepted.await(3, TimeUnit.SECONDS),
+                )
+
+                withServer(
+                    listOf(
+                        """{"state":"Operational","progress":{"completion":0}}""",
+                        """{"temperature":{"tool0":{"actual":21,"target":0}}}""",
+                    ),
+                ) { baseUrl, _ ->
+                    scenario.onActivity {
+                        assertTrue(
+                            model.refresh(
+                                profile.copy(baseUrl = baseUrl),
+                                timeoutSeconds = 5,
+                            ),
+                        )
+                    }
+                    assertTrue(
+                        "Manual refresh did not disconnect background monitoring",
+                        connectionClosed.await(3, TimeUnit.SECONDS),
+                    )
+                    waitForRemoteState(model, "Manual refresh did not finish") { !it.busy }
+                    assertEquals("Operational", model.state.value.statusFor(profile.id)?.state)
+                }
+            }
+        } finally {
+            retainedModel.get()?.stopBackgroundRefresh()
+            runCatching { store.delete(profileId) }
+            worker.join(5_000)
+            server.close()
+        }
+        serverFailure.get()?.let { throw AssertionError("Background printer server failed", it) }
+        assertFalse("Background printer server did not stop", worker.isAlive)
+    }
+
+    @Test
     fun retainedRefreshCancellationDisconnectsExactRequestAndAllowsFollowUp() {
         val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
         val requestAccepted = CountDownLatch(1)

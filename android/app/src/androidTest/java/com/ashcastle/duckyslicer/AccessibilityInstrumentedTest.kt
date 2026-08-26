@@ -342,12 +342,21 @@ class AccessibilityInstrumentedTest {
         val bed = context.getString(R.string.bed_temperature)
         val elapsed = context.getString(R.string.remote_elapsed_time, "")
         val remaining = context.getString(R.string.remote_remaining_time, "")
+        val progress = context.getString(R.string.print_progress, 40)
         launchHarness(AccessibilityHarnessActivity.SCREEN_DEVICE_TELEMETRY).use {
-            val nodes = waitForNodes(setOf(nozzle, bed, elapsed.trim(), remaining.trim()))
+            val nodes = waitForNodes(
+                setOf(nozzle, bed, elapsed.trim(), remaining.trim(), progress),
+            )
             assertTrue(nodes.any { it.isVisibleToUser && it.effectiveLabel().contains(nozzle) })
             assertTrue(nodes.any { it.isVisibleToUser && it.effectiveLabel().contains(bed) })
             assertTrue(nodes.any { it.isVisibleToUser && it.effectiveLabel().contains(elapsed.trim()) })
             assertTrue(nodes.any { it.isVisibleToUser && it.effectiveLabel().contains(remaining.trim()) })
+            val progressNode = nodes.first {
+                it.isVisibleToUser &&
+                    it.effectiveLabel().contains(progress) &&
+                    it.rangeInfo != null
+            }
+            assertEquals(0.4f, checkNotNull(progressNode.rangeInfo).current, 0.01f)
         }
     }
 
