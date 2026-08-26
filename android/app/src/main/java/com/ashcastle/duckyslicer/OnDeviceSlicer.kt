@@ -3214,6 +3214,34 @@ object OnDeviceSlicer {
         }
     }
 
+    internal fun exportStl(
+        projectObject: ProjectObject,
+        options: SliceOptions,
+        stagingDirectory: File,
+        requestId: String = UUID.randomUUID().toString(),
+        cancellationRequested: () -> Boolean = { false },
+    ): File {
+        require(stagingDirectory.isDirectory && stagingDirectory.list()?.isEmpty() == true) {
+            "STL export staging is unavailable"
+        }
+        return withTransformedModels(
+            objects = listOf(projectObject),
+            options = options,
+            cancellationRequested = cancellationRequested,
+        ) { transformedModels ->
+            val printableParts = transformedModels.files.filterIndexed { index, _ ->
+                projectObject.volumes[index].role == ProjectVolumeRole.MODEL_PART
+            }
+            require(printableParts.isNotEmpty()) { "Object has no printable model parts" }
+            if (cancellationRequested()) throw ProjectEditCancelledException()
+            SlicerProcessClient.exportStl(
+                transformedModelParts = printableParts,
+                stagingDirectory = stagingDirectory,
+                requestId = requestId,
+            ).file
+        }
+    }
+
     fun arrange(
         objects: List<ProjectObject>,
         options: SliceOptions = SliceOptions(),

@@ -742,6 +742,7 @@
     <string name="canceling_project_export">내보내기를 중지하는 중…</string>
     <string name="project_export_canceled">프로젝트 저장을 중지했습니다.</string>
     <string name="export_model">모델 내보내기 (.3MF)</string>
+    <string name="export_selected_stl">선택한 오브젝트 내보내기 (.STL)</string>
     <string name="model_exported">모델을 내보냈습니다.</string>
     <string name="model_export_error">모델을 내보내지 못했습니다.</string>
     <string name="model_export_canceled">모델 내보내기를 중지했습니다.</string>

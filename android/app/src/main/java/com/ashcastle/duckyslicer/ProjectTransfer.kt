@@ -25,6 +25,7 @@ internal enum class ProjectTransferDirection {
 internal enum class ProjectExportFormat {
     PROJECT_ARCHIVE,
     THREE_MF,
+    STL,
 }
 
 internal data class ActiveProjectTransfer(
@@ -1208,6 +1209,111 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         return true
     }
 
+    @Synchronized
+    fun exportStl(
+        uri: Uri,
+        projectObject: ProjectObject,
+        options: SliceOptions,
+    ): Boolean {
+        if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
+        val operation = ActiveProjectTransfer(
+            id = ++nextOperationId,
+            direction = ProjectTransferDirection.EXPORT,
+            exportFormat = ProjectExportFormat.STL,
+        )
+        val started = mutableState.value.withStartedTransfer(operation) ?: return false
+        val cancellation = DocumentTransferCancellation()
+        activeProjectDocumentTransfer = ActiveProjectDocumentTransfer(operation, cancellation)
+        mutableState.value = started
+        viewModelScope.launch(Dispatchers.IO) {
+            val application = getApplication<Application>()
+            val stagingDirectory = File(
+                application.cacheDir,
+                "$STL_EXPORT_DIRECTORY_PREFIX${UUID.randomUUID()}",
+            )
+            val completion = try {
+                require(stagingDirectory.mkdir()) { "export_staging_unavailable" }
+                cancellation.throwIfRequested()
+                val stagedOutput = OnDeviceSlicer.exportStl(
+                    projectObject = projectObject,
+                    options = options,
+                    stagingDirectory = stagingDirectory,
+                    requestId = operation.requestId,
+                    cancellationRequested = cancellation::wasRequested,
+                )
+                cancellation.throwIfRequested()
+                validateBinaryStl(stagedOutput)
+                val descriptor = requireNotNull(
+                    application.contentResolver.openAssetFileDescriptor(
+                        uri,
+                        "wt",
+                        cancellation.providerSignal,
+                    ),
+                ) { "output_unavailable" }
+                descriptor.use {
+                    stagedOutput.inputStream().use { input ->
+                        descriptor.createOutputStream().use { output ->
+                            cancellation.attachInput(input)
+                            cancellation.attachOutput(output)
+                            try {
+                                copyStlToDocument(input, output, cancellation::throwIfRequested)
+                                output.flush()
+                                cancellation.complete()
+                            } finally {
+                                cancellation.detachInput(input)
+                                cancellation.detachOutput(output)
+                            }
+                        }
+                    }
+                }
+                ProjectTransferCompletion.Exported(operation.id, uri, operation.exportFormat)
+            } catch (_: CancellationException) {
+                cancellation.cancel()
+                deleteFailedCreatedDocument(application, uri)
+                ProjectTransferCompletion.Canceled(
+                    operation.id,
+                    uri,
+                    operation.direction,
+                    operation.exportFormat,
+                )
+            } catch (failure: Exception) {
+                deleteFailedCreatedDocument(application, uri)
+                if (
+                    cancellation.wasRequested() || failure is DocumentTransferCancelledException ||
+                    failure is ProjectEditCancelledException || failure is SlicingCancelledException
+                ) {
+                    ProjectTransferCompletion.Canceled(
+                        operation.id,
+                        uri,
+                        operation.direction,
+                        operation.exportFormat,
+                    )
+                } else {
+                    ProjectTransferCompletion.Failed(
+                        operation.id,
+                        uri,
+                        operation.direction,
+                        operation.exportFormat,
+                    )
+                }
+            } finally {
+                stagingDirectory.deleteRecursively()
+                cancellation.close()
+                SlicerProcessClient.releaseProjectRequest(operation.requestId)
+            }
+            synchronized(this@ProjectTransferViewModel) {
+                if (activeProjectDocumentTransfer?.operation == operation) {
+                    activeProjectDocumentTransfer = null
+                }
+                val settled = mutableState.value.withCompletedTransfer(operation, completion)
+                    ?: return@synchronized
+                mutableState.value = settled
+                schedulePersistenceLocked(allowPendingCompletion = true)
+            }
+        }
+        return true
+    }
+
     fun cancelProjectExport(): Boolean {
         return cancelProjectTransfer(ProjectTransferDirection.EXPORT)
     }
@@ -1221,7 +1327,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             activeProjectDocumentTransfer?.takeIf { it.operation.direction == direction }
         } ?: return false
         if (!active.cancellation.cancel()) return false
-        if (active.operation.exportFormat == ProjectExportFormat.THREE_MF) {
+        if (active.operation.exportFormat != ProjectExportFormat.PROJECT_ARCHIVE) {
             SlicerProcessClient.cancelProjectRequestAsync(active.operation.requestId)
         }
         synchronized(this) {
@@ -1479,7 +1585,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         }
         cleanup.transfer?.cancellation?.cancel()
         cleanup.transfer?.operation
-            ?.takeIf { it.exportFormat == ProjectExportFormat.THREE_MF }
+            ?.takeIf { it.exportFormat != ProjectExportFormat.PROJECT_ARCHIVE }
             ?.let { operation ->
                 SlicerProcessClient.cancelProjectRequestAsync(operation.requestId)
             }
@@ -1523,6 +1629,37 @@ private fun copyThreeMfToDocument(
         output.write(buffer, 0, count)
     }
     require(total > 0L) { "3mf_export_empty" }
+}
+
+internal fun validateBinaryStl(file: File) {
+    require(file.isFile && file.length() in 84L..512L * 1024L * 1024L) {
+        "stl_export_invalid"
+    }
+    val triangleCount = java.io.DataInputStream(file.inputStream().buffered()).use { input ->
+        val header = ByteArray(80)
+        input.readFully(header)
+        Integer.toUnsignedLong(Integer.reverseBytes(input.readInt()))
+    }
+    require(84L + triangleCount * 50L == file.length()) { "stl_export_invalid" }
+}
+
+private fun copyStlToDocument(
+    input: java.io.InputStream,
+    output: java.io.OutputStream,
+    checkCancellation: () -> Unit,
+) {
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var total = 0L
+    while (true) {
+        checkCancellation()
+        val count = input.read(buffer)
+        if (count < 0) break
+        if (count == 0) continue
+        total += count
+        require(total <= 512L * 1024L * 1024L) { "stl_export_too_large" }
+        output.write(buffer, 0, count)
+    }
+    require(total >= 84L) { "stl_export_empty" }
 }
 
 private fun ProjectTransferState.hasPersistableChanges(

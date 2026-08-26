@@ -363,6 +363,35 @@ internal object SlicerProcessClient {
         }.single()
     }
 
+    /** Merges one transformed object's printable parts into a single binary STL. */
+    fun exportStl(
+        transformedModelParts: List<File>,
+        stagingDirectory: File,
+        requestId: String = UUID.randomUUID().toString(),
+    ): OrcaImportedObject {
+        require(transformedModelParts.size in 1..MAX_PROJECT_VOLUMES_PER_OBJECT) {
+            "Printable model-part count is invalid"
+        }
+        require(
+            encodedRequestBytes(
+                transformedModelParts.map(File::getAbsolutePath),
+                stagingDirectory.absolutePath,
+            ) <= SlicerProcessContract.MAX_REQUEST_BYTES,
+        ) { "STL export request is too large" }
+        return runModelOperation(
+            message = SlicerProcessContract.MESSAGE_EXPORT_STL,
+            model = null,
+            stagingDirectory = stagingDirectory,
+            fallbackError = "Slicer could not export the STL",
+            requestId = requestId,
+        ) {
+            putStringArrayList(
+                SlicerProcessContract.KEY_MODEL_PATHS,
+                ArrayList(transformedModelParts.map(File::getAbsolutePath)),
+            )
+        }.single()
+    }
+
     /** Writes one selected plate as an interoperable 3MF through Orca's native writer. */
     fun exportThreeMf(
         transformedModels: List<File>,
@@ -1489,6 +1518,7 @@ internal object SlicerProcessClient {
                 what == SlicerProcessContract.MESSAGE_SIMPLIFY_MODEL ||
                 what == SlicerProcessContract.MESSAGE_CREATE_PRIMITIVE ||
                 what == SlicerProcessContract.MESSAGE_EXPORT_THREE_MF ||
+                what == SlicerProcessContract.MESSAGE_EXPORT_STL ||
                 what == SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST
             if (!cancellable) return
             val requestId = data.getString(SlicerProcessContract.KEY_REQUEST_ID) ?: return
@@ -1645,6 +1675,7 @@ private data class OrcaImportedProjectVolumeRecord(
 private const val MAX_MODEL_COORDINATE_MM = 1_000_000f
 internal const val THREE_MF_EXPORT_DIRECTORY_PREFIX = "three-mf-export-"
 internal const val THREE_MF_EXPORT_FILE_NAME = "project.3mf"
+internal const val STL_EXPORT_DIRECTORY_PREFIX = "stl-export-"
 
 class SlicerProcessService : Service() {
     private val activeRequestId = AtomicReference<String?>(null)
@@ -1892,6 +1923,8 @@ class SlicerProcessService : Service() {
                 startWork(message, WorkOperation.CREATE_PRIMITIVE)
             SlicerProcessContract.MESSAGE_EXPORT_THREE_MF ->
                 startWork(message, WorkOperation.EXPORT_THREE_MF)
+            SlicerProcessContract.MESSAGE_EXPORT_STL ->
+                startWork(message, WorkOperation.EXPORT_STL)
             SlicerProcessContract.MESSAGE_ATTACH -> attachToForegroundSlice(message)
             SlicerProcessContract.MESSAGE_CANCEL -> cancelWork(message)
             SlicerProcessContract.MESSAGE_HEALTH -> send(
@@ -2058,6 +2091,7 @@ class SlicerProcessService : Service() {
                 WorkOperation.SIMPLIFY_MODEL -> runSimplifyModel(requestData)
                 WorkOperation.CREATE_PRIMITIVE -> runCreatePrimitive(requestData)
                 WorkOperation.EXPORT_THREE_MF -> runExportThreeMf(requestData)
+                WorkOperation.EXPORT_STL -> runExportStl(requestData)
                 WorkOperation.SLICE -> runSlice(requestData) { percent ->
                     foregroundProgress = maxOf(foregroundProgress, percent.coerceIn(0, 100))
                     mainHandler.post { updateForegroundSlice(requestId, percent) }
@@ -2813,6 +2847,44 @@ class SlicerProcessService : Service() {
         failure(error.message ?: "3MF could not be exported")
     }
 
+    private fun runExportStl(extras: Bundle): Bundle = try {
+        val paths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_MODEL_PATHS),
+        ) { "Model paths are unavailable" }
+        require(paths.size in 1..MAX_PROJECT_VOLUMES_PER_OBJECT) {
+            "Printable model-part count is invalid"
+        }
+        val models = paths.map(::validateModel)
+        val outputPath = requireNotNull(
+            extras.getString(SlicerProcessContract.KEY_MODEL_OUTPUT_DIRECTORY),
+        ) { "STL output is unavailable" }
+        require(
+            encodedRequestBytes(paths, outputPath) <= SlicerProcessContract.MAX_REQUEST_BYTES,
+        ) { "STL export request is too large" }
+        val outputDirectory = validateStlExportDirectory(outputPath)
+        val runtime = createNativeRuntime()
+        try {
+            loadNativeObjects(runtime, models, intArrayOf(models.size))
+            val records = requireNotNull(
+                runtime.nativeExportLoadedObjects(outputDirectory.absolutePath),
+            ) { "Orca could not write the STL" }
+            require(records.size == 1) { "STL export produced an invalid object count" }
+            Bundle().apply {
+                putBoolean(SlicerProcessContract.KEY_OK, true)
+                putInt(SlicerProcessContract.KEY_PID, Process.myPid())
+                putStringArrayList(
+                    SlicerProcessContract.KEY_NORMALIZED_MODELS,
+                    ArrayList(records.toList()),
+                )
+            }
+        } finally {
+            runtime.clearModel()
+        }
+    } catch (error: Exception) {
+        if (BuildConfig.DEBUG) Log.e(LOG_TAG, "STL export failed", error)
+        failure(error.message ?: "STL could not be exported")
+    }
+
     private fun runSplitModel(extras: Bundle): Bundle = try {
         val sourcePath = requireNotNull(extras.getString(SlicerProcessContract.KEY_MODEL_PATH)) {
             "Model path is unavailable"
@@ -3413,7 +3485,7 @@ class SlicerProcessService : Service() {
     private fun validateThreeMfExportOutput(path: String): File {
         require(path.length in 1..MAX_PATH_LENGTH) { "Invalid 3MF output path" }
         val output = File(path).canonicalFile
-        val directory = output.parentFile
+        val directory = requireNotNull(output.parentFile) { "3MF output is unavailable" }
         val cacheRoot = cacheDir.canonicalFile
         val identifier = directory.name.removePrefix(THREE_MF_EXPORT_DIRECTORY_PREFIX)
         val expectedName = runCatching { UUID.fromString(identifier).toString() }
@@ -3426,6 +3498,22 @@ class SlicerProcessService : Service() {
                 !Files.isSymbolicLink(output.toPath()),
         ) { "3MF output is unavailable" }
         return output
+    }
+
+    private fun validateStlExportDirectory(path: String): File {
+        require(path.length in 1..MAX_PATH_LENGTH) { "Invalid STL output path" }
+        val directory = File(path).canonicalFile
+        val cacheRoot = cacheDir.canonicalFile
+        val identifier = directory.name.removePrefix(STL_EXPORT_DIRECTORY_PREFIX)
+        val expectedName = runCatching { UUID.fromString(identifier).toString() }
+            .getOrNull()
+            ?.let { "$STL_EXPORT_DIRECTORY_PREFIX$it" }
+        require(
+            expectedName == directory.name && directory.parentFile == cacheRoot &&
+                directory.isDirectory && !Files.isSymbolicLink(directory.toPath()) &&
+                directory.list()?.isEmpty() == true,
+        ) { "STL output directory is unavailable" }
+        return directory
     }
 
     private fun validThreeMfName(value: String): Boolean =
@@ -3812,6 +3900,7 @@ class SlicerProcessService : Service() {
         SIMPLIFY_MODEL,
         CREATE_PRIMITIVE,
         EXPORT_THREE_MF,
+        EXPORT_STL,
         TEST_PROBE,
     }
 
@@ -3863,6 +3952,7 @@ private object SlicerProcessContract {
     const val MESSAGE_SIMPLIFY_MODEL = 15
     const val MESSAGE_SPLIT_MODEL_VOLUME = 16
     const val MESSAGE_EXPORT_THREE_MF = 17
+    const val MESSAGE_EXPORT_STL = 18
     const val KEY_REQUEST_ID = "requestId"
     const val KEY_MODEL_PATH = "modelPath"
     const val KEY_MODEL_PATHS = "modelPaths"

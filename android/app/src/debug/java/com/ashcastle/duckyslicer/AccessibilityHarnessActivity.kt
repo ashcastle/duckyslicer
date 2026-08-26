@@ -459,6 +459,7 @@ private fun WorkspaceAccessibilityHarness(
         onOpenProject = {},
         onSaveProject = {},
         onExportModel = {},
+        onExportSelectedStl = {},
         onPlateSelected = { selectedPlateId = it },
         onAddPlate = {
             if (projectPlates.size < MAX_PROJECT_PLATES) {

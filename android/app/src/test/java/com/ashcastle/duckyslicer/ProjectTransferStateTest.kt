@@ -1,13 +1,51 @@
 package com.ashcastle.duckyslicer
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class ProjectTransferStateTest {
+    @Test
+    fun binaryStlValidationRequiresExactTrianglePayloadLength() {
+        val directory = Files.createTempDirectory("duckyslicer-stl-validation-").toFile()
+        try {
+            val valid = directory.resolve("valid.stl")
+            valid.writeBytes(
+                ByteBuffer.allocate(84 + 2 * 50)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .apply { position(80); putInt(2) }
+                    .array(),
+            )
+            validateBinaryStl(valid)
+
+            val truncated = directory.resolve("truncated.stl")
+            truncated.writeBytes(valid.readBytes().copyOf(valid.length().toInt() - 1))
+            assertThrows(IllegalArgumentException::class.java) {
+                validateBinaryStl(truncated)
+            }
+
+            val forged = directory.resolve("forged.stl")
+            forged.writeBytes(
+                ByteBuffer.allocate(84 + 50)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .apply { position(80); putInt(3) }
+                    .array(),
+            )
+            assertThrows(IllegalArgumentException::class.java) {
+                validateBinaryStl(forged)
+            }
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
     @Test
     fun threeMfNamesDropExtensionsControlsAndRespectWriterLimit() {
         assertEquals("duck", threeMfDisplayName("duck.stl", "Object"))

@@ -533,6 +533,7 @@ internal fun WorkspaceScreen(
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
     onExportModel: () -> Unit,
+    onExportSelectedStl: () -> Unit,
     onPlateSelected: (String) -> Unit,
     onAddPlate: () -> Unit,
     onRemovePlate: () -> Unit,
@@ -834,6 +835,7 @@ internal fun WorkspaceScreen(
                 slicing = slicing,
                 previewLoading = previewLoading,
                 canExportModel = projectObjects.isNotEmpty(),
+                canExportSelectedStl = selectedObjectId != null,
                 canExport = sliceOutcome != null && !exportingGcode,
                 exportingGcode = exportingGcode,
                 gcodeExportCancellationRequested = gcodeExportCancellationRequested,
@@ -843,6 +845,7 @@ internal fun WorkspaceScreen(
                 onCancelProfileTransfer = onCancelProfileTransfer,
                 onAddShape = { showPrimitivePicker = true },
                 onExportModel = onExportModel,
+                onExportSelectedStl = onExportSelectedStl,
                 onExport = onSave,
                 onCancelGcodeExport = onCancelGcodeExport,
                 canArrange = projectObjects.size > 1 &&
@@ -3314,6 +3317,7 @@ private fun WorkspaceMenu(
     slicing: Boolean,
     previewLoading: Boolean,
     canExportModel: Boolean,
+    canExportSelectedStl: Boolean,
     canExport: Boolean,
     exportingGcode: Boolean,
     gcodeExportCancellationRequested: Boolean,
@@ -3324,6 +3328,7 @@ private fun WorkspaceMenu(
     onCancelProfileTransfer: () -> Unit,
     onAddShape: () -> Unit,
     onExportModel: () -> Unit,
+    onExportSelectedStl: () -> Unit,
     onExport: () -> Unit,
     onCancelGcodeExport: () -> Unit,
     onArrange: () -> Unit,
@@ -3448,6 +3453,16 @@ private fun WorkspaceMenu(
                 onClick = {
                     expanded = false
                     onExportModel()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.export_selected_stl)) },
+                leadingIcon = { Icon(Icons.Default.SaveAlt, null) },
+                enabled = canExportSelectedStl && !importing && !editingBusy &&
+                    !projectImporting && !projectExporting && !slicing && !previewLoading,
+                onClick = {
+                    expanded = false
+                    onExportSelectedStl()
                 },
             )
             DropdownMenuItem(

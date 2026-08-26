@@ -47,6 +47,7 @@ private val DuckyColors = darkColorScheme(
 
 internal const val GCODE_DOCUMENT_MIME_TYPE = "application/octet-stream"
 internal const val THREE_MF_DOCUMENT_MIME_TYPE = "model/3mf"
+internal const val STL_DOCUMENT_MIME_TYPE = "model/stl"
 private const val SLICE_NOTIFICATION_PREFERENCES = "slice_notifications"
 private const val SLICE_NOTIFICATION_PERMISSION_ASKED = "permission_asked"
 private const val DEFAULT_PROJECT_ARCHIVE_NAME = "DuckySlicer-project$PROJECT_ARCHIVE_FILE_EXTENSION"
@@ -419,6 +420,7 @@ private fun DuckySlicerScreen(
     var externalProjectConfirmation by remember { mutableStateOf<ExternalProjectRequest?>(null) }
     var plateSliceResults by rememberSaveable { mutableStateOf(PlateSliceResults()) }
     var pendingGcodeExport by rememberSaveable { mutableStateOf<PlateSliceResult?>(null) }
+    var pendingStlExportObjectId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedTab by rememberSaveable { mutableStateOf(WorkspaceTab.SLICE) }
     var layerPreview by remember { mutableStateOf<GcodeLayerPreview?>(null) }
     var stalePreviewResult by remember { mutableStateOf<PlateSliceResult?>(null) }
@@ -557,7 +559,7 @@ private fun DuckySlicerScreen(
                 }
             }
             is ProjectTransferCompletion.Exported -> {
-                notice = if (completion.format == ProjectExportFormat.THREE_MF) {
+                notice = if (completion.format != ProjectExportFormat.PROJECT_ARCHIVE) {
                     modelExportedNotice
                 } else {
                     projectSavedNotice
@@ -572,7 +574,7 @@ private fun DuckySlicerScreen(
                         onExternalProjectRequestConsumed(externalProjectRequest.id)
                     }
                 } else {
-                    notice = if (completion.format == ProjectExportFormat.THREE_MF) {
+                    notice = if (completion.format != ProjectExportFormat.PROJECT_ARCHIVE) {
                         modelExportCanceledNotice
                     } else {
                         projectExportCanceledNotice
@@ -588,7 +590,7 @@ private fun DuckySlicerScreen(
                         onExternalProjectRequestConsumed(externalProjectRequest.id)
                     }
                 } else {
-                    error = if (completion.format == ProjectExportFormat.THREE_MF) {
+                    error = if (completion.format != ProjectExportFormat.PROJECT_ARCHIVE) {
                         modelExportError
                     } else {
                         projectExportError
@@ -1211,6 +1213,33 @@ private fun DuckySlicerScreen(
         }
     }
 
+    val stlExportPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(STL_DOCUMENT_MIME_TYPE),
+    ) { uri ->
+        val objectId = pendingStlExportObjectId
+        pendingStlExportObjectId = null
+        if (
+            uri != null && objectId != null && projectRestored && !projectTransferBusy &&
+            !importing && !autoLaying && !arranging && !splitting && !cutting &&
+            !slicing && !previewLoading
+        ) {
+            val state = projectTransferModel.state.value
+            val snapshot = state.history.current
+            val projectObject = snapshot.allObjects.firstOrNull { it.id == objectId }
+            val objectPlate = snapshot.plates.firstOrNull { plate ->
+                plate.objects.any { it.id == objectId }
+            }
+            val options = objectPlate?.let { state.plateOptions[it.id] } ?: state.sliceOptions
+            if (
+                projectObject != null &&
+                projectTransferModel.exportStl(uri, projectObject, options)
+            ) {
+                error = null
+                notice = null
+            }
+        }
+    }
+
     fun importProfiles(uri: Uri): Boolean {
         if (
             !profileBusy && projectRestored && !projectTransferBusy &&
@@ -1453,6 +1482,14 @@ private fun DuckySlicerScreen(
                 "${threeMfDisplayName(it, "DuckySlicer-model")}.3mf"
             } ?: DEFAULT_THREE_MF_NAME
             modelExportPicker.launch(suggestedName)
+        },
+        onExportSelectedStl = {
+            projectHistory.current.selectedObject?.let { selected ->
+                pendingStlExportObjectId = selected.id
+                stlExportPicker.launch(
+                    "${threeMfDisplayName(selected.primaryModelPart.model.fileName, "model")}.stl",
+                )
+            }
         },
         onPlateSelected = { plateId ->
             if (

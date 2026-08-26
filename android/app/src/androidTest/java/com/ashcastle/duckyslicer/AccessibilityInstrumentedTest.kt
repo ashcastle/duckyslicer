@@ -87,6 +87,21 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun selectedObjectStlExportIsReachableFromWorkspaceMenu() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val menu = context.getString(R.string.menu)
+        val export = context.getString(R.string.export_selected_stl)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
+            val menuButton = waitForNode(menu) { it.isClickable }
+            assertTrue(menuButton.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val exportAction = waitForNode(export) { it.isClickable }
+            assertTrue(exportAction.isVisibleToUser)
+            assertTrue(exportAction.isFocusable)
+            assertTrue(exportAction.isEnabled)
+        }
+    }
+
+    @Test
     fun cancelSupportDetailsSaveActionIsReachable() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val label = context.getString(R.string.stop_support_details_save)

@@ -492,6 +492,81 @@ class OrcaModelImportInstrumentedTest {
     }
 
     @Test
+    fun selectedObjectStlMergesPrintablePartsAppliesPlacementAndExcludesHelpers() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val source = File(context.cacheDir, "selected-object-export-source.3mf")
+        val exportDirectory = File(
+            context.cacheDir,
+            "$STL_EXPORT_DIRECTORY_PREFIX${java.util.UUID.randomUUID()}",
+        )
+        projectRoot.deleteRecursively()
+        source.delete()
+        exportDirectory.deleteRecursively()
+        try {
+            writeMultiVolume3mf(source)
+            val options = SliceOptions().copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                bedSizeX = 100f,
+                bedSizeY = 100f,
+                bedPolygon = rectangularBedPolygon(100f, 100f),
+            )
+            val sourceUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.debug-files",
+                source,
+            )
+            val imported = importOrcaModels(
+                context,
+                sourceUri,
+                ProjectStore(context),
+                options,
+            ).single()
+            assertEquals(2, imported.modelPartVolumes.size)
+            val helper = imported.volumes[1].copy(
+                id = legacyProjectVolumeId(imported.id, 2),
+                role = ProjectVolumeRole.NEGATIVE_VOLUME,
+                filamentSlot = 0,
+            )
+            val transformed = imported.copy(
+                volumes = imported.volumes + helper,
+                transform = ModelTransform(
+                    offsetXmm = 7f,
+                    offsetYmm = -9f,
+                    offsetZmm = 5f,
+                    scale = 2f,
+                    scaleY = 3f,
+                    scaleZ = 4f,
+                    mirrorX = true,
+                ),
+            )
+            val expectedTriangles = imported.modelPartVolumes.sumOf { it.model.triangles }
+            val sourceGeometry = imported.geometry()
+            assertTrue(exportDirectory.mkdir())
+
+            val exported = OnDeviceSlicer.exportStl(
+                projectObject = transformed,
+                options = options,
+                stagingDirectory = exportDirectory,
+            )
+
+            validateBinaryStl(exported)
+            val inspected = inspectModel(exported.absolutePath)
+            assertEquals(expectedTriangles, inspected.triangles)
+            assertEquals((sourceGeometry.maxX - sourceGeometry.minX) * 2.0, inspected.dimensions[0], 0.02)
+            assertEquals((sourceGeometry.maxY - sourceGeometry.minY) * 3.0, inspected.dimensions[1], 0.02)
+            assertEquals((sourceGeometry.maxZ - sourceGeometry.minZ) * 4.0, inspected.dimensions[2], 0.02)
+            assertEquals(57.0, (inspected.minMm[0] + inspected.maxMm[0]) / 2.0, 0.02)
+            assertEquals(41.0, (inspected.minMm[1] + inspected.maxMm[1]) / 2.0, 0.02)
+            assertEquals(5.0, inspected.minMm[2], 0.02)
+        } finally {
+            source.delete()
+            exportDirectory.deleteRecursively()
+            projectRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun negative3mfVolumePreservesItsRoleAndDoesNotBecomePrintableGeometry() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)

@@ -742,6 +742,7 @@
     <string name="canceling_project_export">Stopping export…</string>
     <string name="project_export_canceled">Project save stopped.</string>
     <string name="export_model">Export model (.3MF)</string>
+    <string name="export_selected_stl">Export selected object (.STL)</string>
     <string name="model_exported">Model exported.</string>
     <string name="model_export_error">Couldn’t export the model.</string>
     <string name="model_export_canceled">Model export stopped.</string>
