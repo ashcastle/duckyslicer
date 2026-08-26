@@ -132,6 +132,14 @@ def manual_dispatch_errors(name: str, workflow: str) -> list[str]:
     return []
 
 
+def android_concurrency_errors(workflow: str) -> list[str]:
+    """Prevent a delayed event for one commit from cancelling another commit."""
+    required = "concurrency:\n  group: android-${{ github.sha }}\n  cancel-in-progress: true\n"
+    if required not in workflow:
+        return ["android.yml: concurrency must be scoped to the exact commit"]
+    return []
+
+
 def main() -> None:
     errors: list[str] = []
     action_count = 0
@@ -154,6 +162,7 @@ def main() -> None:
 
     android_source = (WORKFLOW_ROOT / "android.yml").read_text(encoding="utf-8")
     errors.extend(manual_dispatch_errors("android.yml", android_source))
+    errors.extend(android_concurrency_errors(android_source))
     errors.extend(
         f"ccache.env: {error}"
         for error in ccache_lock_errors(

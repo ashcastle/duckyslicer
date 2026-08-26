@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from tools.verify_workflows import (
+    android_concurrency_errors,
     ccache_lock_errors,
     literal_run_blocks,
     manual_dispatch_errors,
@@ -70,6 +71,23 @@ jobs:
         self.assertEqual(
             ["android.yml: manual dispatch recovery path is required"],
             errors,
+        )
+
+    def test_accepts_commit_scoped_android_concurrency(self) -> None:
+        source = """concurrency:
+  group: android-${{ github.sha }}
+  cancel-in-progress: true
+"""
+        self.assertEqual([], android_concurrency_errors(source))
+
+    def test_rejects_branch_scoped_android_concurrency(self) -> None:
+        source = """concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+"""
+        self.assertEqual(
+            ["android.yml: concurrency must be scoped to the exact commit"],
+            android_concurrency_errors(source),
         )
 
 
