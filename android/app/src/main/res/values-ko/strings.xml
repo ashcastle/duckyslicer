@@ -746,6 +746,10 @@
     <string name="open_project">프로젝트 열기</string>
     <string name="recent_projects">최근 프로젝트</string>
     <string name="recent_project_unavailable">이 프로젝트를 더 이상 열 수 없습니다. 파일에서 다시 열어 주세요.</string>
+    <string name="recent_project_actions">%1$s 작업</string>
+    <string name="remove_recent_project">최근 목록에서 제거</string>
+    <string name="recent_project_removed">최근 프로젝트에서 제거했습니다.</string>
+    <string name="recent_project_remove_error">이 최근 프로젝트를 제거하지 못했습니다.</string>
     <string name="save_project">프로젝트 저장</string>
     <string name="save_project_as">다른 이름으로 프로젝트 저장…</string>
     <string name="project_save_options">프로젝트 저장 옵션</string>

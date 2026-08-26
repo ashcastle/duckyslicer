@@ -734,6 +734,8 @@ private fun DuckySlicerScreen(
     val filamentSlotUnavailable = resources.getString(R.string.filament_slot_unavailable)
     val newProjectStartedNotice = resources.getString(R.string.new_project_started)
     val recentProjectUnavailable = resources.getString(R.string.recent_project_unavailable)
+    val recentProjectRemoved = resources.getString(R.string.recent_project_removed)
+    val recentProjectRemoveError = resources.getString(R.string.recent_project_remove_error)
     val savedDataUnavailable = resources.getString(R.string.saved_data_unavailable)
     val previewError = resources.getString(R.string.preview_error)
     val remoteSavedNotice = resources.getString(R.string.device_saved)
@@ -1342,6 +1344,16 @@ private fun DuckySlicerScreen(
         }
     }
 
+    fun forgetRecentProject(document: LinkedProjectDocument) {
+        if (projectTransferModel.forgetRecentProject(document)) {
+            error = null
+            notice = recentProjectRemoved
+        } else {
+            error = recentProjectRemoveError
+            notice = null
+        }
+    }
+
     val projectOpenPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -1656,6 +1668,7 @@ private fun DuckySlicerScreen(
             )
         },
         onOpenRecentProject = ::importRecentProject,
+        onForgetRecentProject = ::forgetRecentProject,
         onSaveProject = projectSaveAction(projectTransferModel, projectSavePicker),
         onExportModel = {
             val sourceName = projectHistory.current.selectedObject

@@ -286,6 +286,18 @@ internal fun ProjectTransferState.withUnavailableProjectDocument(
     )
 }
 
+internal fun ProjectTransferState.withForgottenRecentProject(
+    uri: String,
+): ProjectTransferState {
+    if (linkedDocument?.uri == uri) return this
+    val nextRecentDocuments = recentDocuments.withoutRecentProjectDocument(uri)
+    if (nextRecentDocuments == recentDocuments) return this
+    return copy(
+        recentDocuments = nextRecentDocuments,
+        sessionRevision = sessionRevision + 1,
+    )
+}
+
 internal fun ProjectTransferState.withStartedEdit(
     operation: ActiveProjectEdit,
 ): ProjectTransferState? {
@@ -1113,6 +1125,18 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             return false
         }
         return importProject(document.contentUri)
+    }
+
+    @Synchronized
+    fun forgetRecentProject(document: LinkedProjectDocument): Boolean {
+        val current = mutableState.value
+        val updated = current.withForgottenRecentProject(document.uri)
+        if (updated == current) return false
+        val resolver = getApplication<Application>().contentResolver
+        if (!resolver.releaseProjectDocumentPermission(document.contentUri)) return false
+        mutableState.value = updated
+        schedulePersistenceLocked(delayMillis = 0L)
+        return true
     }
 
     @Synchronized

@@ -674,6 +674,9 @@ class AccessibilityInstrumentedTest {
             R.string.replace_project_unsaved_body,
             "Linked-project.duckyproject",
         )
+        val actionsLabel = context.getString(R.string.recent_project_actions, recentName)
+        val removeLabel = context.getString(R.string.remove_recent_project)
+        val removedNotice = context.getString(R.string.recent_project_removed)
         launchHarness(AccessibilityHarnessActivity.SCREEN_PROJECT_RECENT).use {
             assertTrue(
                 "Recent projects must have a visible section heading",
@@ -689,6 +692,23 @@ class AccessibilityInstrumentedTest {
                 waitForNodes(setOf(replaceTitle, replaceWarning)).let { nodes ->
                     nodes.any { it.effectiveLabel().contains(replaceTitle) } &&
                         nodes.any { it.effectiveLabel().contains(replaceWarning) }
+                },
+            )
+            assertTrue(
+                InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(
+                    AccessibilityService.GLOBAL_ACTION_BACK,
+                ),
+            )
+            val actions = scrollUntilClickable(actionsLabel)
+            assertTrue("Recent project actions must be focusable", actions.isFocusable)
+            assertTrue(actions.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val remove = scrollUntilClickable(removeLabel)
+            assertTrue("Remove from recent must be focusable", remove.isFocusable)
+            assertTrue(remove.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(
+                "Removing a recent project must provide feedback",
+                waitForNodes(setOf(removedNotice)).any {
+                    it.effectiveLabel().contains(removedNotice)
                 },
             )
         }

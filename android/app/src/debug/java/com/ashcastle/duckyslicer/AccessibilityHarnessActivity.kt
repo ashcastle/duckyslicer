@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import java.io.File
@@ -535,6 +536,7 @@ private fun WorkspaceAccessibilityHarness(
     layOnFaceForcedFailure: Boolean = false,
 ) {
     var harnessNotice by remember { mutableStateOf<String?>(null) }
+    val recentProjectRemoved = stringResource(R.string.recent_project_removed)
     var layOnFaceUndoTransform by remember { mutableStateOf<ModelTransform?>(null) }
     var projectPlates by remember(plateCount) {
         mutableStateOf(
@@ -634,6 +636,9 @@ private fun WorkspaceAccessibilityHarness(
         },
         onOpenProject = {},
         onOpenRecentProject = { harnessNotice = it.displayName },
+        onForgetRecentProject = {
+            harnessNotice = recentProjectRemoved
+        },
         onSaveProject = {},
         onExportModel = {},
         onExportSelectedStl = {},

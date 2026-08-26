@@ -541,6 +541,7 @@ internal fun WorkspaceScreen(
     onNewProject: () -> Unit,
     onOpenProject: () -> Unit,
     onOpenRecentProject: (LinkedProjectDocument) -> Unit,
+    onForgetRecentProject: (LinkedProjectDocument) -> Unit,
     onSaveProject: (Boolean) -> Unit,
     onExportModel: () -> Unit,
     onExportSelectedStl: () -> Unit,
@@ -1239,6 +1240,7 @@ internal fun WorkspaceScreen(
                     onNewProject = onNewProject,
                     onOpenProject = onOpenProject,
                     onOpenRecentProject = onOpenRecentProject,
+                    onForgetRecentProject = onForgetRecentProject,
                     onSaveProject = onSaveProject,
                     onCancelProjectImport = onCancelProjectImport,
                     onCancelProjectExport = onCancelProjectExport,
@@ -7761,6 +7763,7 @@ private fun ProjectSheet(
     onNewProject: () -> Unit,
     onOpenProject: () -> Unit,
     onOpenRecentProject: (LinkedProjectDocument) -> Unit,
+    onForgetRecentProject: (LinkedProjectDocument) -> Unit,
     onSaveProject: (Boolean) -> Unit,
     onCancelProjectImport: () -> Unit,
     onCancelProjectExport: () -> Unit,
@@ -7768,6 +7771,7 @@ private fun ProjectSheet(
 ) {
     var confirmReplacement by remember { mutableStateOf(false) }
     var recentReplacement by remember { mutableStateOf<LinkedProjectDocument?>(null) }
+    var recentMenuUri by remember { mutableStateOf<String?>(null) }
     var confirmNewProject by remember { mutableStateOf(false) }
     var objectMenuId by remember { mutableStateOf<String?>(null) }
     var renameObjectId by remember { mutableStateOf<String?>(null) }
@@ -7780,6 +7784,7 @@ private fun ProjectSheet(
         if (busy || importing || exporting) {
             saveMenuExpanded = false
             recentReplacement = null
+            recentMenuUri = null
         }
     }
     WorkspaceCard(modifier) {
@@ -7815,31 +7820,65 @@ private fun ProjectSheet(
                 fontWeight = FontWeight.SemiBold,
             )
             recentProjectDocuments.forEach { document ->
-                Surface(
-                    onClick = {
-                        if (replacementConfirmationRequired) {
-                            recentReplacement = document
-                        } else {
-                            onOpenRecentProject(document)
-                        }
-                    },
-                    enabled = !busy && !importing && !exporting,
-                    color = Color(0xFF343531),
-                    contentColor = Color(0xFFF4F4EE),
-                    shape = RoundedCornerShape(12.dp),
+                Row(
                     modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    Surface(
+                        onClick = {
+                            if (replacementConfirmationRequired) {
+                                recentReplacement = document
+                            } else {
+                                onOpenRecentProject(document)
+                            }
+                        },
+                        enabled = !busy && !importing && !exporting,
+                        color = Color(0xFF343531),
+                        contentColor = Color(0xFFF4F4EE),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f),
                     ) {
-                        Icon(Icons.Default.History, contentDescription = null)
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            document.displayName,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.History, contentDescription = null)
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                document.displayName,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    Box {
+                        IconButton(
+                            onClick = { recentMenuUri = document.uri },
+                            enabled = !busy && !importing && !exporting,
+                        ) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                stringResource(
+                                    R.string.recent_project_actions,
+                                    document.displayName,
+                                ),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = recentMenuUri == document.uri,
+                            onDismissRequest = { recentMenuUri = null },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.remove_recent_project)) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Close, contentDescription = null)
+                                },
+                                onClick = {
+                                    recentMenuUri = null
+                                    onForgetRecentProject(document)
+                                },
+                            )
+                        }
                     }
                 }
             }

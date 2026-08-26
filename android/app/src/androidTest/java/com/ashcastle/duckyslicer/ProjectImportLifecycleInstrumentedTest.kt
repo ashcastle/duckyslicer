@@ -71,8 +71,13 @@ class ProjectImportLifecycleInstrumentedTest {
             assertTrue(model.state.value.completion is ProjectTransferCompletion.Imported)
             assertEquals(document, model.state.value.linkedDocument)
             assertEquals("incoming", model.state.value.history.current.selectedObjectId)
+            assertFalse(model.forgetRecentProject(document))
+            assertTrue(resolver.hasProjectDocumentWritePermission(uri))
             model.consumeCompletion(checkNotNull(model.state.value.completion).id)
             assertTrue(model.newProject())
+            assertTrue(model.forgetRecentProject(document))
+            assertFalse(model.state.value.recentDocuments.any { it.uri == document.uri })
+            assertFalse(resolver.hasProjectDocumentWritePermission(uri))
             model.flushPersistence()
             waitUntil("recent-project test cleanup was not persisted") {
                 model.state.value.sessionRevision == model.state.value.persistedRevision

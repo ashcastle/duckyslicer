@@ -79,6 +79,13 @@ class ProjectTransferStateTest {
         assertFalse(unavailable.linkedDocumentDirty)
         assertFalse(unavailable.recentDocuments.any { it.uri == newest.uri })
         assertEquals(state.sessionRevision + 1, unavailable.sessionRevision)
+
+        assertEquals(state, state.withForgottenRecentProject(newest.uri))
+        val unlinked = state.withLinkedDocument(null)
+        val forgotten = unlinked.withForgottenRecentProject(newest.uri)
+        assertFalse(forgotten.recentDocuments.any { it.uri == newest.uri })
+        assertEquals(unlinked.sessionRevision + 1, forgotten.sessionRevision)
+        assertEquals(forgotten, forgotten.withForgottenRecentProject("content://missing"))
     }
 
     @Test
