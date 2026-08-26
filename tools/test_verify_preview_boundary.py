@@ -39,6 +39,18 @@ def valid_sources() -> dict[str, str]:
             "fun SliceOutcome.previewSummary() estimatedSeconds / SECONDS_PER_MINUTE "
             "filamentMm / MILLIMETERS_PER_METER Invalid preview filament mass"
         ),
+        "GcodePreviewMetadata.kt": (
+            "METADATA_HEAD_BYTES = 128 * 1_024 METADATA_TAIL_BYTES = 512 * 1_024 "
+            "values.size !in 1..MAX_FILAMENT_SLOTS parseFilamentColor(value) "
+            "lastColorList(metadata, ORCA_FILAMENT_COLORS) "
+            "lastColorList(metadata, ORCA_EXTRUDER_COLORS)"
+        ),
+        "GcodePreviewImportViewModel.kt": (
+            "resolver.acquireContentProviderClient(uri) provider.query( "
+            'provider.openAssetFile(uri, "r", signal) store.importDocument( '
+            "readGcodePreviewMetadata(output) filamentColors = metadata.filamentColors "
+            "normalizedProjectDocumentName"
+        ),
         "AppSettings.kt": (
             "PreviewDetail.AUTOMATIC val previewDetail: PreviewDetail = PreviewDetail.AUTOMATIC "
             "PreviewDeviceCapabilities manager?.isLowRamDevice "
@@ -315,6 +327,10 @@ def valid_sources() -> dict[str, str]:
             "contentDescription = if (showLabels) null else labelText "
             "alwaysShowLabel = showLabels "
             "workspaceEditingBusy(\n        autoLaying,\n        arranging,\n        slicing,\n        displayedPreviewLoading,"
+            " displayedFilamentColors "
+            "importedGcodeState.document.filamentColors.previewFilamentColors() "
+            "importedDisplayName = importedGcodeState.document?.displayName "
+            "layerEventsEditable = !imported"
             " internal fun facetPaintTarget( "
             "ceil(log2((longestEdge / targetDiameter).toDouble())) "
             "val paintedTargets = HashSet<FacetPaintTarget>() "
@@ -557,6 +573,17 @@ def valid_sources() -> dict[str, str]:
             "sliceResultKeepsTimeMassAndLengthWithoutReadingGcode "
             "subMinuteEstimateUsesCompactFallback "
             "invalidNativeStatisticsAreRejectedBeforeDisplay"
+        ),
+        "GcodePreviewMetadataTest.kt": (
+            "parsesOrcaDurationAndSumsPerToolFilament "
+            "fallsBackToValidExtruderColorsWhenFilamentColorsAreMalformed "
+            "listOf(0x123456, 0xABCDEF)"
+        ),
+        "GcodeOpenIntentInstrumentedTest.kt": (
+            "importedDocumentIsCopiedParsedAndPreviewedOffline "
+            "interruptedReplacementRetriesWithoutDiscardingThePreviousPreviewFirst "
+            "providerOpenCanBeCanceledWithoutLeavingAPartialPreview "
+            "assertEquals(listOf(0x123456, 0xABCDEF), document.filamentColors)"
         ),
         "SliceOutcomeRestorationTest.kt": (
             "retainedPrivateOutputCanBeRestoredAfterConfigurationChange "
@@ -1148,6 +1175,34 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "PreviewSummaryHeader(", "PreviewControls("
         )
         with self.assertRaisesRegex(VerificationError, "PreviewSummaryHeader"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_imported_gcode_color_fallback(self) -> None:
+        sources = valid_sources()
+        sources["GcodePreviewMetadata.kt"] = sources[
+            "GcodePreviewMetadata.kt"
+        ].replace("lastColorList(metadata, ORCA_EXTRUDER_COLORS)", "emptyList()")
+        with self.assertRaisesRegex(VerificationError, "imported G-code metadata boundary"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_project_colors_for_imported_gcode_preview(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "importedGcodeState.document.filamentColors.previewFilamentColors()",
+            "filamentColors",
+        )
+        with self.assertRaisesRegex(VerificationError, "imported G-code Preview fidelity"):
+            verify_preview_boundary(sources)
+
+    def test_requires_imported_gcode_color_device_regression(self) -> None:
+        sources = valid_sources()
+        sources["GcodeOpenIntentInstrumentedTest.kt"] = sources[
+            "GcodeOpenIntentInstrumentedTest.kt"
+        ].replace(
+            "assertEquals(listOf(0x123456, 0xABCDEF), document.filamentColors)",
+            "assertTrue(document.filamentColors.isNotEmpty())",
+        )
+        with self.assertRaisesRegex(VerificationError, "imported G-code device regression"):
             verify_preview_boundary(sources)
 
     def test_rejects_dropped_filament_length(self) -> None:

@@ -5,7 +5,12 @@ import java.io.RandomAccessFile
 import java.nio.charset.StandardCharsets
 import kotlin.math.roundToInt
 
-internal fun readGcodePreviewSummary(file: File): PreviewSummary {
+internal data class GcodePreviewMetadata(
+    val summary: PreviewSummary,
+    val filamentColors: List<Int>,
+)
+
+internal fun readGcodePreviewMetadata(file: File): GcodePreviewMetadata {
     require(file.isFile) { "G-code document is unavailable" }
     RandomAccessFile(file, "r").use { input ->
         val length = input.length()
@@ -19,7 +24,7 @@ internal fun readGcodePreviewSummary(file: File): PreviewSummary {
         } else {
             ByteArray(0)
         }
-        return parseGcodePreviewSummary(
+        return parseGcodePreviewMetadata(
             buildString(head.size + tail.size + 1) {
                 append(String(head, StandardCharsets.UTF_8))
                 append('\n')
@@ -29,7 +34,11 @@ internal fun readGcodePreviewSummary(file: File): PreviewSummary {
     }
 }
 
-internal fun parseGcodePreviewSummary(metadata: String): PreviewSummary {
+internal fun readGcodePreviewSummary(file: File): PreviewSummary {
+    return readGcodePreviewMetadata(file).summary
+}
+
+internal fun parseGcodePreviewMetadata(metadata: String): GcodePreviewMetadata {
     val normalDuration = metadata.lineSequence().mapNotNull { line ->
         ORCA_TIME.matchEntire(line.trim())?.groupValues?.get(1)
     }.lastOrNull()?.let(::parseDurationSeconds)
@@ -42,12 +51,21 @@ internal fun parseGcodePreviewSummary(metadata: String): PreviewSummary {
     val millimeters = lastNumberList(metadata, ORCA_TOOL_MILLIMETERS)?.sum()
     val curaMeters = lastScalar(metadata, CURA_FILAMENT_METERS)
 
-    return PreviewSummary(
-        duration = seconds?.let(::previewDuration),
-        filamentGrams = (totalGrams ?: toolGrams)?.toFloat(),
-        filamentMeters = (millimeters?.div(1_000.0) ?: curaMeters)?.toFloat(),
+    val filamentColors = lastColorList(metadata, ORCA_FILAMENT_COLORS)
+        ?: lastColorList(metadata, ORCA_EXTRUDER_COLORS)
+
+    return GcodePreviewMetadata(
+        summary = PreviewSummary(
+            duration = seconds?.let(::previewDuration),
+            filamentGrams = (totalGrams ?: toolGrams)?.toFloat(),
+            filamentMeters = (millimeters?.div(1_000.0) ?: curaMeters)?.toFloat(),
+        ),
+        filamentColors = filamentColors.orEmpty(),
     )
 }
+
+internal fun parseGcodePreviewSummary(metadata: String): PreviewSummary =
+    parseGcodePreviewMetadata(metadata).summary
 
 private fun lastScalar(metadata: String, pattern: Regex): Double? =
     metadata.lineSequence().mapNotNull { line ->
@@ -58,6 +76,14 @@ private fun lastNumberList(metadata: String, pattern: Regex): List<Double>? =
     metadata.lineSequence().mapNotNull { line ->
         val payload = pattern.matchEntire(line.trim())?.groupValues?.get(1) ?: return@mapNotNull null
         payload.split(',').map { value -> value.trim().toDoubleOrNull()?.validStatistic() ?: return@mapNotNull null }
+    }.lastOrNull()
+
+private fun lastColorList(metadata: String, pattern: Regex): List<Int>? =
+    metadata.lineSequence().mapNotNull { line ->
+        val payload = pattern.matchEntire(line.trim())?.groupValues?.get(1) ?: return@mapNotNull null
+        val values = payload.split(';')
+        if (values.size !in 1..MAX_FILAMENT_SLOTS) return@mapNotNull null
+        values.map { value -> parseFilamentColor(value) ?: return@mapNotNull null }
     }.lastOrNull()
 
 private fun parseDurationSeconds(value: String): Double? {
@@ -93,6 +119,8 @@ private val ORCA_TOTAL_GRAMS = Regex(";\\s*total filament used \\[g]\\s*=\\s*([0
 private val ORCA_TOOL_GRAMS = Regex(";\\s*filament used \\[g]\\s*=\\s*(.+)", RegexOption.IGNORE_CASE)
 private val ORCA_TOOL_MILLIMETERS = Regex(";\\s*filament used \\[mm]\\s*=\\s*(.+)", RegexOption.IGNORE_CASE)
 private val CURA_FILAMENT_METERS = Regex(";\\s*Filament used\\s*:\\s*([0-9]+(?:\\.[0-9]+)?)m", RegexOption.IGNORE_CASE)
+private val ORCA_FILAMENT_COLORS = Regex(";\\s*filament_colour\\s*=\\s*(.+)", RegexOption.IGNORE_CASE)
+private val ORCA_EXTRUDER_COLORS = Regex(";\\s*extruder_colour\\s*=\\s*(.+)", RegexOption.IGNORE_CASE)
 private val DURATION_TOKEN = Regex("([0-9]+(?:\\.[0-9]+)?)\\s*([dhms])")
 private const val METADATA_HEAD_BYTES = 128 * 1_024
 private const val METADATA_TAIL_BYTES = 512 * 1_024

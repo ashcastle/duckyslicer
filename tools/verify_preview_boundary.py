@@ -18,6 +18,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "NativeEngine.kt",
         "PreviewModels.kt",
         "PreviewSummary.kt",
+        "GcodePreviewMetadata.kt",
+        "GcodePreviewImportViewModel.kt",
         "AppSettings.kt",
         "AppSettingsSheet.kt",
         "ToolpathPreviewView.kt",
@@ -56,6 +58,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "AccessibilityInstrumentedTest.kt",
         "PreviewModelsTest.kt",
         "PreviewSummaryTest.kt",
+        "GcodePreviewMetadataTest.kt",
+        "GcodeOpenIntentInstrumentedTest.kt",
         "SliceOutcomeRestorationTest.kt",
         "PreviewPerformancePolicyTest.kt",
         "ToolpathMeshBuilderTest.kt",
@@ -1025,6 +1029,54 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in summary_test:
             raise VerificationError(f"preview summary regression is missing: {marker}")
+    imported_metadata = sources["GcodePreviewMetadata.kt"]
+    for marker in (
+        "METADATA_HEAD_BYTES = 128 * 1_024",
+        "METADATA_TAIL_BYTES = 512 * 1_024",
+        "values.size !in 1..MAX_FILAMENT_SLOTS",
+        "parseFilamentColor(value)",
+        "lastColorList(metadata, ORCA_FILAMENT_COLORS)",
+        "lastColorList(metadata, ORCA_EXTRUDER_COLORS)",
+    ):
+        if marker not in imported_metadata:
+            raise VerificationError(f"imported G-code metadata boundary is missing: {marker}")
+    imported_owner = sources["GcodePreviewImportViewModel.kt"]
+    for marker in (
+        "resolver.acquireContentProviderClient(uri)",
+        "provider.query(",
+        'provider.openAssetFile(uri, "r", signal)',
+        "store.importDocument(",
+        "readGcodePreviewMetadata(output)",
+        "filamentColors = metadata.filamentColors",
+        "normalizedProjectDocumentName",
+    ):
+        if marker not in imported_owner:
+            raise VerificationError(f"imported G-code retained owner is missing: {marker}")
+    imported_unit = sources["GcodePreviewMetadataTest.kt"]
+    for marker in (
+        "parsesOrcaDurationAndSumsPerToolFilament",
+        "fallsBackToValidExtruderColorsWhenFilamentColorsAreMalformed",
+        "listOf(0x123456, 0xABCDEF)",
+    ):
+        if marker not in imported_unit:
+            raise VerificationError(f"imported G-code metadata regression is missing: {marker}")
+    imported_device = sources["GcodeOpenIntentInstrumentedTest.kt"]
+    for marker in (
+        "importedDocumentIsCopiedParsedAndPreviewedOffline",
+        "interruptedReplacementRetriesWithoutDiscardingThePreviousPreviewFirst",
+        "providerOpenCanBeCanceledWithoutLeavingAPartialPreview",
+        "assertEquals(listOf(0x123456, 0xABCDEF), document.filamentColors)",
+    ):
+        if marker not in imported_device:
+            raise VerificationError(f"imported G-code device regression is missing: {marker}")
+    for marker in (
+        "displayedFilamentColors",
+        "importedGcodeState.document.filamentColors.previewFilamentColors()",
+        "importedDisplayName = importedGcodeState.document?.displayName",
+        "layerEventsEditable = !imported",
+    ):
+        if marker not in sources["WorkspaceScreen.kt"]:
+            raise VerificationError(f"imported G-code Preview fidelity is missing: {marker}")
     for source_name in ("strings.xml", "strings-ko.xml"):
         strings = sources[source_name]
         for resource in (
@@ -1215,6 +1267,12 @@ def read_sources() -> dict[str, str]:
         "NativeEngine.kt": (main / "NativeEngine.kt").read_text(encoding="utf-8"),
         "PreviewModels.kt": (main / "PreviewModels.kt").read_text(encoding="utf-8"),
         "PreviewSummary.kt": (main / "PreviewSummary.kt").read_text(encoding="utf-8"),
+        "GcodePreviewMetadata.kt": (main / "GcodePreviewMetadata.kt").read_text(
+            encoding="utf-8"
+        ),
+        "GcodePreviewImportViewModel.kt": (
+            main / "GcodePreviewImportViewModel.kt"
+        ).read_text(encoding="utf-8"),
         "AppSettings.kt": (main / "AppSettings.kt").read_text(encoding="utf-8"),
         "AppSettingsSheet.kt": (main / "AppSettingsSheet.kt").read_text(
             encoding="utf-8"
@@ -1309,6 +1367,12 @@ def read_sources() -> dict[str, str]:
         "PreviewSummaryTest.kt": (tests / "PreviewSummaryTest.kt").read_text(
             encoding="utf-8"
         ),
+        "GcodePreviewMetadataTest.kt": (
+            tests / "GcodePreviewMetadataTest.kt"
+        ).read_text(encoding="utf-8"),
+        "GcodeOpenIntentInstrumentedTest.kt": (
+            device / "GcodeOpenIntentInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
         "SliceOutcomeRestorationTest.kt": (
             tests / "SliceOutcomeRestorationTest.kt"
         ).read_text(encoding="utf-8"),

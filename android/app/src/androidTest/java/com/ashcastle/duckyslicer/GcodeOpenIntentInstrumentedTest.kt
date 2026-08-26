@@ -82,6 +82,7 @@ class GcodeOpenIntentInstrumentedTest {
             """
             ;TIME:42
             ;Filament used: 1.25m
+            ; filament_colour = #123456;#ABCDEF
             ;LAYER_CHANGE
             ;Z:0.2
             ;HEIGHT:0.2
@@ -122,6 +123,7 @@ class GcodeOpenIntentInstrumentedTest {
             assertEquals(2, preview.layerCount)
             assertEquals(1.25f, document.summary.filamentMeters ?: Float.NaN, 0.001f)
             assertTrue(requireNotNull(document.summary.duration).underOneMinute)
+            assertEquals(listOf(0x123456, 0xABCDEF), document.filamentColors)
 
             val importedOutput = document.output
             model.clearDocument()

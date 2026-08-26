@@ -34,6 +34,7 @@ internal data class ImportedGcodePreview(
     val output: File,
     val displayName: String,
     val summary: PreviewSummary,
+    val filamentColors: List<Int>,
     val preview: GcodeLayerPreview?,
 )
 
@@ -109,9 +110,15 @@ internal class GcodePreviewImportViewModel(
                         name
                     }
                     val output = requireNotNull(imported)
-                    val summary = readGcodePreviewSummary(output)
+                    val metadata = readGcodePreviewMetadata(output)
                     val preview = buildPreview(output, 0, Int.MAX_VALUE)
-                    ImportedGcodePreview(output, displayName, summary, preview)
+                    ImportedGcodePreview(
+                        output = output,
+                        displayName = displayName,
+                        summary = metadata.summary,
+                        filamentColors = metadata.filamentColors,
+                        preview = preview,
+                    )
                 }
                 if (cancellationRequested.get()) throw GcodeImportCanceledException()
                 persistDocument(document)
@@ -221,12 +228,18 @@ internal class GcodePreviewImportViewModel(
             return
         }
         val displayName = savedStateHandle.get<String>(KEY_DISPLAY_NAME) ?: DEFAULT_DISPLAY_NAME
-        val summary = runCatching { readGcodePreviewSummary(output) }.getOrElse {
+        val metadata = runCatching { readGcodePreviewMetadata(output) }.getOrElse {
             store.discard(output)
             clearPersistedDocument()
             return
         }
-        val document = ImportedGcodePreview(output, displayName, summary, null)
+        val document = ImportedGcodePreview(
+            output = output,
+            displayName = displayName,
+            summary = metadata.summary,
+            filamentColors = metadata.filamentColors,
+            preview = null,
+        )
         if (!loadPreview) {
             mutableState.value = GcodePreviewImportState(document = document)
             return
@@ -275,9 +288,7 @@ internal class GcodePreviewImportViewModel(
             null
         }
         return queried
-            ?.trim()
-            ?.take(ProjectStore.MAX_DISPLAY_NAME_LENGTH)
-            ?.takeIf { it.isNotEmpty() }
+            ?.let(::normalizedProjectDocumentName)
             ?: DEFAULT_DISPLAY_NAME
     }
 

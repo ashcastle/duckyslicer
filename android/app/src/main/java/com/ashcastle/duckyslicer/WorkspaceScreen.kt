@@ -645,6 +645,11 @@ internal fun WorkspaceScreen(
     val selectedSingleVolume = selectedObject?.singleVolumeOrNull
     val availableFilaments = sliceOptions.resolvedFilamentSlots()
     val filamentColors = sliceOptions.previewFilamentColors()
+    val displayedFilamentColors = if (importedGcodeState.document != null) {
+        importedGcodeState.document.filamentColors.previewFilamentColors()
+    } else {
+        filamentColors
+    }
     val layerFilamentColors = sliceOptions.resolvedFilamentColors()
     val layerFilamentChangesAvailable = availableFilaments.size > 1 &&
         projectObjects.supportLayerFilamentChanges()
@@ -793,7 +798,7 @@ internal fun WorkspaceScreen(
                     projectObjects = projectObjects,
                     selectedObjectId = selectedObjectId,
                     preview = if (selectedTab == WorkspaceTab.PREVIEW) displayedPreview else null,
-                    filamentColors = filamentColors,
+                    filamentColors = displayedFilamentColors,
                     bedSizeX = sliceOptions.bedSizeX,
                     bedSizeY = sliceOptions.bedSizeY,
                     maxPrintHeight = sliceOptions.maxPrintHeight,
@@ -1180,6 +1185,7 @@ internal fun WorkspaceScreen(
                 WorkspaceTab.PREVIEW -> PreviewSheet(
                     outcome = previewOutcome.takeIf { importedGcodeState.document == null },
                     importedSummary = importedGcodeState.document?.summary,
+                    importedDisplayName = importedGcodeState.document?.displayName,
                     imported = importedGcodeState.document != null,
                     preview = displayedPreview,
                     stale = previewStale,
@@ -1197,7 +1203,7 @@ internal fun WorkspaceScreen(
                     },
                     visibleToolpathRoles = visibleToolpathRoles,
                     previewColorMode = previewColorMode,
-                    filamentColors = filamentColors,
+                    filamentColors = displayedFilamentColors,
                     layerFilamentColors = layerFilamentColors,
                     layerPauseEvents = layerPauseEvents,
                     layerFilamentChanges = layerFilamentChanges,
@@ -7009,6 +7015,7 @@ private fun SliceSheet(
 private fun PreviewSheet(
     outcome: SliceOutcome?,
     importedSummary: PreviewSummary?,
+    importedDisplayName: String?,
     imported: Boolean,
     preview: GcodeLayerPreview?,
     stale: Boolean,
@@ -7068,6 +7075,15 @@ private fun PreviewSheet(
                     }
                 }
                 return@Column
+            }
+            if (importedDisplayName != null) {
+                Text(
+                    text = importedDisplayName,
+                    color = Color(0xFFD0D1CB),
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             PreviewSummaryHeader(
                 summary = summary,
