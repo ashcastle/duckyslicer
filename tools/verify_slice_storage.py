@@ -230,6 +230,7 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "laterBatchFailureDeletesEarlierDocumentsAndKeepsPrivateArtifacts",
         "batchCancellationDeletesEveryDocumentCreatedByThatOperation",
         "BatchExportDocumentsProvider.TREE_URI",
+        "batchProviderRejectsTraversalDocumentNamesOutsideItsRoot",
     ):
         if marker not in export_tests:
             raise VerificationError(f"retained G-code export regression is missing: {marker}")
@@ -243,6 +244,9 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "createDocument(",
         "deleteDocument(",
         "signal.setOnCancelListener",
+        'documentId.contains("..")',
+        "candidate.startsWith(rootPath)",
+        "rootPath.equals(candidate.getParent())",
     ):
         if marker not in provider:
             raise VerificationError(f"batch export test provider is incomplete: {marker}")

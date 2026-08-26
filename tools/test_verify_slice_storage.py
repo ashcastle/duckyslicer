@@ -96,11 +96,13 @@ def valid_sources() -> dict[str, str]:
             " laterBatchFailureDeletesEarlierDocumentsAndKeepsPrivateArtifacts"
             " batchCancellationDeletesEveryDocumentCreatedByThatOperation"
             " BatchExportDocumentsProvider.TREE_URI"
+            " batchProviderRejectsTraversalDocumentNamesOutsideItsRoot"
         ),
         "BatchExportDocumentsProvider.java": (
             'extends ContentProvider METHOD_CREATE_DOCUMENT = "android:createDocument" '
             "openAssetFile( MODE_FAIL_SECOND MODE_BLOCK_SECOND createDocument( "
-            "deleteDocument( signal.setOnCancelListener"
+            'deleteDocument( signal.setOnCancelListener documentId.contains("..") '
+            "candidate.startsWith(rootPath) rootPath.equals(candidate.getParent())"
         ),
         "AccessibilityInstrumentedTest.kt": (
             "cancelGcodeExportActionIsReachable "

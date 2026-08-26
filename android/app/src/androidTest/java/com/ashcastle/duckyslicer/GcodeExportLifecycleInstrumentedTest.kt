@@ -3,6 +3,7 @@ package com.ashcastle.duckyslicer
 import android.app.Application
 import android.os.Bundle
 import android.os.SystemClock
+import android.provider.DocumentsContract
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ActivityScenario
@@ -22,6 +23,35 @@ import org.junit.runner.RunWith
 class GcodeExportLifecycleInstrumentedTest {
     @get:Rule
     val blockingProviderProcess = BlockingProviderProcessRule()
+
+    @Test
+    fun batchProviderRejectsTraversalDocumentNamesOutsideItsRoot() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val escaped = File(context.cacheDir, "batch-export-escape.gcode")
+        escaped.delete()
+        prepareBatchProvider(BatchExportDocumentsProvider.METHOD_PREPARE_SUCCESS)
+        val parent = DocumentsContract.buildDocumentUriUsingTree(
+            BatchExportDocumentsProvider.TREE_URI,
+            BatchExportDocumentsProvider.ROOT_ID,
+        )
+
+        val result = runCatching {
+            DocumentsContract.createDocument(
+                resolver,
+                parent,
+                "application/octet-stream",
+                "../batch-export-escape.gcode",
+            )
+        }
+
+        assertTrue("Traversal document names must be rejected", result.isFailure)
+        assertFalse("The provider must not write outside its root", escaped.exists())
+        assertTrue(
+            "Rejected names must not leave a provider document",
+            batchProviderFiles().isEmpty(),
+        )
+    }
 
     @Test
     fun gcodeExportSurvivesActivityRecreationAndCopiesTheExactArtifactOnce() {

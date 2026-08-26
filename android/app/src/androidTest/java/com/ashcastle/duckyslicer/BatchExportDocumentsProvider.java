@@ -17,6 +17,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -214,7 +216,7 @@ public final class BatchExportDocumentsProvider extends ContentProvider {
         if (target.mode == MODE_FAIL_SECOND && number == 2) {
             throw new FileNotFoundException("Intentional second document failure");
         }
-        File output = new File(root(), displayName);
+        File output = documentFile(displayName);
         try {
             if (!output.createNewFile()) throw new FileNotFoundException("Duplicate document");
         } catch (java.io.IOException error) {
@@ -246,13 +248,32 @@ public final class BatchExportDocumentsProvider extends ContentProvider {
     }
 
     private File document(String documentId) throws FileNotFoundException {
-        if (documentId == null || ROOT_ID.equals(documentId)
-                || documentId.contains("/") || documentId.contains("\\")) {
-            throw new FileNotFoundException("Unsafe document id");
-        }
-        File file = new File(root(), documentId);
+        File file = documentFile(documentId);
         if (!file.isFile()) throw new FileNotFoundException("Unknown document");
         return file;
+    }
+
+    private File documentFile(String documentId) throws FileNotFoundException {
+        if (documentId == null || documentId.trim().isEmpty() || ROOT_ID.equals(documentId)
+                || documentId.contains("..") || documentId.contains("/")
+                || documentId.contains("\\")) {
+            throw new FileNotFoundException("Unsafe document id");
+        }
+        for (int index = 0; index < documentId.length(); index++) {
+            if (Character.isISOControl(documentId.charAt(index))) {
+                throw new FileNotFoundException("Unsafe document id");
+            }
+        }
+        try {
+            Path rootPath = root().toPath().toAbsolutePath().normalize();
+            Path candidate = rootPath.resolve(documentId).normalize();
+            if (!candidate.startsWith(rootPath) || !rootPath.equals(candidate.getParent())) {
+                throw new FileNotFoundException("Unsafe document id");
+            }
+            return candidate.toFile();
+        } catch (InvalidPathException error) {
+            throw new FileNotFoundException("Unsafe document id");
+        }
     }
 
     private static final class Session {
