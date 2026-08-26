@@ -13,6 +13,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -331,6 +332,72 @@ class AccessibilityInstrumentedTest {
                     },
                 1,
                 selectionActions.size,
+            )
+        }
+    }
+
+    @Test
+    fun remoteDeviceDeletionRequiresExplicitConfirmation() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val delete = context.getString(R.string.delete_device)
+        val prompt = context.getString(R.string.confirm_delete_device, TEST_DEVICE_LABEL)
+        val keep = context.getString(R.string.keep_device)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_DEVICE).use {
+            clickNamedAction(delete)
+            waitForNodes(setOf(prompt, keep))
+            assertTrue(waitForSingleNamedAction(delete).isFocusable)
+            assertFalse(
+                "Opening delete confirmation must not dispatch deletion",
+                currentNodes().any { it.effectiveLabel().contains(TEST_REMOTE_DELETE_DISPATCHED) },
+            )
+
+            clickNamedAction(keep)
+            assertFalse(
+                "Dismissing delete confirmation must not dispatch deletion",
+                currentNodes().any { it.effectiveLabel().contains(TEST_REMOTE_DELETE_DISPATCHED) },
+            )
+
+            clickNamedAction(delete)
+            waitForNodes(setOf(prompt, keep))
+            assertTrue(waitForSingleNamedAction(delete).isFocusable)
+            clickNamedAction(delete)
+            assertTrue(
+                waitForNode(TEST_REMOTE_DELETE_DISPATCHED) {
+                    it.effectiveLabel() == TEST_REMOTE_DELETE_DISPATCHED
+                }.isVisibleToUser,
+            )
+        }
+    }
+
+    @Test
+    fun livePrintCancellationRequiresExplicitConfirmation() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val cancel = context.getString(R.string.cancel_print)
+        val prompt = context.getString(R.string.confirm_cancel_print)
+        val keep = context.getString(R.string.keep_printing)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_DEVICE_PRINTING).use {
+            clickNamedAction(cancel)
+            waitForNodes(setOf(prompt, keep))
+            assertTrue(waitForSingleNamedAction(cancel).isFocusable)
+            assertFalse(
+                "Opening print cancellation confirmation must not dispatch cancellation",
+                currentNodes().any { it.effectiveLabel().contains(TEST_REMOTE_CANCEL_DISPATCHED) },
+            )
+
+            clickNamedAction(keep)
+            assertFalse(
+                "Keeping the print must not dispatch cancellation",
+                currentNodes().any { it.effectiveLabel().contains(TEST_REMOTE_CANCEL_DISPATCHED) },
+            )
+
+            clickNamedAction(cancel)
+            waitForNodes(setOf(prompt, keep))
+            assertTrue(waitForSingleNamedAction(cancel).isFocusable)
+            clickNamedAction(cancel)
+            assertTrue(
+                waitForNode(TEST_REMOTE_CANCEL_DISPATCHED) {
+                    it.effectiveLabel() == TEST_REMOTE_CANCEL_DISPATCHED
+                }.isVisibleToUser,
             )
         }
     }
@@ -1492,6 +1559,40 @@ class AccessibilityInstrumentedTest {
             SystemClock.sleep(NODE_POLL_MILLIS)
         } while (SystemClock.elapsedRealtime() < deadline)
         throw AssertionError("Timed out waiting for accessibility node: $label")
+    }
+
+    private fun clickNamedAction(label: String) {
+        val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
+        do {
+            val accepted = currentNodes()
+                .filter { node ->
+                    node.isVisibleToUser && node.isClickable && node.effectiveLabel() == label
+                }
+                .asReversed()
+                .any { node -> node.performAction(AccessibilityNodeInfo.ACTION_CLICK) }
+            if (accepted) return
+            SystemClock.sleep(NODE_POLL_MILLIS)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        throw AssertionError("Timed out clicking accessibility action: $label")
+    }
+
+    private fun waitForSingleNamedAction(label: String): AccessibilityNodeInfo {
+        val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
+        var observedCount = 0
+        do {
+            val actions = currentNodes().filter { node ->
+                node.isVisibleToUser &&
+                    node.isEnabled &&
+                    node.isClickable &&
+                    node.effectiveLabel() == label
+            }
+            observedCount = actions.size
+            if (actions.size == 1) return actions.single()
+            SystemClock.sleep(NODE_POLL_MILLIS)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        throw AssertionError(
+            "Expected one visible accessibility action for $label; observed $observedCount",
+        )
     }
 
     private fun replaceEditableText(label: String, value: String) {

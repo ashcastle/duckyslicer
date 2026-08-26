@@ -756,6 +756,8 @@
     <string name="add_device">Add</string>
     <string name="edit_device">Edit device</string>
     <string name="delete_device">Delete device</string>
+    <string name="confirm_delete_device">Remove %1$s and its saved connection details? Any current print will continue.</string>
+    <string name="keep_device">Keep device</string>
     <string name="no_devices">Add an OctoPrint or Klipper printer on your local network.</string>
     <string name="device_name">Name</string>
     <string name="device_address">Address</string>
@@ -787,6 +789,8 @@
     <string name="pause_print">Pause</string>
     <string name="resume_print">Resume</string>
     <string name="cancel_print">Cancel print</string>
+    <string name="confirm_cancel_print">The current print will stop. This cannot be undone.</string>
+    <string name="keep_printing">Keep printing</string>
     <string name="device_saved">Device saved.</string>
     <string name="device_deleted">Device removed.</string>
     <string name="device_connected">Printer is reachable.</string>

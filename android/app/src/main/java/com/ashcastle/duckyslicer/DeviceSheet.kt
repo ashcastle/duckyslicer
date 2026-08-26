@@ -35,6 +35,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,7 +84,22 @@ internal fun DeviceSheet(
 ) {
     var editing by remember { mutableStateOf<RemoteDeviceDraft?>(null) }
     var confirmStart by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<RemoteDeviceProfile?>(null) }
+    var confirmCancelPrint by remember { mutableStateOf(false) }
     val selected = profiles.firstOrNull { it.id == selectedProfileId }
+    val selectedPrintIsActive = selected != null && status?.isPrintActive() == true
+
+    LaunchedEffect(profiles.map(RemoteDeviceProfile::id)) {
+        if (pendingDelete != null && profiles.none { it.id == pendingDelete?.id }) {
+            pendingDelete = null
+        }
+    }
+    LaunchedEffect(selectedProfileId) {
+        confirmCancelPrint = false
+    }
+    LaunchedEffect(selectedPrintIsActive) {
+        if (!selectedPrintIsActive) confirmCancelPrint = false
+    }
 
     Card(
         modifier = modifier.padding(12.dp).fillMaxWidth().widthIn(max = 620.dp),
@@ -167,7 +183,7 @@ internal fun DeviceSheet(
                             Icon(Icons.Default.Edit, stringResource(R.string.edit_device))
                         }
                         IconButton(
-                            onClick = { onDelete(profile.id) },
+                            onClick = { pendingDelete = profile },
                             enabled = !busy,
                         ) {
                             Icon(
@@ -183,7 +199,7 @@ internal fun DeviceSheet(
             if (selected != null) {
                 val localizedStatus = status?.displayState()
                 val normalizedState = status?.state?.lowercase().orEmpty()
-                val printIsActive = status?.isPrintActive() == true
+                val printIsActive = selectedPrintIsActive
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -319,7 +335,11 @@ internal fun DeviceSheet(
                                 Text(stringResource(R.string.pause_print))
                             }
                         }
-                        TextButton(onClick = onCancel, enabled = !busy, modifier = Modifier.weight(1f)) {
+                        TextButton(
+                            onClick = { confirmCancelPrint = true },
+                            enabled = !busy,
+                            modifier = Modifier.weight(1f),
+                        ) {
                             Text(stringResource(R.string.cancel_print), color = Color(0xFFFF8A80))
                         }
                     }
@@ -351,6 +371,54 @@ internal fun DeviceSheet(
             },
             dismissButton = {
                 TextButton(onClick = { confirmStart = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+    pendingDelete?.let { profile ->
+        if (profiles.any { it.id == profile.id }) {
+            AlertDialog(
+                onDismissRequest = { pendingDelete = null },
+                title = { Text(stringResource(R.string.delete_device)) },
+                text = { Text(stringResource(R.string.confirm_delete_device, profile.name)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            pendingDelete = null
+                            onDelete(profile.id)
+                        },
+                        enabled = !busy,
+                    ) {
+                        Text(stringResource(R.string.delete_device), color = Color(0xFFFF8A80))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingDelete = null }) {
+                        Text(stringResource(R.string.keep_device))
+                    }
+                },
+            )
+        }
+    }
+    if (confirmCancelPrint && selected != null) {
+        AlertDialog(
+            onDismissRequest = { confirmCancelPrint = false },
+            title = { Text(stringResource(R.string.cancel_print)) },
+            text = { Text(stringResource(R.string.confirm_cancel_print)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmCancelPrint = false
+                        onCancel()
+                    },
+                    enabled = !busy,
+                ) {
+                    Text(stringResource(R.string.cancel_print), color = Color(0xFFFF8A80))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmCancelPrint = false }) {
+                    Text(stringResource(R.string.keep_printing))
+                }
             },
         )
     }

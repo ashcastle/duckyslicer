@@ -756,6 +756,8 @@
     <string name="add_device">추가</string>
     <string name="edit_device">디바이스 편집</string>
     <string name="delete_device">디바이스 삭제</string>
+    <string name="confirm_delete_device">%1$s와 저장된 연결 정보를 삭제할까요? 현재 출력은 계속됩니다.</string>
+    <string name="keep_device">디바이스 유지</string>
     <string name="no_devices">같은 네트워크의 OctoPrint 또는 Klipper 프린터를 추가하세요.</string>
     <string name="device_name">이름</string>
     <string name="device_address">주소</string>
@@ -787,6 +789,8 @@
     <string name="pause_print">일시 정지</string>
     <string name="resume_print">계속</string>
     <string name="cancel_print">출력 취소</string>
+    <string name="confirm_cancel_print">현재 출력이 중단되며 되돌릴 수 없습니다.</string>
+    <string name="keep_printing">출력 계속</string>
     <string name="device_saved">디바이스를 저장했습니다.</string>
     <string name="device_deleted">디바이스를 삭제했습니다.</string>
     <string name="device_connected">프린터에 연결했습니다.</string>

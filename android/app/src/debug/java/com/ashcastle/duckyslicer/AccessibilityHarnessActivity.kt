@@ -35,6 +35,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                         SCREEN_PROFILE -> ProfileAccessibilityHarness()
                         SCREEN_DEVICE -> DeviceAccessibilityHarness()
                         SCREEN_DEVICE_TELEMETRY -> DeviceAccessibilityHarness(telemetry = true)
+                        SCREEN_DEVICE_PRINTING -> DeviceAccessibilityHarness(printing = true)
                         SCREEN_REMOTE_REQUEST -> DeviceAccessibilityHarness(requestActive = true)
                         SCREEN_SETTINGS -> SettingsAccessibilityHarness()
                         SCREEN_SUPPORT_EXPORT -> SettingsAccessibilityHarness(supportExporting = true)
@@ -149,6 +150,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_PROFILE = "profile"
         const val SCREEN_DEVICE = "device"
         const val SCREEN_DEVICE_TELEMETRY = "device-telemetry"
+        const val SCREEN_DEVICE_PRINTING = "device-printing"
         const val SCREEN_REMOTE_REQUEST = "remote-request"
         const val SCREEN_SETTINGS = "settings"
         const val SCREEN_SUPPORT_EXPORT = "support-export"
@@ -314,49 +316,65 @@ private fun ProfileAccessibilityHarness() {
 private fun DeviceAccessibilityHarness(
     requestActive: Boolean = false,
     telemetry: Boolean = false,
+    printing: Boolean = false,
 ) {
-    DeviceSheet(
-        profiles = listOf(
-            RemoteDeviceProfile(
-                id = "accessibility-device",
-                name = TEST_DEVICE_LABEL,
-                kind = RemoteDeviceKind.OCTOPRINT,
-                baseUrl = "http://127.0.0.1",
+    var destructiveAction by remember { mutableStateOf<String?>(null) }
+    Box {
+        DeviceSheet(
+            profiles = listOf(
+                RemoteDeviceProfile(
+                    id = "accessibility-device",
+                    name = TEST_DEVICE_LABEL,
+                    kind = RemoteDeviceKind.OCTOPRINT,
+                    baseUrl = "http://127.0.0.1",
+                ),
             ),
-        ),
-        selectedProfileId = "accessibility-device".takeIf { requestActive || telemetry },
-        status = RemoteDeviceStatus(
-            state = "Printing",
-            fileName = "accessibility.gcode",
-            progressPercent = 40,
-            nozzleTemperatureC = 205.4,
-            nozzleTargetC = 210.0,
-            bedTemperatureC = 59.8,
-            bedTargetC = 60.0,
-            elapsedSeconds = 3_660,
-            remainingSeconds = 1_200,
-        ).takeIf { telemetry },
-        upload = null,
-        gcodeAvailable = false,
-        busy = requestActive,
-        uploadProgress = null,
-        requestActive = requestActive,
-        uploadActive = false,
-        requestCancellationRequested = false,
-        message = null,
-        isError = false,
-        confirmBeforePrint = true,
-        onSelect = {},
-        onSave = {},
-        onDelete = {},
-        onRefresh = {},
-        onUpload = {},
-        onCancelRequest = {},
-        onStart = {},
-        onPause = {},
-        onResume = {},
-        onCancel = {},
-    )
+            selectedProfileId = "accessibility-device".takeIf {
+                requestActive || telemetry || printing
+            },
+            status = when {
+                telemetry -> RemoteDeviceStatus(
+                    state = "Printing",
+                    fileName = "accessibility.gcode",
+                    progressPercent = 40,
+                    nozzleTemperatureC = 205.4,
+                    nozzleTargetC = 210.0,
+                    bedTemperatureC = 59.8,
+                    bedTargetC = 60.0,
+                    elapsedSeconds = 3_660,
+                    remainingSeconds = 1_200,
+                )
+                printing -> RemoteDeviceStatus(state = "Printing")
+                else -> null
+            },
+            upload = null,
+            gcodeAvailable = false,
+            busy = requestActive,
+            uploadProgress = null,
+            requestActive = requestActive,
+            uploadActive = false,
+            requestCancellationRequested = false,
+            message = null,
+            isError = false,
+            confirmBeforePrint = true,
+            onSelect = {},
+            onSave = {},
+            onDelete = { destructiveAction = TEST_REMOTE_DELETE_DISPATCHED },
+            onRefresh = {},
+            onUpload = {},
+            onCancelRequest = {},
+            onStart = {},
+            onPause = {},
+            onResume = {},
+            onCancel = { destructiveAction = TEST_REMOTE_CANCEL_DISPATCHED },
+        )
+        destructiveAction?.let { result ->
+            Text(
+                result,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        }
+    }
 }
 
 @Composable
@@ -706,6 +724,8 @@ private fun accessibilityAuxiliaryVolumeProjectObject(): ProjectObject {
 internal const val TEST_SETTING_LABEL = "Accessibility setting"
 internal const val TEST_SWITCH_LABEL = "Accessibility switch"
 internal const val TEST_DEVICE_LABEL = "Accessibility test printer"
+internal const val TEST_REMOTE_DELETE_DISPATCHED = "Accessibility device deletion dispatched"
+internal const val TEST_REMOTE_CANCEL_DISPATCHED = "Accessibility print cancellation dispatched"
 internal const val TEST_LAY_ON_FACE_SELECTED_LABEL = "Accessibility face selected"
 internal const val TEST_LAY_ON_FACE_FAILED_LABEL = "Accessibility face placement failed"
 internal const val TEST_LAY_ON_FACE_UNDONE_LABEL = "Accessibility face placement undone"
