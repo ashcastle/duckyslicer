@@ -1337,8 +1337,7 @@ private fun DuckySlicerScreen(
             !arranging && !splitting && !cutting && !slicing && !previewLoading &&
             projectTransferState.completion == null,
         replacementConfirmationRequired = requiresProjectReplacementConfirmation(
-            plateCount = projectHistory.current.plates.size,
-            objectCount = projectHistory.current.allObjects.size,
+            plates = projectHistory.current.plates,
             linkedDocumentDirty = projectTransferState.linkedDocumentDirty,
         ),
         projectTransferModel = projectTransferModel,

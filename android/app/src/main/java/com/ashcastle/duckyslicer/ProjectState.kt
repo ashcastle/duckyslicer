@@ -269,10 +269,14 @@ data class ProjectSnapshot(
 }
 
 internal fun requiresProjectReplacementConfirmation(
-    plateCount: Int,
-    objectCount: Int,
+    plates: List<ProjectPlate>,
     linkedDocumentDirty: Boolean,
-): Boolean = linkedDocumentDirty || plateCount > 1 || objectCount > 0
+): Boolean = linkedDocumentDirty || plates.size > 1 || plates.any { plate ->
+    plate.objects.isNotEmpty() || plate.name != null ||
+        plate.layerPauseEvents.values.isNotEmpty() ||
+        plate.layerFilamentChanges.values.isNotEmpty() ||
+        plate.layerCustomGCodeEvents.values.isNotEmpty()
+}
 
 data class ProjectHistoryState(
     val current: ProjectSnapshot = ProjectSnapshot(),

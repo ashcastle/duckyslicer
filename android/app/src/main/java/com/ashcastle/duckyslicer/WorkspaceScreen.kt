@@ -1213,8 +1213,7 @@ internal fun WorkspaceScreen(
                     plates = projectPlates,
                     selectedPlateId = selectedPlateId,
                     replacementConfirmationRequired = requiresProjectReplacementConfirmation(
-                        plateCount = projectPlates.size,
-                        objectCount = projectPlates.sumOf { it.objects.size },
+                        plates = projectPlates,
                         linkedDocumentDirty = linkedProjectDirty,
                     ),
                     selectedObjectId = selectedObjectId,

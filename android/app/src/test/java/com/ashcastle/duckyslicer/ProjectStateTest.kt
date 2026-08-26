@@ -23,32 +23,52 @@ class ProjectStateTest {
     fun replacementConfirmationProtectsDirtyAndStructuredProjects() {
         assertFalse(
             requiresProjectReplacementConfirmation(
-                plateCount = 1,
-                objectCount = 0,
+                plates = listOf(ProjectPlate("empty")),
                 linkedDocumentDirty = false,
             ),
         )
         assertTrue(
             requiresProjectReplacementConfirmation(
-                plateCount = 1,
-                objectCount = 0,
+                plates = listOf(ProjectPlate("dirty")),
                 linkedDocumentDirty = true,
             ),
         )
         assertTrue(
             requiresProjectReplacementConfirmation(
-                plateCount = 2,
-                objectCount = 0,
+                plates = listOf(ProjectPlate("first"), ProjectPlate("second")),
                 linkedDocumentDirty = false,
             ),
         )
         assertTrue(
             requiresProjectReplacementConfirmation(
-                plateCount = 1,
-                objectCount = 1,
+                plates = listOf(ProjectPlate("modeled", objects = listOf(projectObject("part")))),
                 linkedDocumentDirty = false,
             ),
         )
+        listOf(
+            ProjectPlate("named", name = "Named plate"),
+            ProjectPlate(
+                "pause",
+                layerPauseEvents = LayerPauseEvents(listOf(LayerPauseEvent(1f))),
+            ),
+            ProjectPlate(
+                "filament",
+                layerFilamentChanges = LayerFilamentChanges(listOf(LayerFilamentChange(1f, 0))),
+            ),
+            ProjectPlate(
+                "gcode",
+                layerCustomGCodeEvents = LayerCustomGCodeEvents(
+                    listOf(LayerCustomGCodeEvent(1f, "M117 Layer")),
+                ),
+            ),
+        ).forEach { plate ->
+            assertTrue(
+                requiresProjectReplacementConfirmation(
+                    plates = listOf(plate),
+                    linkedDocumentDirty = false,
+                ),
+            )
+        }
     }
 
     @Test

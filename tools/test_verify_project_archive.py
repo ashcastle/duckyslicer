@@ -165,7 +165,11 @@ def valid_sources() -> dict[str, str]:
             "current.allObjects.size + source.objects.size <= ProjectStore.MAX_PROJECT_OBJECTS "
             "ProjectStore.MAX_PROJECT_VOLUMES projectObject.rebaseVolumeIds(newObjectId) "
             "selectedPlateId = newPlateId fun requiresProjectReplacementConfirmation( "
-            "linkedDocumentDirty || plateCount > 1 || objectCount > 0"
+            "linkedDocumentDirty || plates.size > 1 || plates.any "
+            "plate.objects.isNotEmpty() || plate.name != null "
+            "plate.layerPauseEvents.values.isNotEmpty() "
+            "plate.layerFilamentChanges.values.isNotEmpty() "
+            "plate.layerCustomGCodeEvents.values.isNotEmpty()"
         ),
         "ProjectTransfer.kt": " ".join(
             (

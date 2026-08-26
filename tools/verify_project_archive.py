@@ -493,7 +493,11 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "projectObject.rebaseVolumeIds(newObjectId)",
             "selectedPlateId = newPlateId",
             "fun requiresProjectReplacementConfirmation(",
-            "linkedDocumentDirty || plateCount > 1 || objectCount > 0",
+            "linkedDocumentDirty || plates.size > 1 || plates.any",
+            "plate.objects.isNotEmpty() || plate.name != null",
+            "plate.layerPauseEvents.values.isNotEmpty()",
+            "plate.layerFilamentChanges.values.isNotEmpty()",
+            "plate.layerCustomGCodeEvents.values.isNotEmpty()",
         ),
     )
 
