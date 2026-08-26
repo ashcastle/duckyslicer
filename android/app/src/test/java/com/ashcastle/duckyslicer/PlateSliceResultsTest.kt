@@ -40,6 +40,9 @@ class PlateSliceResultsTest {
         val secondFilamentChanges = LayerFilamentChanges().put(
             LayerFilamentChange(printZMm = 6.4f, filamentSlot = 1),
         )
+        val secondCustomGCode = LayerCustomGCodeEvents().put(
+            LayerCustomGCodeEvent(printZMm = 8.6f, gcode = "M117 Inspect"),
+        )
         val snapshot = ProjectSnapshot(
             selectedPlateId = "second-plate",
             plates = listOf(
@@ -50,6 +53,7 @@ class PlateSliceResultsTest {
                     selectedObjectId = secondObject.id,
                     layerPauseEvents = secondPauses,
                     layerFilamentChanges = secondFilamentChanges,
+                    layerCustomGCodeEvents = secondCustomGCode,
                 ),
             ),
         )
@@ -65,6 +69,7 @@ class PlateSliceResultsTest {
         assertEquals(secondOptions, selected.options)
         assertEquals(secondPauses, selected.layerPauseEvents)
         assertEquals(secondFilamentChanges, selected.layerFilamentChanges)
+        assertEquals(secondCustomGCode, selected.layerCustomGCodeEvents)
         assertNull(snapshot.sliceInput(options - "second-plate"))
     }
 

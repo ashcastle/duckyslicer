@@ -1299,6 +1299,7 @@ private fun DuckySlicerScreen(
                 input.options,
                 input.layerPauseEvents,
                 input.layerFilamentChanges,
+                input.layerCustomGCodeEvents,
             )
         ) {
             plateSliceResults = plateSliceResults.clear(input.plateId)
@@ -1358,6 +1359,7 @@ private fun DuckySlicerScreen(
         selectedObjectId = projectHistory.current.selectedObjectId,
         layerPauseEvents = projectHistory.current.activePlate.layerPauseEvents,
         layerFilamentChanges = projectHistory.current.activePlate.layerFilamentChanges,
+        layerCustomGCodeEvents = projectHistory.current.activePlate.layerCustomGCodeEvents,
         sliceOptions = sliceOptions,
         profileCatalog = profileCatalog,
         profileRecents = profileRecents,
@@ -1933,6 +1935,26 @@ private fun DuckySlicerScreen(
         onRemoveLayerFilamentChange = { printZMm ->
             val current = projectTransferModel.state.value.history
             val next = current.removeLayerFilamentChange(printZMm)
+            if (next != current && projectTransferModel.updateHistory(current, next)) {
+                invalidateSliceAfterPreviewEdit()
+                notice = null
+                error = null
+            }
+        },
+        onPutLayerCustomGCode = { _, printZMm, gcode ->
+            val current = projectTransferModel.state.value.history
+            val next = current.putLayerCustomGCode(
+                LayerCustomGCodeEvent(printZMm = printZMm, gcode = gcode),
+            )
+            if (next != current && projectTransferModel.updateHistory(current, next)) {
+                invalidateSliceAfterPreviewEdit()
+                notice = null
+                error = null
+            }
+        },
+        onRemoveLayerCustomGCode = { printZMm ->
+            val current = projectTransferModel.state.value.history
+            val next = current.removeLayerCustomGCode(printZMm)
             if (next != current && projectTransferModel.updateHistory(current, next)) {
                 invalidateSliceAfterPreviewEdit()
                 notice = null

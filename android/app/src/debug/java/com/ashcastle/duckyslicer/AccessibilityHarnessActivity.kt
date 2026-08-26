@@ -231,6 +231,7 @@ private fun PreviewAccessibilityHarness() {
     var colorMode by remember { mutableStateOf(PreviewColorMode.FEATURE) }
     var pauseEvents by remember { mutableStateOf(LayerPauseEvents()) }
     var filamentChanges by remember { mutableStateOf(LayerFilamentChanges()) }
+    var customGCodeEvents by remember { mutableStateOf(LayerCustomGCodeEvents()) }
     PreviewControls(
         preview = GcodeLayerPreview(
             startLayer = 0,
@@ -250,6 +251,7 @@ private fun PreviewAccessibilityHarness() {
         ),
         layerPauseEvents = pauseEvents,
         layerFilamentChanges = filamentChanges,
+        layerCustomGCodeEvents = customGCodeEvents,
         layerFilamentChangesAvailable = true,
         filamentColors = listOf(0xFFFFCF40.toInt(), 0xFF44D7FF.toInt()),
         layerFilamentColors = listOf(0xFFFFCF40.toInt(), 0xFF44D7FF.toInt()),
@@ -275,6 +277,12 @@ private fun PreviewAccessibilityHarness() {
         },
         onRemoveLayerFilamentChange = { printZMm ->
             filamentChanges = filamentChanges.remove(printZMm)
+        },
+        onPutLayerCustomGCode = { _, printZMm, gcode ->
+            customGCodeEvents = customGCodeEvents.put(LayerCustomGCodeEvent(printZMm, gcode))
+        },
+        onRemoveLayerCustomGCode = { printZMm ->
+            customGCodeEvents = customGCodeEvents.remove(printZMm)
         },
     )
 }
@@ -390,6 +398,7 @@ private fun WorkspaceAccessibilityHarness(
         selectedObjectId = activePlate.selectedObjectId,
         layerPauseEvents = activePlate.layerPauseEvents,
         layerFilamentChanges = activePlate.layerFilamentChanges,
+        layerCustomGCodeEvents = activePlate.layerCustomGCodeEvents,
         sliceOptions = SliceOptions(),
         profileCatalog = ProfileCatalog(),
         profileRecents = ProfileRecents(),
@@ -585,6 +594,8 @@ private fun WorkspaceAccessibilityHarness(
         onRemoveLayerPause = {},
         onPutLayerFilamentChange = { _, _, _ -> },
         onRemoveLayerFilamentChange = {},
+        onPutLayerCustomGCode = { _, _, _ -> },
+        onRemoveLayerCustomGCode = {},
         onAppSettingsChanged = {},
         onSupportReportExport = {},
         onCancelSupportReportExport = {},

@@ -180,6 +180,7 @@ internal class ProjectStore(
                         selectedObjectId = archivedPlate.selectedObjectId,
                         layerPauseEvents = archivedPlate.layerPauseEvents,
                         layerFilamentChanges = archivedPlate.layerFilamentChanges,
+                        layerCustomGCodeEvents = archivedPlate.layerCustomGCodeEvents,
                     )
                 },
             )
@@ -291,6 +292,11 @@ internal class ProjectStore(
                         LayerPauseEvents()
                     },
                     layerFilamentChanges = layerFilamentChanges,
+                    layerCustomGCodeEvents = if (schemaVersion >= 77) {
+                        value.getJSONArray("layerCustomGCodeEvents").toLayerCustomGCodeEvents()
+                    } else {
+                        LayerCustomGCodeEvents()
+                    },
                 )
             }
             val selectedPlateId = root.getString("selectedPlateId")
@@ -388,6 +394,10 @@ internal class ProjectStore(
                                 .put(
                                     "layerFilamentChanges",
                                     plate.layerFilamentChanges.toProjectJson(),
+                                )
+                                .put(
+                                    "layerCustomGCodeEvents",
+                                    plate.layerCustomGCodeEvents.toProjectJson(),
                                 )
                                 .put("sliceOptions", requireNotNull(plateOptions[plate.id]).toProjectJson())
                                 .put(
@@ -624,6 +634,9 @@ internal class ProjectStore(
                             it.filamentSlot in options.resolvedFilamentSlots().indices
                         },
                     )
+                }
+                if (schemaVersion >= 77) {
+                    value.getJSONArray("layerCustomGCodeEvents").toLayerCustomGCodeEvents()
                 }
             }
             val selectedPlateId = root.getString("selectedPlateId")
@@ -1081,7 +1094,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 76
+        const val SCHEMA_VERSION = 77
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"

@@ -514,9 +514,10 @@ def valid_sources() -> dict[str, str]:
         "ModelImportPerformanceInstrumentedTest.kt": (
             "denseBinaryStlUsesBoundedPrimitiveImportWithinBudget "
             "sourceTriangles=${info.triangles} "
-            "native.last() / 1_000_000.0 <= 250.0 "
-            "decode.last() / 1_000_000.0 <= 100.0 "
-            "(native.last() + decode.last()) / 1_000_000.0 <= 300.0"
+            "repeat(21) require(sortedDurations.size == 20) "
+            "nativeP95 / 1_000_000.0 <= 250.0 "
+            "decodeP95 / 1_000_000.0 <= 100.0 "
+            "(nativeP95 + decodeP95) / 1_000_000.0 <= 300.0"
         ),
         "ToolpathRendererPerformanceInstrumentedTest.kt": (
             "maximumLayerRangeBuildsResponsiveInteractionGeometry "
@@ -769,7 +770,7 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
         sources = valid_sources()
         sources["ModelImportPerformanceInstrumentedTest.kt"] = sources[
             "ModelImportPerformanceInstrumentedTest.kt"
-        ].replace("decode.last() / 1_000_000.0 <= 100.0", "decode.isNotEmpty()")
+        ].replace("decodeP95 / 1_000_000.0 <= 100.0", "decode.isNotEmpty()")
         with self.assertRaisesRegex(VerificationError, "model import performance"):
             verify_preview_boundary(sources)
 

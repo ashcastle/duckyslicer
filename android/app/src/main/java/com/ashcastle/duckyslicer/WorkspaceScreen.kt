@@ -475,6 +475,7 @@ internal fun WorkspaceScreen(
     selectedObjectId: String?,
     layerPauseEvents: LayerPauseEvents,
     layerFilamentChanges: LayerFilamentChanges,
+    layerCustomGCodeEvents: LayerCustomGCodeEvents,
     sliceOptions: SliceOptions,
     profileCatalog: ProfileCatalog,
     profileRecents: ProfileRecents,
@@ -581,6 +582,8 @@ internal fun WorkspaceScreen(
     onRemoveLayerPause: (Float) -> Unit,
     onPutLayerFilamentChange: (Int, Float, Int) -> Unit,
     onRemoveLayerFilamentChange: (Float) -> Unit,
+    onPutLayerCustomGCode: (Int, Float, String) -> Unit,
+    onRemoveLayerCustomGCode: (Float) -> Unit,
     onAppSettingsChanged: (AppSettings) -> Unit,
     onSupportReportExport: (Uri) -> Unit,
     onCancelSupportReportExport: () -> Unit,
@@ -1104,6 +1107,7 @@ internal fun WorkspaceScreen(
                     layerFilamentColors = layerFilamentColors,
                     layerPauseEvents = layerPauseEvents,
                     layerFilamentChanges = layerFilamentChanges,
+                    layerCustomGCodeEvents = layerCustomGCodeEvents,
                     layerFilamentChangesAvailable = layerFilamentChangesAvailable,
                     onPreviewColorModeChanged = { mode -> previewColorModeName = mode.name },
                     onToolpathRoleVisibilityChanged = { role, visible ->
@@ -1118,6 +1122,8 @@ internal fun WorkspaceScreen(
                     onRemoveLayerPause = onRemoveLayerPause,
                     onPutLayerFilamentChange = onPutLayerFilamentChange,
                     onRemoveLayerFilamentChange = onRemoveLayerFilamentChange,
+                    onPutLayerCustomGCode = onPutLayerCustomGCode,
+                    onRemoveLayerCustomGCode = onRemoveLayerCustomGCode,
                     onGoToSlice = { onTabSelected(WorkspaceTab.SLICE) },
                     modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
@@ -6623,6 +6629,7 @@ private fun PreviewSheet(
     layerFilamentColors: List<Int>,
     layerPauseEvents: LayerPauseEvents,
     layerFilamentChanges: LayerFilamentChanges,
+    layerCustomGCodeEvents: LayerCustomGCodeEvents,
     layerFilamentChangesAvailable: Boolean,
     onPreviewColorModeChanged: (PreviewColorMode) -> Unit,
     onToolpathRoleVisibilityChanged: (Int, Boolean) -> Unit,
@@ -6631,6 +6638,8 @@ private fun PreviewSheet(
     onRemoveLayerPause: (Float) -> Unit,
     onPutLayerFilamentChange: (Int, Float, Int) -> Unit,
     onRemoveLayerFilamentChange: (Float) -> Unit,
+    onPutLayerCustomGCode: (Int, Float, String) -> Unit,
+    onRemoveLayerCustomGCode: (Float) -> Unit,
     onGoToSlice: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -6702,6 +6711,7 @@ private fun PreviewSheet(
                             layerFilamentColors = layerFilamentColors,
                             layerPauseEvents = layerPauseEvents,
                             layerFilamentChanges = layerFilamentChanges,
+                            layerCustomGCodeEvents = layerCustomGCodeEvents,
                             layerFilamentChangesAvailable = layerFilamentChangesAvailable,
                             toolpathOpacity = toolpathOpacity,
                             onToolpathOpacityChanged = onToolpathOpacityChanged,
@@ -6716,6 +6726,8 @@ private fun PreviewSheet(
                             onRemoveLayerPause = onRemoveLayerPause,
                             onPutLayerFilamentChange = onPutLayerFilamentChange,
                             onRemoveLayerFilamentChange = onRemoveLayerFilamentChange,
+                            onPutLayerCustomGCode = onPutLayerCustomGCode,
+                            onRemoveLayerCustomGCode = onRemoveLayerCustomGCode,
                         )
                     }
                 }
@@ -6810,6 +6822,7 @@ internal fun PreviewControls(
     layerFilamentColors: List<Int> = filamentColors,
     layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
     layerFilamentChanges: LayerFilamentChanges = LayerFilamentChanges(),
+    layerCustomGCodeEvents: LayerCustomGCodeEvents = LayerCustomGCodeEvents(),
     layerFilamentChangesAvailable: Boolean = false,
     toolpathOpacity: Float,
     onToolpathOpacityChanged: (Float) -> Unit,
@@ -6824,6 +6837,8 @@ internal fun PreviewControls(
     onRemoveLayerPause: (Float) -> Unit = {},
     onPutLayerFilamentChange: (Int, Float, Int) -> Unit = { _, _, _ -> },
     onRemoveLayerFilamentChange: (Float) -> Unit = {},
+    onPutLayerCustomGCode: (Int, Float, String) -> Unit = { _, _, _ -> },
+    onRemoveLayerCustomGCode: (Float) -> Unit = {},
 ) {
     val lastLayerIndex = (preview.layerCount - 1).coerceAtLeast(0)
     val safeStartLayer = preview.startLayer.coerceIn(0, lastLayerIndex)
@@ -6834,6 +6849,10 @@ internal fun PreviewControls(
     var filamentChangeTarget by remember(preview.layerCount) {
         mutableStateOf<Pair<Int, Float>?>(null)
     }
+    var customGCodeTarget by remember(preview.layerCount) {
+        mutableStateOf<Pair<Int, Float>?>(null)
+    }
+    var customGCodeDraft by rememberSaveable { mutableStateOf("") }
     val rangeColors = duckySliderColors()
     val toolpathVisibilityLabel = stringResource(R.string.toolpath_visibility_control)
     val toolpathVisibilityState = stringResource(
@@ -6987,6 +7006,7 @@ internal fun PreviewControls(
         val selectedLayerZ = preview.printZForLayer(selectedLayerIndex)
         val selectedPause = selectedLayerZ?.let(layerPauseEvents::eventAt)
         val selectedFilamentChange = selectedLayerZ?.let(layerFilamentChanges::changeAt)
+        val selectedCustomGCode = selectedLayerZ?.let(layerCustomGCodeEvents::eventAt)
         Button(
             onClick = {
                 selectedLayerZ?.let { printZ ->
@@ -7053,6 +7073,36 @@ internal fun PreviewControls(
                 stringResource(R.string.layer_filament_change_unavailable),
                 color = Color(0xFFFFCC4D),
                 style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Button(
+            onClick = {
+                selectedLayerZ?.let { printZ ->
+                    customGCodeDraft = selectedCustomGCode?.gcode.orEmpty()
+                    customGCodeTarget = selectedLayerIndex to printZ
+                }
+            },
+            enabled = selectedLayerZ != null &&
+                (selectedCustomGCode != null ||
+                    layerCustomGCodeEvents.values.size < LayerCustomGCodeEvents.MAX_EVENTS),
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF353631),
+                contentColor = Color(0xFFF4F4EE),
+            ),
+        ) {
+            Icon(Icons.Default.Edit, null)
+            Spacer(Modifier.width(7.dp))
+            Text(
+                stringResource(
+                    if (selectedCustomGCode == null) {
+                        R.string.add_layer_custom_gcode
+                    } else {
+                        R.string.edit_layer_custom_gcode
+                    },
+                    selectedLayerIndex + 1,
+                ),
+                fontWeight = FontWeight.SemiBold,
             )
         }
         if (layerPauseEvents.values.isNotEmpty()) {
@@ -7126,6 +7176,47 @@ internal fun PreviewControls(
                         modifier = Modifier.semantics {
                             contentDescription = removeDescription
                         },
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, null)
+                    }
+                }
+            }
+        }
+        if (layerCustomGCodeEvents.values.isNotEmpty()) {
+            Text(
+                stringResource(
+                    R.string.saved_layer_custom_gcodes,
+                    layerCustomGCodeEvents.values.size,
+                ),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            layerCustomGCodeEvents.values.forEach { event ->
+                val removeDescription = stringResource(
+                    R.string.remove_layer_custom_gcode_height,
+                    event.printZMm,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.layer_custom_gcode_height, event.printZMm),
+                            color = Color(0xFFF4F4EE),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            event.gcode.lineSequence().first(),
+                            color = Color(0xFFAAABA6),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    IconButton(
+                        onClick = { onRemoveLayerCustomGCode(event.printZMm) },
+                        modifier = Modifier.semantics { contentDescription = removeDescription },
                     ) {
                         Icon(Icons.Default.DeleteOutline, null)
                     }
@@ -7291,6 +7382,54 @@ internal fun PreviewControls(
             confirmButton = {
                 TextButton(onClick = { filamentChangeTarget = null }) {
                     Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+    customGCodeTarget?.let { target ->
+        val normalized = normalizedLayerCustomGCode(customGCodeDraft)
+        val valid = runCatching {
+            LayerCustomGCodeEvent(printZMm = target.second, gcode = normalized)
+        }.isSuccess
+        AlertDialog(
+            onDismissRequest = {
+                customGCodeTarget = null
+                customGCodeDraft = ""
+            },
+            title = { Text(stringResource(R.string.layer_custom_gcode_title, target.first + 1)) },
+            text = {
+                OutlinedTextField(
+                    value = customGCodeDraft,
+                    onValueChange = { customGCodeDraft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.gcode)) },
+                    placeholder = { Text(stringResource(R.string.layer_custom_gcode_example)) },
+                    supportingText = { Text(stringResource(R.string.layer_custom_gcode_limits)) },
+                    isError = customGCodeDraft.isNotEmpty() && !valid,
+                    minLines = 3,
+                    maxLines = 10,
+                )
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        customGCodeTarget = null
+                        customGCodeDraft = ""
+                    },
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = valid,
+                    onClick = {
+                        onPutLayerCustomGCode(target.first, target.second, normalized)
+                        customGCodeTarget = null
+                        customGCodeDraft = ""
+                    },
+                ) {
+                    Text(stringResource(R.string.layer_custom_gcode_apply))
                 }
             },
         )

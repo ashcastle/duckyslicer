@@ -45,6 +45,7 @@ data class PlateSliceInput(
     val options: SliceOptions,
     val layerPauseEvents: LayerPauseEvents,
     val layerFilamentChanges: LayerFilamentChanges,
+    val layerCustomGCodeEvents: LayerCustomGCodeEvents,
 )
 
 internal fun ProjectSnapshot.sliceInput(
@@ -58,5 +59,6 @@ internal fun ProjectSnapshot.sliceInput(
         options = plateOptions[plate.id] ?: return null,
         layerPauseEvents = plate.layerPauseEvents,
         layerFilamentChanges = plate.layerFilamentChanges,
+        layerCustomGCodeEvents = plate.layerCustomGCodeEvents,
     )
 }

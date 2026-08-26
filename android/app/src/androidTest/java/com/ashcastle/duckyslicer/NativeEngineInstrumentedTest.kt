@@ -113,6 +113,39 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun selectedPreviewLayerCanEmitBoundedCustomGCode() {
+        val model = fixtureModel()
+        val projectObject = ProjectObject("layer-custom-gcode", inspectModel(model.absolutePath))
+        val options = SliceOptions()
+        val baseline = OnDeviceSlicer.slice(listOf(projectObject), options)
+        try {
+            val baselinePreview = loadGcodePreview(baseline.output.absolutePath, 0, Int.MAX_VALUE)
+            val selectedLayer = (baselinePreview.layerCount / 2).coerceAtLeast(1)
+            val selectedPrintZ = requireNotNull(baselinePreview.printZForLayer(selectedLayer))
+            val customCode = "M117 DUCKY_CUSTOM_LAYER\nM106 S77"
+
+            val changed = OnDeviceSlicer.slice(
+                listOf(projectObject),
+                options,
+                layerCustomGCodeEvents = LayerCustomGCodeEvents(
+                    listOf(LayerCustomGCodeEvent(selectedPrintZ, customCode)),
+                ),
+            )
+            try {
+                val lines = changed.output.readLines().map(String::trim)
+                assertEquals(1, lines.count { it == "M117 DUCKY_CUSTOM_LAYER" })
+                assertEquals(1, lines.count { it == "M106 S77" })
+                assertTrue(lines.indexOf("M117 DUCKY_CUSTOM_LAYER") < lines.indexOf("M106 S77"))
+            } finally {
+                changed.output.delete()
+            }
+        } finally {
+            baseline.output.delete()
+            model.delete()
+        }
+    }
+
+    @Test
     fun automaticPreviewQualityResolvesToAConcreteDeviceTier() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val capabilities = previewDeviceCapabilities(context)

@@ -61,6 +61,8 @@ class NativeLibrary(
         pauseMessages: Array<String>,
         filamentChangePrintZValues: FloatArray,
         filamentChangeExtruders: IntArray,
+        customGCodePrintZValues: FloatArray,
+        customGCodes: Array<String>,
     ): Boolean
     external fun getObjectBoundingBoxes(): FloatArray
     external fun nativeGetObjectWorldAABBMins(): FloatArray

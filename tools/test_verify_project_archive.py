@@ -22,7 +22,7 @@ def valid_sources() -> dict[str, str]:
                 "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
                 'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
                 "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-                "PROJECT_ARCHIVE_SCHEMA_VERSION = 74",
+                "PROJECT_ARCHIVE_SCHEMA_VERSION = 75",
                 'ArchivedProjectPlate ArchivedProjectVolume put("role", volume.role.name) '
                 'put("config", volume.config.toJson()) ProjectVolumeRole.valueOf '
                 "ProjectVolumeConfig.fromJson",
@@ -51,6 +51,8 @@ def valid_sources() -> dict[str, str]:
                 'getJSONArray("layerPauseEvents").toLayerPauseEvents()',
                 '"layerFilamentChanges", schemaVersion >= 74 '
                 'getJSONArray("layerFilamentChanges").toLayerFilamentChanges()',
+                '"layerCustomGCodeEvents", schemaVersion >= 75 '
+                'getJSONArray("layerCustomGCodeEvents").toLayerCustomGCodeEvents()',
                 "checkCancellation: () -> Unit = {}",
                 "copyArchiveBytes(input, archive, model.length(), checkCancellation)",
                 "val copied = copyArchiveBytes(",
@@ -63,6 +65,12 @@ def valid_sources() -> dict[str, str]:
             "MAX_EVENTS = 256 constrainedToSlotCount "
             "fun LayerFilamentChanges.toProjectJson "
             "fun JSONArray.toLayerFilamentChanges"
+        ),
+        "LayerCustomGCodeEvents.kt": (
+            "data class LayerCustomGCodeEvent data class LayerCustomGCodeEvents "
+            "MAX_EVENTS = 64 MAX_TOTAL_BYTES = 32_768 MAX_GCODE_BYTES = 2_048 "
+            "fun LayerCustomGCodeEvents.toProjectJson "
+            "fun JSONArray.toLayerCustomGCodeEvents"
         ),
         "HeightRangeModifiers.kt": (
             "data class HeightRangeModifier data class HeightRangeModifiers "
@@ -91,13 +99,15 @@ def valid_sources() -> dict[str, str]:
                 "checkCancellation: () -> Unit = {}",
                 "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
                 "beginCommit: () -> Unit = {} beginCommit()",
-                'SCHEMA_VERSION = 76 schemaVersion >= 70 schemaVersion >= 75 '
-                'schemaVersion >= 76 '
+                'SCHEMA_VERSION = 77 schemaVersion >= 70 schemaVersion >= 75 '
+                'schemaVersion >= 76 schemaVersion >= 77 '
                 'put("heightRangeModifiers", heightRangeModifiers.toProjectJson()) '
                 'put("layerPauseEvents", plate.layerPauseEvents.toProjectJson()) '
                 'getJSONArray("layerPauseEvents").toLayerPauseEvents() '
                 '"layerFilamentChanges", '
                 'getJSONArray("layerFilamentChanges").toLayerFilamentChanges() '
+                '"layerCustomGCodeEvents", '
+                'getJSONArray("layerCustomGCodeEvents").toLayerCustomGCodeEvents() '
                 'put("role", role.name) put("config", config.toJson())',
             )
         ),
@@ -408,8 +418,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "SUPPORT.md": "`.duckyproject` model geometry include saved printer addresses, access keys, or G-code",
         "PROJECT_FORMAT.md": (
-            "manifest.json models/000.stl schema version `74` "
-            "Schema 1 through 74 projects remain readable brim chamfer policy up to 16 plates "
+            "manifest.json models/000.stl schema version `75` "
+            "Schema 1 through 75 projects remain readable brim chamfer policy up to 16 plates "
             "parameter modifier support blocker support enforcer "
             "plate-local objects and settings stable, bounded `volumes` list "
             "up to 64 volumes per object independent X, Y, and Z scale "

@@ -192,6 +192,9 @@ class ProjectStoreTest {
                         layerFilamentChanges = LayerFilamentChanges(
                             listOf(LayerFilamentChange(7.4f, 1)),
                         ),
+                        layerCustomGCodeEvents = LayerCustomGCodeEvents(
+                            listOf(LayerCustomGCodeEvent(9.6f, "M117 Inspect")),
+                        ),
                     )
                 },
             )
@@ -201,7 +204,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(76, persisted.getInt("schemaVersion"))
+        assertEquals(77, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -210,7 +213,7 @@ class ProjectStoreTest {
         assertEquals(
             setOf(
                 "id", "selectedObjectId", "layerPauseEvents",
-                "layerFilamentChanges", "sliceOptions", "objects",
+                "layerFilamentChanges", "layerCustomGCodeEvents", "sliceOptions", "objects",
             ),
             persistedPlate.keys().asSequence().toSet(),
         )
@@ -219,6 +222,10 @@ class ProjectStoreTest {
         assertEquals(
             snapshot.activePlate.layerFilamentChanges,
             restored.snapshot.activePlate.layerFilamentChanges,
+        )
+        assertEquals(
+            snapshot.activePlate.layerCustomGCodeEvents,
+            restored.snapshot.activePlate.layerCustomGCodeEvents,
         )
         val persistedObject = persistedPlate.getJSONArray("objects").getJSONObject(0)
         assertEquals(

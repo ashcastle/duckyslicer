@@ -1,13 +1,14 @@
 diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -820,6 +820,9 @@ public:
+@@ -820,6 +820,10 @@ public:
      std::string getVolumeName(int objIdx, int volIdx) const;
      int  getVolumeExtruder(int objIdx, int volIdx) const;
      bool setVolumeExtruder(int objIdx, int volIdx, int slot);
 +    bool setLayerEvents(
 +        const std::vector<std::pair<float, std::string>>& pauses,
-+        const std::vector<std::pair<float, int>>& filament_changes);
++        const std::vector<std::pair<float, int>>& filament_changes,
++        const std::vector<std::pair<float, std::string>>& custom_gcodes);
  
  private:
      struct Impl;
@@ -22,20 +23,22 @@ diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_m
  #include "libslic3r/TriangleSelector.hpp"
  #include "libslic3r/QuadricEdgeCollapse.hpp"
  #include "libslic3r/Semver.hpp"
-@@ -1127,6 +1128,58 @@ void SlicerEngine::cancelPreviewMesh() {
+@@ -1127,6 +1128,95 @@ void SlicerEngine::cancelPreviewMesh() {
      SAPIL_LOGI("cancelPreviewMesh: signalled cancellation");
  }
  
 +bool SlicerEngine::setLayerEvents(
 +        const std::vector<std::pair<float, std::string>>& pauses,
-+        const std::vector<std::pair<float, int>>& filament_changes) {
-+    if (!g_model_loaded || pauses.size() > 256 || filament_changes.size() > 256)
++        const std::vector<std::pair<float, int>>& filament_changes,
++        const std::vector<std::pair<float, std::string>>& custom_gcodes) {
++    if (!g_model_loaded || pauses.size() > 256 || filament_changes.size() > 256 ||
++        custom_gcodes.size() > 64)
 +        return false;
 +
 +    Slic3r::CustomGCode::Info info;
 +    info.mode = filament_changes.empty() ?
 +        Slic3r::CustomGCode::SingleExtruder : Slic3r::CustomGCode::MultiAsSingle;
-+    info.gcodes.reserve(pauses.size() + filament_changes.size());
++    info.gcodes.reserve(pauses.size() + filament_changes.size() + custom_gcodes.size());
 +    float previous_z = 0.0f;
 +    for (const auto& pause : pauses) {
 +        const float print_z = pause.first;
@@ -73,6 +76,41 @@ diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_m
 +        });
 +        previous_z = print_z;
 +    }
++    previous_z = 0.0f;
++    size_t total_custom_gcode_bytes = 0;
++    for (const auto& custom_gcode : custom_gcodes) {
++        const float print_z = custom_gcode.first;
++        const std::string& code = custom_gcode.second;
++        total_custom_gcode_bytes += code.size();
++        if (!std::isfinite(print_z) || print_z < 0.001f || print_z > 10000.0f ||
++            print_z <= previous_z || code.empty() || code.size() > 2048 ||
++            total_custom_gcode_bytes > 32768 ||
++            std::any_of(pauses.begin(), pauses.end(), [print_z](const auto& pause) {
++                return pause.first == print_z;
++            })) {
++            return false;
++        }
++        size_t line_count = 1;
++        size_t line_bytes = 0;
++        for (unsigned char value : code) {
++            if (value == '\r' || value == 0 || (value < 0x20 && value != '\n' && value != '\t'))
++                return false;
++            if (value == '\n') {
++                if (++line_count > 32 || line_bytes > 256) return false;
++                line_bytes = 0;
++            } else if (++line_bytes > 256) {
++                return false;
++            }
++        }
++        info.gcodes.emplace_back(Slic3r::CustomGCode::Item{
++            static_cast<double>(print_z),
++            Slic3r::CustomGCode::Custom,
++            0,
++            "",
++            code,
++        });
++        previous_z = print_z;
++    }
 +    std::stable_sort(info.gcodes.begin(), info.gcodes.end());
 +    g_model.plates_custom_gcodes[g_model.curr_plate_index] = std::move(info);
 +    return true;
@@ -84,22 +122,27 @@ diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_m
 diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slicer_wrapper.cpp
 --- a/app/src/main/cpp/src/slicer_wrapper.cpp
 +++ b/app/src/main/cpp/src/slicer_wrapper.cpp
-@@ -538,4 +538,59 @@ Java_com_u1_slicer_NativeLibrary_nativeSetVolumeExtruder(
+@@ -538,4 +538,87 @@ Java_com_u1_slicer_NativeLibrary_nativeSetVolumeExtruder(
      return (g_engine && g_engine->setVolumeExtruder(objIdx, volIdx, slot)) ? JNI_TRUE : JNI_FALSE;
  }
  
 +JNIEXPORT jboolean JNICALL
 +Java_com_u1_slicer_NativeLibrary_nativeSetLayerEvents(
 +        JNIEnv* env, jobject, jfloatArray jpause_z_values, jobjectArray jmessages,
-+        jfloatArray jchange_z_values, jintArray jchange_extruders) {
++        jfloatArray jchange_z_values, jintArray jchange_extruders,
++        jfloatArray jcustom_z_values, jobjectArray jcustom_gcodes) {
 +    if (!g_engine || !jpause_z_values || !jmessages ||
-+        !jchange_z_values || !jchange_extruders) return JNI_FALSE;
++        !jchange_z_values || !jchange_extruders ||
++        !jcustom_z_values || !jcustom_gcodes) return JNI_FALSE;
 +    const jsize pause_count = env->GetArrayLength(jpause_z_values);
 +    const jsize change_count = env->GetArrayLength(jchange_z_values);
++    const jsize custom_count = env->GetArrayLength(jcustom_z_values);
 +    if (pause_count < 0 || pause_count > 256 ||
 +        env->GetArrayLength(jmessages) != pause_count ||
 +        change_count < 0 || change_count > 256 ||
-+        env->GetArrayLength(jchange_extruders) != change_count) return JNI_FALSE;
++        env->GetArrayLength(jchange_extruders) != change_count ||
++        custom_count < 0 || custom_count > 64 ||
++        env->GetArrayLength(jcustom_gcodes) != custom_count) return JNI_FALSE;
 +
 +    std::vector<jfloat> pause_z_values(static_cast<size_t>(pause_count));
 +    if (pause_count > 0)
@@ -140,23 +183,48 @@ diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slic
 +            change_z_values[static_cast<size_t>(index)],
 +            change_extruders[static_cast<size_t>(index)]);
 +    }
-+    return g_engine->setLayerEvents(pauses, filament_changes) ? JNI_TRUE : JNI_FALSE;
++
++    std::vector<jfloat> custom_z_values(static_cast<size_t>(custom_count));
++    if (custom_count > 0)
++        env->GetFloatArrayRegion(jcustom_z_values, 0, custom_count, custom_z_values.data());
++    if (env->ExceptionCheck()) return JNI_FALSE;
++    std::vector<std::pair<float, std::string>> custom_gcodes;
++    custom_gcodes.reserve(static_cast<size_t>(custom_count));
++    for (jsize index = 0; index < custom_count; ++index) {
++        auto* value = static_cast<jstring>(env->GetObjectArrayElement(jcustom_gcodes, index));
++        if (!value || env->ExceptionCheck()) {
++            if (value) env->DeleteLocalRef(value);
++            return JNI_FALSE;
++        }
++        const char* code = env->GetStringUTFChars(value, nullptr);
++        if (!code || env->ExceptionCheck()) {
++            env->DeleteLocalRef(value);
++            return JNI_FALSE;
++        }
++        custom_gcodes.emplace_back(custom_z_values[static_cast<size_t>(index)], code);
++        env->ReleaseStringUTFChars(value, code);
++        env->DeleteLocalRef(value);
++    }
++    return g_engine->setLayerEvents(pauses, filament_changes, custom_gcodes) ?
++        JNI_TRUE : JNI_FALSE;
 +}
 +
  } // extern "C"
 diff --git a/app/src/main/java/com/u1/slicer/NativeLibrary.kt b/app/src/main/java/com/u1/slicer/NativeLibrary.kt
 --- a/app/src/main/java/com/u1/slicer/NativeLibrary.kt
 +++ b/app/src/main/java/com/u1/slicer/NativeLibrary.kt
-@@ -337,6 +337,14 @@ class NativeLibrary {
+@@ -337,6 +337,16 @@ class NativeLibrary {
      /** Assign a 1-indexed extruder slot to one volume — used by the Parts panel. */
      external fun nativeSetVolumeExtruder(objIdx: Int, volIdx: Int, slot: Int): Boolean
  
-+    /** Replace Orca's current-plate pauses and whole-layer filament changes. */
++    /** Replace Orca's current-plate pauses, filament changes, and custom G-code. */
 +    external fun nativeSetLayerEvents(
 +        pausePrintZValues: FloatArray,
 +        pauseMessages: Array<String>,
 +        filamentChangePrintZValues: FloatArray,
 +        filamentChangeExtruders: IntArray,
++        customGCodePrintZValues: FloatArray,
++        customGCodes: Array<String>,
 +    ): Boolean
 +
      // ---- Progress Callback (called from native code) ----

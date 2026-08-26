@@ -257,6 +257,30 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun previewLayerCustomGCodeExposesEditingApplyAndRemoval() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val addLabel = context.getString(R.string.add_layer_custom_gcode, 300)
+        val title = context.getString(R.string.layer_custom_gcode_title, 300)
+        val fieldLabel = context.getString(R.string.gcode)
+        val applyLabel = context.getString(R.string.layer_custom_gcode_apply)
+        val removeLabel = context.getString(R.string.remove_layer_custom_gcode_height, 60.05f)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PREVIEW).use {
+            val addNode = scrollUntilClickable(addLabel)
+            assertTrue(addNode.isFocusable)
+            assertTrue(addNode.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(waitForNodes(setOf(title)).any { it.effectiveLabel().contains(title) })
+            replaceEditableText(fieldLabel, "M117 Inspect")
+            val applyNode = waitForNodes(setOf(applyLabel)).single {
+                it.isClickable && it.effectiveLabel() == applyLabel
+            }
+            assertTrue(applyNode.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val removeNode = scrollUntilClickable(removeLabel)
+            assertTrue(removeNode.isFocusable)
+            assertTrue(removeNode.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        }
+    }
+
+    @Test
     fun profileSliderAndSwitchExposeTheirSettingNamesOnce() {
         launchHarness(AccessibilityHarnessActivity.SCREEN_PROFILE).use {
             val nodes = waitForNodes(setOf(TEST_SETTING_LABEL, TEST_SWITCH_LABEL))

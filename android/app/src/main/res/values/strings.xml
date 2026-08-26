@@ -1162,4 +1162,14 @@
     <string name="layer_filament_change_height">%1$.2f mm · T%2$d</string>
     <string name="remove_layer_filament_change_height">Remove filament change at %1$.2f mm</string>
     <string name="layer_filament_change_unavailable">Layer changes require one model filament and at least two available filaments.</string>
+    <string name="add_layer_custom_gcode">Add G-code at layer %1$d</string>
+    <string name="edit_layer_custom_gcode">Edit G-code at layer %1$d</string>
+    <string name="layer_custom_gcode_title">G-code at layer %1$d</string>
+    <string name="gcode">G-code</string>
+    <string name="layer_custom_gcode_example">M117 Layer reached</string>
+    <string name="layer_custom_gcode_limits">Up to 32 lines · 2 KB</string>
+    <string name="saved_layer_custom_gcodes">%1$d saved G-code events</string>
+    <string name="layer_custom_gcode_height">G-code at %1$.2f mm</string>
+    <string name="remove_layer_custom_gcode_height">Remove G-code at %1$.2f mm</string>
+    <string name="layer_custom_gcode_apply">Apply</string>
 </resources>

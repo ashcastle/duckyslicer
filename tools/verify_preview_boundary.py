@@ -636,9 +636,11 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     for marker in (
         "denseBinaryStlUsesBoundedPrimitiveImportWithinBudget",
         "sourceTriangles=${info.triangles}",
-        "native.last() / 1_000_000.0 <= 250.0",
-        "decode.last() / 1_000_000.0 <= 100.0",
-        "(native.last() + decode.last()) / 1_000_000.0 <= 300.0",
+        "repeat(21)",
+        "require(sortedDurations.size == 20)",
+        "nativeP95 / 1_000_000.0 <= 250.0",
+        "decodeP95 / 1_000_000.0 <= 100.0",
+        "(nativeP95 + decodeP95) / 1_000_000.0 <= 300.0",
     ):
         if marker not in model_performance:
             raise VerificationError(f"model import performance regression is missing: {marker}")

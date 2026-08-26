@@ -61,6 +61,7 @@ internal object SlicerProcessClient {
         },
         layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
         layerFilamentChanges: LayerFilamentChanges = LayerFilamentChanges(),
+        layerCustomGCodeEvents: LayerCustomGCodeEvents = LayerCustomGCodeEvents(),
         foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit,
@@ -84,6 +85,7 @@ internal object SlicerProcessClient {
         List(transformedModels.size) { null },
         layerPauseEvents,
         layerFilamentChanges,
+        layerCustomGCodeEvents,
         foregroundSession,
         cancellationRequested,
         null,
@@ -112,6 +114,7 @@ internal object SlicerProcessClient {
         orcaMultiColorAnnotationFiles: List<File?> = List(transformedModels.size) { null },
         layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
         layerFilamentChanges: LayerFilamentChanges = LayerFilamentChanges(),
+        layerCustomGCodeEvents: LayerCustomGCodeEvents = LayerCustomGCodeEvents(),
         foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit,
@@ -135,6 +138,7 @@ internal object SlicerProcessClient {
         volumeConfigFiles,
         layerPauseEvents,
         layerFilamentChanges,
+        layerCustomGCodeEvents,
         foregroundSession,
         cancellationRequested,
         null,
@@ -171,6 +175,7 @@ internal object SlicerProcessClient {
             List(transformedModels.size) { null },
             LayerPauseEvents(),
             LayerFilamentChanges(),
+            LayerCustomGCodeEvents(),
             null,
             { false },
             maximumGcodeBytes,
@@ -823,6 +828,7 @@ internal object SlicerProcessClient {
         volumeConfigFiles: List<File?>,
         layerPauseEvents: LayerPauseEvents,
         layerFilamentChanges: LayerFilamentChanges,
+        layerCustomGCodeEvents: LayerCustomGCodeEvents,
         foregroundSession: ForegroundSliceSession?,
         cancellationRequested: () -> Boolean,
         maximumGcodeBytesForTest: Int?,
@@ -889,6 +895,10 @@ internal object SlicerProcessClient {
         val filamentChangeSlots = layerFilamentChanges.values
             .map(LayerFilamentChange::filamentSlot)
             .toIntArray()
+        val customGCodePrintZValues = layerCustomGCodeEvents.values
+            .map(LayerCustomGCodeEvent::printZMm)
+            .toFloatArray()
+        val customGCodes = layerCustomGCodeEvents.values.map(LayerCustomGCodeEvent::gcode)
         require(
             filamentChangeSlots.all { it in options.resolvedFilamentSlots().indices },
         ) { "Layer filament change is unavailable" }
@@ -969,6 +979,14 @@ internal object SlicerProcessClient {
             putIntArray(
                 SlicerProcessContract.KEY_LAYER_FILAMENT_CHANGE_SLOTS,
                 filamentChangeSlots,
+            )
+            putFloatArray(
+                SlicerProcessContract.KEY_LAYER_CUSTOM_GCODE_Z_VALUES,
+                customGCodePrintZValues,
+            )
+            putStringArrayList(
+                SlicerProcessContract.KEY_LAYER_CUSTOM_GCODES,
+                ArrayList(customGCodes),
             )
             putString(SlicerProcessContract.KEY_OPTIONS, optionsText)
             putString(SlicerProcessContract.KEY_INPUT_FILENAME_BASE, inputFilenameBase)
@@ -2358,6 +2376,20 @@ class SlicerProcessService : Service() {
                 )
             },
         )
+        val customGCodePrintZValues = requireNotNull(
+            extras.getFloatArray(SlicerProcessContract.KEY_LAYER_CUSTOM_GCODE_Z_VALUES),
+        ) { "Layer G-code heights are unavailable" }
+        val customGCodes = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_LAYER_CUSTOM_GCODES),
+        ) { "Layer G-codes are unavailable" }
+        require(customGCodePrintZValues.size == customGCodes.size) {
+            "Layer G-code events are invalid"
+        }
+        val layerCustomGCodeEvents = LayerCustomGCodeEvents(
+            customGCodePrintZValues.indices.map { index ->
+                LayerCustomGCodeEvent(customGCodePrintZValues[index], customGCodes[index])
+            },
+        )
         val optionsText = requireNotNull(extras.getString(SlicerProcessContract.KEY_OPTIONS)) {
             "Slice settings are unavailable"
         }
@@ -2477,6 +2509,7 @@ class SlicerProcessService : Service() {
                 volumeConfigFiles,
                 layerPauseEvents,
                 layerFilamentChanges,
+                layerCustomGCodeEvents,
                 options,
                 inputFilenameBase,
                 maximumGcodeBytes,
@@ -3126,6 +3159,7 @@ class SlicerProcessService : Service() {
         volumeConfigFiles: List<File?>,
         layerPauseEvents: LayerPauseEvents,
         layerFilamentChanges: LayerFilamentChanges,
+        layerCustomGCodeEvents: LayerCustomGCodeEvents,
         options: SliceOptions,
         inputFilenameBase: String,
         maximumGcodeBytes: Int,
@@ -3256,6 +3290,12 @@ class SlicerProcessService : Service() {
                     layerPauseEvents.values.map(LayerPauseEvent::message).toTypedArray(),
                     layerFilamentChanges.values.map(LayerFilamentChange::printZMm).toFloatArray(),
                     layerFilamentChanges.values.map { it.filamentSlot + 1 }.toIntArray(),
+                    layerCustomGCodeEvents.values
+                        .map(LayerCustomGCodeEvent::printZMm)
+                        .toFloatArray(),
+                    layerCustomGCodeEvents.values
+                        .map(LayerCustomGCodeEvent::gcode)
+                        .toTypedArray(),
                 ),
             ) { "Layer events could not be applied" }
             val nativeConfig = options.toNativeConfig().apply {
@@ -3856,6 +3896,8 @@ private object SlicerProcessContract {
     const val KEY_LAYER_PAUSE_MESSAGES = "layerPauseMessages"
     const val KEY_LAYER_FILAMENT_CHANGE_Z_VALUES = "layerFilamentChangeZValues"
     const val KEY_LAYER_FILAMENT_CHANGE_SLOTS = "layerFilamentChangeSlots"
+    const val KEY_LAYER_CUSTOM_GCODE_Z_VALUES = "layerCustomGCodeZValues"
+    const val KEY_LAYER_CUSTOM_GCODES = "layerCustomGCodes"
     const val KEY_OPTIONS = "options"
     const val KEY_INPUT_FILENAME_BASE = "inputFilenameBase"
     const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"

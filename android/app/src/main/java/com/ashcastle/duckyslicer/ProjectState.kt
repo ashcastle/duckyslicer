@@ -163,6 +163,7 @@ data class ProjectPlate(
     val selectedObjectId: String? = null,
     val layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
     val layerFilamentChanges: LayerFilamentChanges = LayerFilamentChanges(),
+    val layerCustomGCodeEvents: LayerCustomGCodeEvents = LayerCustomGCodeEvents(),
 ) {
     init {
         require(id.length in 1..ProjectStore.MAX_ID_LENGTH) { "Invalid project plate id" }
@@ -172,6 +173,11 @@ data class ProjectPlate(
         require(selectedObjectId == null || objects.any { it.id == selectedObjectId }) {
             "Project plate selection is invalid"
         }
+        require(
+            layerPauseEvents.values.none { pause ->
+                layerCustomGCodeEvents.eventAt(pause.printZMm) != null
+            },
+        ) { "A layer cannot contain both a pause and custom G-code" }
     }
 
     val selectedObject: ProjectObject?
@@ -435,7 +441,10 @@ data class ProjectHistoryState(
         current.copy(
             plates = current.plates.map { plate ->
                 if (plate.id == current.selectedPlateId) {
-                    plate.copy(layerPauseEvents = plate.layerPauseEvents.put(event))
+                    plate.copy(
+                        layerPauseEvents = plate.layerPauseEvents.put(event),
+                        layerCustomGCodeEvents = plate.layerCustomGCodeEvents.remove(event.printZMm),
+                    )
                 } else {
                     plate
                 }
@@ -472,6 +481,33 @@ data class ProjectHistoryState(
             plates = current.plates.map { plate ->
                 if (plate.id == current.selectedPlateId) {
                     plate.copy(layerFilamentChanges = plate.layerFilamentChanges.remove(printZMm))
+                } else {
+                    plate
+                }
+            },
+        ),
+    )
+
+    fun putLayerCustomGCode(event: LayerCustomGCodeEvent): ProjectHistoryState = record(
+        current.copy(
+            plates = current.plates.map { plate ->
+                if (plate.id == current.selectedPlateId) {
+                    plate.copy(
+                        layerPauseEvents = plate.layerPauseEvents.remove(event.printZMm),
+                        layerCustomGCodeEvents = plate.layerCustomGCodeEvents.put(event),
+                    )
+                } else {
+                    plate
+                }
+            },
+        ),
+    )
+
+    fun removeLayerCustomGCode(printZMm: Float): ProjectHistoryState = record(
+        current.copy(
+            plates = current.plates.map { plate ->
+                if (plate.id == current.selectedPlateId) {
+                    plate.copy(layerCustomGCodeEvents = plate.layerCustomGCodeEvents.remove(printZMm))
                 } else {
                     plate
                 }

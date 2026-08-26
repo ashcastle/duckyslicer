@@ -147,6 +147,9 @@ class ProjectArchiveTest {
                             layerFilamentChanges = LayerFilamentChanges(
                                 listOf(LayerFilamentChange(4.2f, 1)),
                             ),
+                            layerCustomGCodeEvents = LayerCustomGCodeEvents(
+                                listOf(LayerCustomGCodeEvent(6.4f, "M117 Inspect")),
+                            ),
                         )
                     },
                 )
@@ -169,13 +172,13 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(74, manifest.getInt("schemaVersion"))
+            assertEquals(75, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
                 setOf(
                     "id", "selectedObjectId", "layerPauseEvents",
-                    "layerFilamentChanges", "sliceOptions", "objects",
+                    "layerFilamentChanges", "layerCustomGCodeEvents", "sliceOptions", "objects",
                 ),
                 manifestPlate.keys().asSequence().toSet(),
             )
@@ -218,6 +221,10 @@ class ProjectArchiveTest {
             assertEquals(
                 snapshot.activePlate.layerFilamentChanges,
                 imported.snapshot.activePlate.layerFilamentChanges,
+            )
+            assertEquals(
+                snapshot.activePlate.layerCustomGCodeEvents,
+                imported.snapshot.activePlate.layerCustomGCodeEvents,
             )
             assertEquals(2, imported.snapshot.objects.size)
             assertEquals(first.singleVolume.id, imported.snapshot.objects[0].singleVolume.id)
