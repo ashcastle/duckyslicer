@@ -65,8 +65,8 @@ opens the system document picker for a new destination. The remembered link is a
 `content://` URI and display name, never a resolved local path. It is not written into the portable archive.
 Starting a new project clears the current link but keeps up to five granted documents in a private recent list.
 DuckySlicer removes entries whose Android permission is revoked and returns the permission of an entry evicted
-from that bounded list. Removing an item from Recent likewise returns its permission without deleting the
-document itself; the currently linked document cannot be removed from Recent until another project is active.
+from that bounded list. Removing an item from Recent returns its permission without deleting the document itself.
+The currently linked document cannot be removed from Recent until another project is active.
 
 ## Import boundary
 
