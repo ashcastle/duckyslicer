@@ -81,6 +81,9 @@
     <string name="cancel_profile_export">Stop exporting profiles</string>
     <string name="canceling_profile_transfer">Stopping profile transfer…</string>
     <string name="export_gcode">Export G-code</string>
+    <string name="share_gcode">Share G-code</string>
+    <string name="gcode_share_title">Share G-code with</string>
+    <string name="gcode_share_error">This G-code can’t be shared.</string>
     <string name="export_options">Export options</string>
     <string name="import_from_menu">Import a model from the menu above.</string>
     <string name="edit_model">Edit model</string>

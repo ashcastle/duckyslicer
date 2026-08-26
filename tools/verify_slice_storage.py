@@ -25,6 +25,11 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "SliceOperationViewModel.kt",
         "CreatedDocument.kt",
         "GcodeExportViewModel.kt",
+        "GcodeOutputActions.kt",
+        "GcodeShare.kt",
+        "GcodeShareProvider.kt",
+        "AndroidManifest.xml",
+        "gcode_share_paths.xml",
         "PlateSliceResults.kt",
         "RemoteDevice.kt",
         "SliceArtifactStoreTest.kt",
@@ -103,6 +108,7 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
     main_activity = sources["MainActivity.kt"]
     workspace = sources["WorkspaceScreen.kt"]
     exporter = sources["GcodeExportViewModel.kt"]
+    output_actions = sources["GcodeOutputActions.kt"]
     created_document = sources["CreatedDocument.kt"]
     for marker in (
         "fun deleteFailedCreatedDocument(context: Context, uri: Uri)",
@@ -144,16 +150,26 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
             raise VerificationError(f"retained G-code export contract is missing: {marker}")
     for marker in (
         "ViewModelProvider(this)[GcodeExportViewModel::class.java]",
-        "var pendingGcodeExport by rememberSaveable",
-        "pendingGcodeExport = requested",
-        "gcodeExportModel.export(uri, requested.outcome)",
-        "ActivityResultContracts.OpenDocumentTree()",
-        "var pendingGcodeBatch by rememberSaveable",
-        "gcodeExportModel.exportAll(uri, requested)",
+        "rememberGcodeOutputActions(",
+        "gcodeOutputActions.clearPending()",
+        "onSave = gcodeOutputActions.save",
+        "onShareGcode = gcodeOutputActions.share",
         "gcodeExportModel::cancelActiveExport",
     ):
         if marker not in main_activity:
             raise VerificationError(f"retained G-code export dispatch is missing: {marker}")
+    for marker in (
+        "var pendingSingle by rememberSaveable",
+        "pendingSingle = selectedResult",
+        "model.export(uri, requested.outcome)",
+        "ActivityResultContracts.OpenDocumentTree()",
+        "var pendingBatch by rememberSaveable",
+        "pendingBatch = requested",
+        "model.exportAll(uri, requested)",
+        "clearPending =",
+    ):
+        if marker not in output_actions:
+            raise VerificationError(f"G-code output action ownership is missing: {marker}")
     for forbidden in (
         "SliceArtifactLease.acquire(completed.output)",
         "openOutputStream(uri)",
@@ -178,10 +194,59 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         raise VerificationError("Preview generation does not lease its retained artifact")
     if 'GCODE_DOCUMENT_MIME_TYPE = "application/octet-stream"' not in main_activity:
         raise VerificationError("G-code document MIME type may let providers append .txt")
-    if "CreateDocument(GCODE_DOCUMENT_MIME_TYPE)" not in main_activity:
+    if "CreateDocument(GCODE_DOCUMENT_MIME_TYPE)" not in output_actions:
         raise VerificationError("G-code export does not use the binary document contract")
-    if 'CreateDocument("text/plain")' in main_activity:
+    if 'CreateDocument("text/plain")' in output_actions:
         raise VerificationError("G-code export reverted to a .txt-producing MIME type")
+    share = sources["GcodeShare.kt"]
+    for marker in (
+        'GCODE_SHARE_MIME_TYPE = "text/x.gcode"',
+        "outcome.isRestorableFrom(context.filesDir)",
+        '"${context.packageName}.slice-share"',
+        "safeGcodeFileName(outcome.suggestedName)",
+        "FileProvider.getUriForFile(",
+        "Intent.ACTION_SEND",
+        "Intent.EXTRA_STREAM",
+        "Intent.EXTRA_TITLE",
+        "ClipData.newUri(",
+        "Intent.FLAG_GRANT_READ_URI_PERMISSION",
+    ):
+        if marker not in share:
+            raise VerificationError(f"outgoing G-code share contract is missing: {marker}")
+    provider_source = sources["GcodeShareProvider.kt"]
+    if "class GcodeShareProvider : FileProvider(R.xml.gcode_share_paths)" not in provider_source:
+        raise VerificationError("G-code share provider is not bound to its narrow path policy")
+    share_manifest = sources["AndroidManifest.xml"]
+    for marker in (
+        'android:name=".GcodeShareProvider"',
+        'android:authorities="${applicationId}.slice-share"',
+        'android:exported="false"',
+        'android:grantUriPermissions="true"',
+        'android:resource="@xml/gcode_share_paths"',
+    ):
+        if marker not in share_manifest:
+            raise VerificationError(f"G-code share manifest boundary is missing: {marker}")
+    share_paths = sources["gcode_share_paths.xml"]
+    if (
+        share_paths.count("<files-path") != 1
+        or 'name="retained-gcode"' not in share_paths
+        or 'path="slices/"' not in share_paths
+        or any(marker in share_paths for marker in ("<root-path", "<cache-path", 'path="."'))
+    ):
+        raise VerificationError("G-code share path must expose only retained slices")
+    for marker in (
+        "gcodeShareIntentOrNull(context, outcome)",
+        "Intent.createChooser(share, chooserTitle)",
+    ):
+        if marker not in output_actions:
+            raise VerificationError(f"outgoing G-code share dispatch is missing: {marker}")
+    for marker in (
+        "onShareGcode: () -> Unit",
+        "R.string.share_gcode",
+        "onShare = onShareGcode",
+    ):
+        if marker not in workspace:
+            raise VerificationError(f"outgoing G-code share UI is missing: {marker}")
     plate_results = sources["PlateSliceResults.kt"]
     for marker in (
         "fun PlateSliceResults.completeExportBatch(",
@@ -231,6 +296,7 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "batchCancellationDeletesEveryDocumentCreatedByThatOperation",
         "BatchExportDocumentsProvider.TREE_URI",
         "batchProviderRejectsTraversalDocumentNamesOutsideItsRoot",
+        "currentArtifactShareIsNamedReadableAndLimitedToRetainedGcode",
     ):
         if marker not in export_tests:
             raise VerificationError(f"retained G-code export regression is missing: {marker}")
@@ -256,6 +322,10 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "AccessibilityInstrumentedTest.kt"
     ]:
         raise VerificationError("accessible all-plate G-code export regression is missing")
+    if "gcodeShareIsExplicitInPreviewExportOptions" not in sources[
+        "AccessibilityInstrumentedTest.kt"
+    ]:
+        raise VerificationError("accessible outgoing G-code share regression is missing")
 
     for document in ("SECURITY.md", "CONTRIBUTING.md"):
         if "G-code" not in sources[document] or "lease" not in sources[document].lower():
@@ -287,6 +357,19 @@ def read_sources() -> dict[str, str]:
         "GcodeExportViewModel.kt": (main / "GcodeExportViewModel.kt").read_text(
             encoding="utf-8"
         ),
+        "GcodeOutputActions.kt": (main / "GcodeOutputActions.kt").read_text(
+            encoding="utf-8"
+        ),
+        "GcodeShare.kt": (main / "GcodeShare.kt").read_text(encoding="utf-8"),
+        "GcodeShareProvider.kt": (main / "GcodeShareProvider.kt").read_text(
+            encoding="utf-8"
+        ),
+        "AndroidManifest.xml": (ROOT / "android/app/src/main/AndroidManifest.xml").read_text(
+            encoding="utf-8"
+        ),
+        "gcode_share_paths.xml": (
+            ROOT / "android/app/src/main/res/xml/gcode_share_paths.xml"
+        ).read_text(encoding="utf-8"),
         "PlateSliceResults.kt": (main / "PlateSliceResults.kt").read_text(encoding="utf-8"),
         "RemoteDevice.kt": (main / "RemoteDevice.kt").read_text(encoding="utf-8"),
         "SliceArtifactStoreTest.kt": (tests / "SliceArtifactStoreTest.kt").read_text(

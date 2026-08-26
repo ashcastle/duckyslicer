@@ -1037,6 +1037,28 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun gcodeShareIsExplicitInPreviewExportOptions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val exportOptions = context.getString(R.string.export_options)
+        val shareGcode = context.getString(R.string.share_gcode)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_GCODE_EXPORT_ALL).use {
+            val options = waitForNode(exportOptions) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == exportOptions
+            }
+            assertTrue(options.isFocusable)
+            assertTrue(options.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val share = waitForNode(shareGcode) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == shareGcode
+            }
+            assertTrue(share.isFocusable)
+            assertTrue(share.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNode(TEST_GCODE_SHARE_REQUESTED_LABEL) {
+                it.effectiveLabel() == TEST_GCODE_SHARE_REQUESTED_LABEL
+            }
+        }
+    }
+
+    @Test
     fun largeTextLandscapeKeepsMenuClearOfScrollableWorkspaceSheet() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val menuLabel = context.getString(R.string.menu)

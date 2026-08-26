@@ -68,6 +68,7 @@ import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.UploadFile
@@ -587,6 +588,7 @@ internal fun WorkspaceScreen(
     onSlice: (Boolean) -> Unit,
     onCancelSlice: () -> Unit,
     onSave: (Boolean) -> Unit,
+    onShareGcode: () -> Unit,
     onCancelGcodeExport: () -> Unit,
     onSliceOptionsChanged: (SliceOptions) -> Unit,
     onSavePrinterProfile: (String, SliceOptions) -> Unit,
@@ -1107,6 +1109,7 @@ internal fun WorkspaceScreen(
                     canSend = sliceOutcome != null && selectedRemoteDeviceId != null && !remoteBusy,
                     onExport = { onSave(false) },
                     onExportAll = { onSave(true) },
+                    onShare = onShareGcode,
                     onCancelExport = onCancelGcodeExport,
                     onSend = onRemoteUpload,
                     modifier = Modifier
@@ -3830,6 +3833,7 @@ private fun PreviewExportSplitButton(
     canSend: Boolean,
     onExport: () -> Unit,
     onExportAll: () -> Unit,
+    onShare: () -> Unit,
     onCancelExport: () -> Unit,
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
@@ -3965,6 +3969,15 @@ private fun PreviewExportSplitButton(
                     },
                 )
             }
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.share_gcode)) },
+                leadingIcon = { Icon(Icons.Default.Share, null) },
+                enabled = canExport && !exporting,
+                onClick = {
+                    expanded = false
+                    onShare()
+                },
+            )
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.send_gcode)) },
                 leadingIcon = { Icon(Icons.Default.UploadFile, null) },

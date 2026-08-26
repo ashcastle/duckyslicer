@@ -27,19 +27,18 @@ def valid_sources() -> dict[str, str]:
         ),
         "MainActivity.kt": (
             "GCODE_DOCUMENT_MIME_TYPE = \"application/octet-stream\" "
-            "CreateDocument(GCODE_DOCUMENT_MIME_TYPE) "
             "ViewModelProvider(this)[GcodeExportViewModel::class.java] "
-            "var pendingGcodeExport by rememberSaveable pendingGcodeExport = requested "
-            "gcodeExportModel.export(uri, requested.outcome) "
-            "ActivityResultContracts.OpenDocumentTree() var pendingGcodeBatch by rememberSaveable "
-            "gcodeExportModel.exportAll(uri, requested) gcodeExportModel::cancelActiveExport"
+            "rememberGcodeOutputActions( gcodeOutputActions.clearPending() "
+            "onSave = gcodeOutputActions.save onShareGcode = gcodeOutputActions.share "
+            "gcodeExportModel::cancelActiveExport"
         ),
         "WorkspaceScreen.kt": (
             "gcodeExportState: GcodeExportState canExportAllGcode: Boolean "
             "onCancelGcodeExport: () -> Unit "
             "R.string.cancel_gcode_export R.string.canceling_gcode_export "
             "R.string.export_all_gcode R.string.exporting_gcode_files "
-            "if (exporting) onCancelExport() else onExport()"
+            "if (exporting) onCancelExport() else onExport() "
+            "onShareGcode: () -> Unit R.string.share_gcode onShare = onShareGcode"
         ),
         "SliceOperationViewModel.kt": "SliceArtifactLease.acquire(outcome.output)",
         "CreatedDocument.kt": (
@@ -65,6 +64,33 @@ def valid_sources() -> dict[str, str]:
             "DocumentsContract.createDocument( createdDocuments.asReversed() "
             "batch.entries.any { !it.outcome.isRestorableFrom(application.filesDir) } "
             "withExportProgress(operationId, completedFiles)"
+        ),
+        "GcodeOutputActions.kt": (
+            "CreateDocument(GCODE_DOCUMENT_MIME_TYPE) "
+            "var pendingSingle by rememberSaveable pendingSingle = selectedResult "
+            "model.export(uri, requested.outcome) ActivityResultContracts.OpenDocumentTree() "
+            "var pendingBatch by rememberSaveable pendingBatch = requested "
+            "model.exportAll(uri, requested) clearPending = "
+            "gcodeShareIntentOrNull(context, outcome) Intent.createChooser(share, chooserTitle)"
+        ),
+        "GcodeShare.kt": (
+            'GCODE_SHARE_MIME_TYPE = "text/x.gcode" '
+            "outcome.isRestorableFrom(context.filesDir) "
+            '"${context.packageName}.slice-share" safeGcodeFileName(outcome.suggestedName) '
+            "FileProvider.getUriForFile( Intent.ACTION_SEND Intent.EXTRA_STREAM "
+            "Intent.EXTRA_TITLE ClipData.newUri( Intent.FLAG_GRANT_READ_URI_PERMISSION"
+        ),
+        "GcodeShareProvider.kt": (
+            "class GcodeShareProvider : FileProvider(R.xml.gcode_share_paths)"
+        ),
+        "AndroidManifest.xml": (
+            '<provider android:name=".GcodeShareProvider" '
+            'android:authorities="${applicationId}.slice-share" '
+            'android:exported="false" android:grantUriPermissions="true" '
+            'android:resource="@xml/gcode_share_paths" />'
+        ),
+        "gcode_share_paths.xml": (
+            '<paths><files-path name="retained-gcode" path="slices/" /></paths>'
         ),
         "PlateSliceResults.kt": (
             "fun PlateSliceResults.completeExportBatch( snapshot.plates.withIndex() "
@@ -97,6 +123,7 @@ def valid_sources() -> dict[str, str]:
             " batchCancellationDeletesEveryDocumentCreatedByThatOperation"
             " BatchExportDocumentsProvider.TREE_URI"
             " batchProviderRejectsTraversalDocumentNamesOutsideItsRoot"
+            " currentArtifactShareIsNamedReadableAndLimitedToRetainedGcode"
         ),
         "BatchExportDocumentsProvider.java": (
             'extends ContentProvider METHOD_CREATE_DOCUMENT = "android:createDocument" '
@@ -106,7 +133,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "AccessibilityInstrumentedTest.kt": (
             "cancelGcodeExportActionIsReachable "
-            "allPlateGcodeExportIsExplicitAndReportsFileProgress"
+            "allPlateGcodeExportIsExplicitAndReportsFileProgress "
+            "gcodeShareIsExplicitInPreviewExportOptions"
         ),
         "SECURITY.md": "G-code reader lease RLIMIT_FSIZE",
         "CONTRIBUTING.md": "G-code reader lease RLIMIT_FSIZE",
@@ -147,6 +175,12 @@ class VerifySliceStorageTest(unittest.TestCase):
         sources = valid_sources()
         sources["MainActivity.kt"] += " rememberCoroutineScope() openOutputStream(uri)"
         with self.assertRaisesRegex(VerificationError, "Activity composition"):
+            verify_slice_storage(sources)
+
+    def test_rejects_root_owned_gcode_output_launchers(self) -> None:
+        sources = valid_sources()
+        sources["GcodeOutputActions.kt"] = "output actions omitted"
+        with self.assertRaisesRegex(VerificationError, "output action ownership"):
             verify_slice_storage(sources)
 
     def test_rejects_missing_failed_document_cleanup(self) -> None:
@@ -195,9 +229,35 @@ class VerifySliceStorageTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "accessible all-plate"):
             verify_slice_storage(sources)
 
+    def test_rejects_broad_gcode_share_path(self) -> None:
+        sources = valid_sources()
+        sources["gcode_share_paths.xml"] = '<paths><files-path name="all" path="." /></paths>'
+        with self.assertRaisesRegex(VerificationError, "share path"):
+            verify_slice_storage(sources)
+
+    def test_rejects_writable_or_unbounded_gcode_share_intent(self) -> None:
+        sources = valid_sources()
+        sources["GcodeShare.kt"] = sources["GcodeShare.kt"].replace(
+            "Intent.FLAG_GRANT_READ_URI_PERMISSION",
+            "Intent.FLAG_GRANT_WRITE_URI_PERMISSION",
+        )
+        with self.assertRaisesRegex(VerificationError, "share contract"):
+            verify_slice_storage(sources)
+
+    def test_rejects_missing_gcode_share_device_regression(self) -> None:
+        sources = valid_sources()
+        sources["GcodeExportLifecycleInstrumentedTest.kt"] = sources[
+            "GcodeExportLifecycleInstrumentedTest.kt"
+        ].replace(
+            "currentArtifactShareIsNamedReadableAndLimitedToRetainedGcode",
+            "missing outgoing share regression",
+        )
+        with self.assertRaisesRegex(VerificationError, "export regression"):
+            verify_slice_storage(sources)
+
     def test_rejects_text_plain_gcode_export(self) -> None:
         sources = valid_sources()
-        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+        sources["GcodeOutputActions.kt"] = sources["GcodeOutputActions.kt"].replace(
             "CreateDocument(GCODE_DOCUMENT_MIME_TYPE)", 'CreateDocument("text/plain")'
         )
         with self.assertRaisesRegex(VerificationError, "document contract|txt-producing"):

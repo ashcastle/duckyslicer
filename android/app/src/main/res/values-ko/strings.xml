@@ -81,6 +81,9 @@
     <string name="cancel_profile_export">프로필 내보내기 중지</string>
     <string name="canceling_profile_transfer">프로필 전송 중지 중…</string>
     <string name="export_gcode">G-code 내보내기</string>
+    <string name="share_gcode">G-code 공유</string>
+    <string name="gcode_share_title">G-code 공유</string>
+    <string name="gcode_share_error">이 G-code를 공유할 수 없습니다.</string>
     <string name="export_options">내보내기 옵션</string>
     <string name="import_from_menu">위 메뉴에서 모델을 임포트하세요.</string>
     <string name="edit_model">모델 편집</string>

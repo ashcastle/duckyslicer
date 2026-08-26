@@ -189,7 +189,15 @@ def valid_manifest(*, debug: bool = False) -> str:
       A: android:usesCleartextTraffic(0x010104ec)=(type 0x12)0xffffffff
       A: android:dataExtractionRules(0x0101063e)=@0x7f0b0001
       A: android:localeConfig(0x0101065b)=@0x7f0b0002
-{debug_components}      E: service (line=40)
+{debug_components}      E: provider (line=35)
+        A: android:name(0x01010003)="com.ashcastle.duckyslicer.GcodeShareProvider" (Raw: "com.ashcastle.duckyslicer.GcodeShareProvider")
+        A: android:authorities(0x01010018)="com.ashcastle.duckyslicer.slice-share" (Raw: "com.ashcastle.duckyslicer.slice-share")
+        A: android:exported(0x01010010)=(type 0x12)0x0
+        A: android:grantUriPermissions(0x0101001b)=(type 0x12)0xffffffff
+        E: meta-data (line=36)
+          A: android:name(0x01010003)="android.support.FILE_PROVIDER_PATHS" (Raw: "android.support.FILE_PROVIDER_PATHS")
+          A: android:resource(0x01010025)=@0x7f0b0003
+      E: service (line=40)
         A: android:name(0x01010003)="com.ashcastle.duckyslicer.SlicerProcessService" (Raw: "com.ashcastle.duckyslicer.SlicerProcessService")
         A: android:exported(0x01010010)=(type 0x12)0x0
         A: android:process(0x01010011)=":slicer" (Raw: ":slicer")
@@ -319,6 +327,32 @@ class VerifyArtifactManifestTest(unittest.TestCase):
             "      E: service (line=40)",
         )
         with self.assertRaisesRegex(VerificationError, "component allowlist"):
+            verify_aapt_output(source, "release")
+
+    def test_rejects_exported_gcode_share_provider(self) -> None:
+        source = valid_manifest().replace(
+            'A: android:name(0x01010003)="com.ashcastle.duckyslicer.GcodeShareProvider" '
+            '(Raw: "com.ashcastle.duckyslicer.GcodeShareProvider")\n'
+            '        A: android:authorities(0x01010018)',
+            'A: android:name(0x01010003)="com.ashcastle.duckyslicer.GcodeShareProvider" '
+            '(Raw: "com.ashcastle.duckyslicer.GcodeShareProvider")\n'
+            '        A: android:exported(0x01010010)=(type 0x12)0xffffffff\n'
+            '        A: android:authorities(0x01010018)',
+        ).replace(
+            '        A: android:exported(0x01010010)=(type 0x12)0x0\n'
+            '        A: android:grantUriPermissions(0x0101001b)',
+            '        A: android:grantUriPermissions(0x0101001b)',
+            1,
+        )
+        with self.assertRaisesRegex(VerificationError, "component allowlist"):
+            verify_aapt_output(source, "release")
+
+    def test_rejects_broad_gcode_share_provider_authority(self) -> None:
+        source = valid_manifest().replace(
+            "com.ashcastle.duckyslicer.slice-share",
+            "com.ashcastle.duckyslicer.files",
+        )
+        with self.assertRaisesRegex(VerificationError, "share provider authority"):
             verify_aapt_output(source, "release")
 
     def test_rejects_exported_debug_performance_harness(self) -> None:

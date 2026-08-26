@@ -803,6 +803,7 @@ private fun WorkspaceAccessibilityHarness(
         onSave = { allPlates ->
             if (allPlates) harnessNotice = TEST_EXPORT_ALL_REQUESTED_LABEL
         },
+        onShareGcode = { harnessNotice = TEST_GCODE_SHARE_REQUESTED_LABEL },
         onCancelGcodeExport = {},
         onSliceOptionsChanged = {},
         onSavePrinterProfile = { _, _ -> },
@@ -929,3 +930,4 @@ internal const val TEST_TRANSFORM_COMMITTED_LABEL = "Accessibility transform com
 internal const val TEST_SUPPORT_PAINTED_LABEL = "Accessibility support painted"
 internal const val TEST_SLICE_ALL_REQUESTED_LABEL = "Accessibility all plates requested"
 internal const val TEST_EXPORT_ALL_REQUESTED_LABEL = "Accessibility all G-code requested"
+internal const val TEST_GCODE_SHARE_REQUESTED_LABEL = "Accessibility G-code share requested"

@@ -1,9 +1,13 @@
 package com.ashcastle.duckyslicer
 
 import android.app.Application
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ActivityScenario
@@ -13,6 +17,8 @@ import java.io.File
 import java.security.MessageDigest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -23,6 +29,83 @@ import org.junit.runner.RunWith
 class GcodeExportLifecycleInstrumentedTest {
     @get:Rule
     val blockingProviderProcess = BlockingProviderProcessRule()
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun currentArtifactShareIsNamedReadableAndLimitedToRetainedGcode() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val output = File(context.filesDir, SliceArtifactStore.OUTPUT_DIRECTORY)
+            .apply(File::mkdirs)
+            .resolve("share-source.gcode")
+        val payload = "G1 X10 Y20 E1\n".toByteArray()
+        output.writeBytes(payload)
+        val outcome = SliceOutcome(
+            output = output,
+            layers = 1,
+            estimatedSeconds = 2f,
+            filamentMm = 3f,
+            filamentGrams = 0.01f,
+            suggestedName = "Shared duck.gcode",
+        )
+        val outside = File(context.cacheDir, "outside-share.gcode").apply {
+            writeBytes(payload)
+        }
+        try {
+            val share = requireNotNull(gcodeShareIntentOrNull(context, outcome))
+            val stream = requireNotNull(share.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
+            assertEquals(Intent.ACTION_SEND, share.action)
+            assertEquals(GCODE_SHARE_MIME_TYPE, share.type)
+            assertTrue(share.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+            assertEquals("Shared duck.gcode", share.getStringExtra(Intent.EXTRA_TITLE))
+            assertEquals(stream, share.clipData?.getItemAt(0)?.uri)
+            assertEquals("${context.packageName}.slice-share", stream.authority)
+
+            context.contentResolver.query(
+                stream,
+                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null,
+                null,
+                null,
+            ).use { cursor ->
+                assertNotNull(cursor)
+                requireNotNull(cursor)
+                assertTrue(cursor.moveToFirst())
+                assertEquals("Shared duck.gcode", cursor.getString(0))
+                assertEquals(payload.size.toLong(), cursor.getLong(1))
+            }
+            val sharedPayload = requireNotNull(
+                context.contentResolver.openInputStream(stream),
+            ).use { it.readBytes() }
+            assertTrue(payload.contentEquals(sharedPayload))
+
+            val provider = context.packageManager.resolveContentProvider(
+                "${context.packageName}.slice-share",
+                0,
+            )
+            assertNotNull(provider)
+            assertFalse(requireNotNull(provider).exported)
+            assertTrue(provider.grantUriPermissions)
+            assertTrue(
+                runCatching {
+                    FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.slice-share",
+                        outside,
+                        outside.name,
+                    )
+                }.isFailure,
+            )
+            assertNull(
+                gcodeShareIntentOrNull(
+                    context,
+                    outcome.copy(output = outside),
+                ),
+            )
+        } finally {
+            output.delete()
+            outside.delete()
+        }
+    }
 
     @Test
     fun batchProviderRejectsTraversalDocumentNamesOutsideItsRoot() {

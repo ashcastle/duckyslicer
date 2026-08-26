@@ -780,6 +780,7 @@ private fun DuckySlicerScreen(
     val recentProjectRemoveError = resources.getString(R.string.recent_project_remove_error)
     val savedDataUnavailable = resources.getString(R.string.saved_data_unavailable)
     val previewError = resources.getString(R.string.preview_error)
+    val gcodeShareError = resources.getString(R.string.gcode_share_error)
 
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -796,8 +797,6 @@ private fun DuckySlicerScreen(
     )
     var externalProjectConfirmation by remember { mutableStateOf<ExternalProjectRequest?>(null) }
     var plateSliceResults by rememberSaveable { mutableStateOf(PlateSliceResults()) }
-    var pendingGcodeExport by rememberSaveable { mutableStateOf<PlateSliceResult?>(null) }
-    var pendingGcodeBatch by rememberSaveable { mutableStateOf<GcodeExportBatch?>(null) }
     var pendingStlExportObjectId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedTab by rememberSaveable { mutableStateOf(WorkspaceTab.SLICE) }
     var layerPreview by remember { mutableStateOf<GcodeLayerPreview?>(null) }
@@ -867,6 +866,21 @@ private fun DuckySlicerScreen(
     val selectedProjectObject = projectHistory.current.selectedObject
     val sliceOutcome = plateSliceResults.outcomeFor(selectedPlateId)
     val gcodeExportBatch = plateSliceResults.completeExportBatch(projectHistory.current)
+    val gcodeOutputActions = rememberGcodeOutputActions(
+        selectedResult = plateSliceResults.resultFor(selectedPlateId),
+        batch = gcodeExportBatch,
+        selectedPlateHasObjects = projectObjects.isNotEmpty(),
+        exporting = exportingGcode,
+        model = gcodeExportModel,
+        onStarted = {
+            error = null
+            notice = null
+        },
+        onShareFailed = {
+            error = gcodeShareError
+            notice = null
+        },
+    )
     val modelTransform = selectedProjectObject?.transform ?: ModelTransform()
     val profileCatalog = profileLibraryState.catalog
     val profileRecents = profileLibraryState.recents
@@ -914,8 +928,7 @@ private fun DuckySlicerScreen(
     fun clearAllCompletedSlices() {
         sliceOperationModel.clearCompleted()
         plateSliceResults = PlateSliceResults()
-        pendingGcodeExport = null
-        pendingGcodeBatch = null
+        gcodeOutputActions.clearPending()
         layerPreview = null
         stalePreviewResult = null
         remoteOperationModel.invalidateUpload()
@@ -1302,28 +1315,6 @@ private fun DuckySlicerScreen(
         }
     }
 
-    val savePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(GCODE_DOCUMENT_MIME_TYPE),
-    ) { uri ->
-        val requested = pendingGcodeExport
-        pendingGcodeExport = null
-        if (uri != null && requested != null && gcodeExportModel.export(uri, requested.outcome)) {
-            error = null
-            notice = null
-        }
-    }
-
-    val folderPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree(),
-    ) { uri ->
-        val requested = pendingGcodeBatch
-        pendingGcodeBatch = null
-        if (uri != null && requested != null && gcodeExportModel.exportAll(uri, requested)) {
-            error = null
-            notice = null
-        }
-    }
-
     fun importProject(uri: Uri): Boolean {
         if (
             projectRestored && !projectTransferBusy && !importing && !autoLaying &&
@@ -1534,23 +1525,6 @@ private fun DuckySlicerScreen(
         },
         onRemoteResultInvalidated = remoteOperationModel::invalidateUpload,
     )
-
-    val saveGcode: (Boolean) -> Unit = { allPlates ->
-        if (!exportingGcode) {
-            if (allPlates) {
-                gcodeExportBatch?.let { requested ->
-                    pendingGcodeBatch = requested
-                    folderPicker.launch(null)
-                }
-            } else {
-                val requested = plateSliceResults.resultFor(selectedPlateId)
-                if (requested != null && projectObjects.isNotEmpty()) {
-                    pendingGcodeExport = requested
-                    savePicker.launch(requested.outcome.suggestedName)
-                }
-            }
-        }
-    }
 
     fun selectedRemoteDevice(): RemoteDeviceProfile? = remoteOperationState.selectedProfile()
 
@@ -1976,7 +1950,8 @@ private fun DuckySlicerScreen(
             if (allPlates) sliceStartControls.startAll() else sliceStartControls.startSelected()
         },
         onCancelSlice = sliceStartControls.cancel,
-        onSave = saveGcode,
+        onSave = gcodeOutputActions.save,
+        onShareGcode = gcodeOutputActions.share,
         onCancelGcodeExport = gcodeExportModel::cancelActiveExport,
         onSliceOptionsChanged = ::applyOptions,
         onSavePrinterProfile = profileActions::savePrinter,
