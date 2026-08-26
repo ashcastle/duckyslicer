@@ -101,9 +101,11 @@ def valid_sources() -> dict[str, str]:
                 "checkCancellation: () -> Unit = {}",
                 "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
                 "beginCommit: () -> Unit = {} beginCommit()",
-                'SCHEMA_VERSION = 79 schemaVersion >= 70 schemaVersion >= 75 '
+                'SCHEMA_VERSION = 80 schemaVersion >= 70 schemaVersion >= 75 '
                 'schemaVersion >= 76 schemaVersion >= 77 schemaVersion >= 78 '
-                'schemaVersion >= 79 "linkedDocument", root.has("linkedDocument") '
+                'schemaVersion >= 79 schemaVersion >= 80 "linkedDocument", '
+                '"linkedDocumentDirty", root.has("linkedDocument") '
+                'root.has("linkedDocumentDirty") '
                 'normalizedLinkedProjectDocument '
                 'put("name", plate.name ?: JSONObject.NULL) normalizedProjectPlateName '
                 'put("heightRangeModifiers", heightRangeModifiers.toProjectJson()) '
@@ -173,6 +175,7 @@ def valid_sources() -> dict[str, str]:
                 "val history: ProjectHistoryState val sliceOptions: SliceOptions "
                 "val plateOptions: Map<String, SliceOptions> "
                 "val linkedDocument: LinkedProjectDocument? "
+                "val linkedDocumentDirty: Boolean "
                 "val restored: Boolean val sessionRevision: Long "
                 "val persistedRevision: Long "
                 "val activeTransferId: Long? "
@@ -183,7 +186,7 @@ def valid_sources() -> dict[str, str]:
                 "fun ProjectTransferState.withCompletedTransfer(",
                 "fun updateHistory( fun updateSession(",
                 "projectStore.loadProject()",
-                "document.linkedDocument",
+                "document.linkedDocument document.linkedDocumentDirty",
                 "PROJECT_SAVE_DEBOUNCE_MILLIS = 400L",
                 "pendingPersistence?.join() fun flushPersistence() "
                 "override fun onCleared() hasPersistableChanges",
@@ -238,6 +241,7 @@ def valid_sources() -> dict[str, str]:
                 "override fun onStop() projectTransferModel.flushPersistence()",
                 "ProjectTransferViewModel projectTransferState.completion ProjectReplacementDialog( "
                 "projectTransferState.linkedDocument?.displayName "
+                "projectTransferState.linkedDocumentDirty "
                 "projectTransferModel.saveLinkedProject( !started && !latest.busy "
                 "latest.completion == null && latest.editCompletion == null "
                 "onSaveProject = projectSaveAction(",
@@ -267,8 +271,9 @@ def valid_sources() -> dict[str, str]:
                 "onConsumeCompletion(completed.id)"
             ),
         "WorkspaceScreen.kt": (
-            "ProjectSheet( onOpenProject onSaveProject linkedProjectName "
-            "R.string.linked_project_file R.string.project_save_options R.string.save_project_as "
+            "ProjectSheet( onOpenProject onSaveProject linkedProjectName linkedProjectDirty "
+            "R.string.linked_project_file R.string.linked_project_unsaved "
+            "R.string.project_save_options R.string.save_project_as "
             "onPlateSelected onAddPlate "
             "onDuplicatePlate onRemovePlate PlateSwitcher( canDuplicateSelectedPlate "
             "onRenamePlate onMovePlate R.string.duplicate_plate R.string.rename_plate "
@@ -276,6 +281,7 @@ def valid_sources() -> dict[str, str]:
             "R.string.plate_actions "
             'stateDescription = "${selectedIndex + 1}/${plates.size}" confirmReplacement '
             "R.string.replace_project_title R.string.replace_project_body "
+            "R.string.replace_project_unsaved_body R.string.new_project_unsaved_body "
             "projectImporting: Boolean projectTransferCancellationRequested: Boolean "
             "onCancelProjectImport: () -> Unit onCancelProjectExport: () -> Unit "
             "R.string.cancel_project_import R.string.canceling_project_import "
@@ -320,6 +326,7 @@ def valid_sources() -> dict[str, str]:
             "projectImportCancellationIsBoundToTheExactActiveTransfer"
             " linkedProjectDocumentsRequireBoundedContentUrisAndSafeNames "
             "bindingAProjectDocumentIsRevisionTrackedAndIdempotent "
+            "linkedProjectBecomesDirtyOnlyWhenProjectContentChanges "
             " switchingPlatesRestoresEachPlatesIndependentSliceOptions "
             "duplicatedPlateStartsWithTheSourcePlatesExactSliceOptions"
         ),
@@ -378,6 +385,7 @@ def valid_sources() -> dict[str, str]:
         "AccessibilityInstrumentedTest.kt": (
             "cancelProjectImportActionIsReachable cancelProjectExportActionIsReachable "
             "projectActionsAreVisibleAndOpeningConfirmsReplacement R.string.project_save_options "
+            "R.string.linked_project_unsaved R.string.replace_project_unsaved_body "
             "R.string.save_project_as Save project as must be reachable from the split action "
             "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions "
             "plateSwitcherDuplicatesTheSelectedPlateAndSelectsTheCopy R.string.duplicate_plate "

@@ -346,12 +346,19 @@ internal class ProjectStore(
         } else {
             null
         }
+        val linkedDocumentDirty = if (schemaVersion >= 80) {
+            root.getBoolean("linkedDocumentDirty")
+        } else {
+            false
+        }
+        require(!linkedDocumentDirty || linkedDocument != null)
         return StoredProject(
             document = StoredProjectDocument(
                 snapshot = snapshot,
                 sliceOptions = plateOptions[snapshot.selectedPlateId],
                 plateOptions = plateOptions,
                 linkedDocument = linkedDocument,
+                linkedDocumentDirty = linkedDocumentDirty,
             ),
             declaredModels = declaredModels,
         )
@@ -368,7 +375,11 @@ internal class ProjectStore(
         snapshot: ProjectSnapshot,
         plateOptions: Map<String, SliceOptions>,
         linkedDocument: LinkedProjectDocument? = null,
+        linkedDocumentDirty: Boolean = false,
     ) {
+        require(!linkedDocumentDirty || linkedDocument != null) {
+            "An unlinked project cannot have unsaved document changes"
+        }
         require(snapshot.allObjects.size <= MAX_PROJECT_OBJECTS) { "Project has too many objects" }
         require(snapshot.allObjects.map(ProjectObject::id).toSet().size == snapshot.allObjects.size) {
             "Project contains duplicate object ids"
@@ -408,6 +419,7 @@ internal class ProjectStore(
                         .put("displayName", link.displayName)
                 } ?: JSONObject.NULL,
             )
+            .put("linkedDocumentDirty", linkedDocumentDirty)
             .put(
                 "plates",
                 JSONArray().also { values ->
@@ -698,6 +710,10 @@ internal class ProjectStore(
                     ) != null,
                 )
             }
+        }
+        if (schemaVersion >= 80) {
+            require(root.has("linkedDocumentDirty"))
+            require(!root.getBoolean("linkedDocumentDirty") || !root.isNull("linkedDocument"))
         }
         root
     }.getOrNull()
@@ -1139,7 +1155,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 79
+        const val SCHEMA_VERSION = 80
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"
@@ -1172,6 +1188,7 @@ internal data class StoredProjectDocument(
         plate.id to (sliceOptions ?: SliceOptions())
     },
     val linkedDocument: LinkedProjectDocument? = null,
+    val linkedDocumentDirty: Boolean = false,
     val storageUnavailable: Boolean = false,
 ) {
     val activeSliceOptions: SliceOptions

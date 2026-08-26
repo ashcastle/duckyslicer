@@ -121,6 +121,7 @@ internal data class ProjectTransferState(
     val sliceOptions: SliceOptions = SliceOptions(),
     val plateOptions: Map<String, SliceOptions> = mapOf(legacyProjectPlateId() to sliceOptions),
     val linkedDocument: LinkedProjectDocument? = null,
+    val linkedDocumentDirty: Boolean = false,
     val restored: Boolean = false,
     val persistenceBlocked: Boolean = false,
     val persistenceMessage: ProjectPersistenceMessage? = null,
@@ -223,6 +224,7 @@ internal fun ProjectTransferState.withUpdatedSession(
         history = nextHistory,
         sliceOptions = nextOptions,
         plateOptions = plateOptions + (nextHistory.current.selectedPlateId to nextOptions),
+        linkedDocumentDirty = linkedDocument != null,
         persistenceMessage = ProjectPersistenceMessage.STORAGE_UNAVAILABLE.takeIf {
             persistenceBlocked
         },
@@ -241,6 +243,7 @@ internal fun ProjectTransferState.withNewProject(): ProjectTransferState? {
         history = nextHistory,
         plateOptions = nextPlateOptions,
         linkedDocument = null,
+        linkedDocumentDirty = false,
         persistenceMessage = ProjectPersistenceMessage.STORAGE_UNAVAILABLE.takeIf {
             persistenceBlocked
         },
@@ -250,11 +253,12 @@ internal fun ProjectTransferState.withNewProject(): ProjectTransferState? {
 
 internal fun ProjectTransferState.withLinkedDocument(
     document: LinkedProjectDocument?,
-): ProjectTransferState = if (linkedDocument == document) {
+): ProjectTransferState = if (linkedDocument == document && !linkedDocumentDirty) {
     this
 } else {
     copy(
         linkedDocument = document,
+        linkedDocumentDirty = false,
         sessionRevision = sessionRevision + 1,
     )
 }
@@ -313,6 +317,7 @@ internal fun ProjectTransferState.withCompletedEdit(
         } else {
             plateOptions + (appliedHistory.current.selectedPlateId to appliedOptions)
         },
+        linkedDocumentDirty = linkedDocument != null && (linkedDocumentDirty || changed),
         persistenceMessage = ProjectPersistenceMessage.STORAGE_UNAVAILABLE.takeIf {
             changed && persistenceBlocked
         } ?: persistenceMessage,
@@ -395,6 +400,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 sliceOptions = restored.activeSliceOptions,
                 plateOptions = restored.plateOptions,
                 linkedDocument = linkedDocument,
+                linkedDocumentDirty = linkedDocument != null && restored.linkedDocumentDirty,
                 restored = true,
                 persistenceBlocked = restored.storageUnavailable,
                 persistenceMessage = ProjectPersistenceMessage.STORAGE_UNAVAILABLE.takeIf {
@@ -1039,6 +1045,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                         persistenceBlocked = false,
                         persistenceMessage = null,
                         linkedDocument = null,
+                        linkedDocumentDirty = false,
                         sessionRevision = current.sessionRevision + 1,
                         persistedRevision = current.sessionRevision + 1,
                     ).withLinkedDocument(linkedDocument)
@@ -1595,6 +1602,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                         document.history.current,
                         document.plateOptions,
                         document.linkedDocument,
+                        document.linkedDocumentDirty,
                     )
                     if (obsoleteModelsAfterSave != null) {
                         runCatching { projectStore.deleteModelsReferencedBy(obsoleteModelsAfterSave) }
@@ -1670,6 +1678,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                         pending.history.current,
                         pending.plateOptions,
                         pending.linkedDocument,
+                        pending.linkedDocumentDirty,
                     )
                 } catch (_: Exception) {
                     supportEvents.record(SupportEvent.PROJECT_SAVE_FAILED)

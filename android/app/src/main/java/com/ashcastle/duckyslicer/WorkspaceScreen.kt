@@ -517,6 +517,7 @@ internal fun WorkspaceScreen(
     projectExporting: Boolean,
     projectTransferCancellationRequested: Boolean,
     linkedProjectName: String?,
+    linkedProjectDirty: Boolean,
     slicing: Boolean,
     sliceCancellationRequested: Boolean,
     sliceProgress: SliceProgress,
@@ -1221,6 +1222,7 @@ internal fun WorkspaceScreen(
                     exporting = projectExporting,
                     cancellationRequested = projectTransferCancellationRequested,
                     linkedProjectName = linkedProjectName,
+                    linkedProjectDirty = linkedProjectDirty,
                     onObjectSelected = onObjectSelected,
                     canDuplicateObject = projectPlates.sumOf { it.objects.size } <
                         ProjectStore.MAX_PROJECT_OBJECTS,
@@ -7741,6 +7743,7 @@ private fun ProjectSheet(
     exporting: Boolean,
     cancellationRequested: Boolean,
     linkedProjectName: String?,
+    linkedProjectDirty: Boolean,
     onObjectSelected: (String) -> Unit,
     canDuplicateObject: Boolean,
     onDuplicateObject: (String) -> Unit,
@@ -7785,6 +7788,13 @@ private fun ProjectSheet(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (linkedProjectDirty) {
+                Text(
+                    stringResource(R.string.linked_project_unsaved),
+                    color = WorkspaceYellow,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
         objects.forEach { projectObject ->
             val selected = projectObject.id == selectedObjectId
@@ -8003,6 +8013,8 @@ private fun ProjectSheet(
     }
     if (confirmReplacement) {
         ProjectReplacementDialog(
+            linkedProjectName = linkedProjectName,
+            linkedProjectDirty = linkedProjectDirty,
             onConfirm = {
                 confirmReplacement = false
                 onOpenProject()
@@ -8014,7 +8026,15 @@ private fun ProjectSheet(
         AlertDialog(
             onDismissRequest = { confirmNewProject = false },
             title = { Text(stringResource(R.string.new_project_title)) },
-            text = { Text(stringResource(R.string.new_project_body)) },
+            text = {
+                Text(
+                    if (linkedProjectDirty && linkedProjectName != null) {
+                        stringResource(R.string.new_project_unsaved_body, linkedProjectName)
+                    } else {
+                        stringResource(R.string.new_project_body)
+                    },
+                )
+            },
             confirmButton = {
                 Button(
                     onClick = {
@@ -8182,13 +8202,23 @@ private fun ProjectSheet(
 
 @Composable
 internal fun ProjectReplacementDialog(
+    linkedProjectName: String? = null,
+    linkedProjectDirty: Boolean = false,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.replace_project_title)) },
-        text = { Text(stringResource(R.string.replace_project_body)) },
+        text = {
+            Text(
+                if (linkedProjectDirty && linkedProjectName != null) {
+                    stringResource(R.string.replace_project_unsaved_body, linkedProjectName)
+                } else {
+                    stringResource(R.string.replace_project_body)
+                },
+            )
+        },
         confirmButton = {
             Button(onClick = onConfirm, colors = primaryButtonColors()) {
                 Text(stringResource(R.string.open_project))

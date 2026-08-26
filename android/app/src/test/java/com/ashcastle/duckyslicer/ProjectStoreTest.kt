@@ -35,12 +35,14 @@ class ProjectStoreTest {
                 displayName = "DuckySlicer-project.duckyproject",
             )
 
-            store.save(snapshot, options, link)
+            store.save(snapshot, options, link, linkedDocumentDirty = true)
 
             val restored = store.loadProject()
             val persisted = JSONObject(File(root, "current_project.json").readText())
             assertEquals(link, restored.linkedDocument)
+            assertTrue(restored.linkedDocumentDirty)
             assertEquals(link.uri, persisted.getJSONObject("linkedDocument").getString("uri"))
+            assertTrue(persisted.getBoolean("linkedDocumentDirty"))
 
             val output = ByteArrayOutputStream()
             store.exportArchive(snapshot, options, output)
@@ -227,12 +229,16 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(79, persisted.getInt("schemaVersion"))
+        assertEquals(80, persisted.getInt("schemaVersion"))
         assertEquals(
-            setOf("schemaVersion", "selectedPlateId", "linkedDocument", "plates"),
+            setOf(
+                "schemaVersion", "selectedPlateId", "linkedDocument",
+                "linkedDocumentDirty", "plates",
+            ),
             persisted.keys().asSequence().toSet(),
         )
         assertTrue(persisted.isNull("linkedDocument"))
+        assertFalse(persisted.getBoolean("linkedDocumentDirty"))
         val persistedPlate = persisted.getJSONArray("plates").getJSONObject(0)
         assertEquals(
             setOf(

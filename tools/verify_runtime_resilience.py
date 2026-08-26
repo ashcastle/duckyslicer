@@ -104,6 +104,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "document.history.current",
         "document.plateOptions",
         "document.linkedDocument",
+        "document.linkedDocumentDirty",
         "pendingPersistence?.join()",
         "fun flushPersistence()",
         "override fun onCleared()",

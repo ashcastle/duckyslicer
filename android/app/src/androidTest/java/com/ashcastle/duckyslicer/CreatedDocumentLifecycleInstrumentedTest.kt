@@ -286,6 +286,7 @@ class CreatedDocumentLifecycleInstrumentedTest {
                 "Linked-project.duckyproject",
                 first.state.value.linkedDocument?.displayName,
             )
+            assertFalse(first.state.value.linkedDocumentDirty)
             first.consumeCompletion(checkNotNull(first.state.value.completion).id)
             first.flushPersistence()
             waitUntil("project document link was not persisted") {
@@ -305,6 +306,17 @@ class CreatedDocumentLifecycleInstrumentedTest {
                 restored.state.value.restored && !restored.state.value.busy
             }
             assertEquals(uri, restored.state.value.linkedDocument?.contentUri)
+            assertFalse(restored.state.value.linkedDocumentDirty)
+            val current = restored.state.value
+            assertTrue(
+                restored.updateSession(
+                    expectedHistory = current.history,
+                    nextHistory = current.history,
+                    expectedOptions = current.sliceOptions,
+                    nextOptions = current.sliceOptions.copy(fillDensity = 0.37f),
+                ),
+            )
+            assertTrue(restored.state.value.linkedDocumentDirty)
             assertTrue(
                 restored.saveLinkedProject(
                     restored.state.value.history.current,
@@ -314,6 +326,7 @@ class CreatedDocumentLifecycleInstrumentedTest {
             waitUntil("direct linked project save did not complete") {
                 restored.state.value.completion is ProjectTransferCompletion.Exported
             }
+            assertFalse(restored.state.value.linkedDocumentDirty)
             val status = waitForProvider {
                 it.getBoolean(BlockingExportProvider.KEY_COMPLETED)
             }

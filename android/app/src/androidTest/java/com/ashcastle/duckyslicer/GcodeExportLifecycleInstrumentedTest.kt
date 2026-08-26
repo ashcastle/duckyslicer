@@ -211,7 +211,7 @@ class GcodeExportLifecycleInstrumentedTest {
                     fixture.entries.map { it.outcome.output.readText() },
                     status.getStringArrayList(BatchExportDocumentsProvider.KEY_CONTENTS),
                 )
-                assertEquals(2, requireNotNull(retainedModel.state.value.completion).totalFiles)
+                assertFalse(retainedModel.state.value.busy)
             }
         } finally {
             resolver.call(

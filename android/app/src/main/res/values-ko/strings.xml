@@ -748,8 +748,11 @@
     <string name="save_project_as">다른 이름으로 프로젝트 저장…</string>
     <string name="project_save_options">프로젝트 저장 옵션</string>
     <string name="linked_project_file">파일: %1$s</string>
+    <string name="linked_project_unsaved">저장하지 않은 변경사항</string>
     <string name="replace_project_title">다른 프로젝트를 열까요?</string>
     <string name="replace_project_body">현재 프로젝트가 바뀝니다. 보관하려면 먼저 저장하세요.</string>
+    <string name="replace_project_unsaved_body">%1$s의 변경사항을 저장하지 않았습니다. 보관하려면 다른 프로젝트를 열기 전에 저장하세요.</string>
+    <string name="new_project_unsaved_body">%1$s의 변경사항을 저장하지 않았습니다. 새 프로젝트를 시작하면 해당 파일에서 이 변경사항을 잃게 됩니다.</string>
     <string name="project_opened">프로젝트를 열었습니다.</string>
     <string name="project_saved">프로젝트를 저장했습니다.</string>
     <string name="project_open_error">이 프로젝트를 열지 못했습니다. 현재 프로젝트는 그대로 두었습니다.</string>

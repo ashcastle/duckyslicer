@@ -31,14 +31,48 @@ class ProjectTransferStateTest {
             "content://documents/projects/duck",
             "Duck.duckyproject",
         )
-        val state = ProjectTransferState(restored = true, sessionRevision = 4)
+        val state = ProjectTransferState(
+            restored = true,
+            linkedDocument = link,
+            linkedDocumentDirty = true,
+            sessionRevision = 4,
+        )
 
         val linked = state.withLinkedDocument(link)
 
         assertEquals(link, linked.linkedDocument)
+        assertFalse(linked.linkedDocumentDirty)
         assertEquals(5, linked.sessionRevision)
         assertEquals(linked, linked.withLinkedDocument(link))
         assertEquals(6, linked.withLinkedDocument(null).sessionRevision)
+    }
+
+    @Test
+    fun linkedProjectBecomesDirtyOnlyWhenProjectContentChanges() {
+        val history = history()
+        val options = SliceOptions()
+        val link = LinkedProjectDocument(
+            "content://documents/projects/duck",
+            "Duck.duckyproject",
+        )
+        val linked = ProjectTransferState(
+            history = history,
+            sliceOptions = options,
+            restored = true,
+            linkedDocument = link,
+        )
+
+        val changed = requireNotNull(
+            linked.withUpdatedSession(
+                history,
+                history.updateSelectedTransform(ModelTransform(offsetXmm = 7f)),
+                options,
+                options,
+            ),
+        )
+
+        assertTrue(changed.linkedDocumentDirty)
+        assertFalse(changed.withLinkedDocument(link).linkedDocumentDirty)
     }
 
     @Test
@@ -207,6 +241,7 @@ class ProjectTransferStateTest {
                 "content://documents/projects/original",
                 "Original.duckyproject",
             ),
+            linkedDocumentDirty = true,
             sessionRevision = 5,
             persistedRevision = 5,
         )
@@ -219,6 +254,7 @@ class ProjectTransferStateTest {
         assertFalse(updated.history.canRedo)
         assertEquals(secondOptions, updated.sliceOptions)
         assertNull(updated.linkedDocument)
+        assertFalse(updated.linkedDocumentDirty)
         assertEquals(
             mapOf(updated.history.current.selectedPlateId to secondOptions),
             updated.plateOptions,

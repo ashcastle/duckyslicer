@@ -1577,6 +1577,7 @@ private fun DuckySlicerScreen(
         projectExporting = projectExporting,
         projectTransferCancellationRequested = projectTransferCancellationRequested,
         linkedProjectName = projectTransferState.linkedDocument?.displayName,
+        linkedProjectDirty = projectTransferState.linkedDocumentDirty,
         slicing = slicing,
         sliceCancellationRequested = sliceCancellationRequested,
         sliceProgress = SliceProgress(sliceProgress, plateSliceBatchProgress),
@@ -2095,6 +2096,8 @@ private fun DuckySlicerScreen(
     )
     externalProjectConfirmation?.let { request ->
         ProjectReplacementDialog(
+            linkedProjectName = projectTransferState.linkedDocument?.displayName,
+            linkedProjectDirty = projectTransferState.linkedDocumentDirty,
             onConfirm = {
                 externalProjectConfirmation = null
                 startExternalProjectImport(

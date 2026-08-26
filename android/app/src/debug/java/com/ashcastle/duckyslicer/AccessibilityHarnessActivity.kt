@@ -589,7 +589,10 @@ private fun WorkspaceAccessibilityHarness(
         projectImporting = projectImporting,
         projectExporting = projectExporting,
         projectTransferCancellationRequested = false,
-        linkedProjectName = null,
+        linkedProjectName = "Linked-project.duckyproject".takeIf {
+            selectedTab == WorkspaceTab.PROJECT
+        },
+        linkedProjectDirty = selectedTab == WorkspaceTab.PROJECT,
         slicing = slicing,
         sliceCancellationRequested = false,
         sliceProgress = sliceProgress,

@@ -610,9 +610,16 @@ class AccessibilityInstrumentedTest {
         val saveLabel = context.getString(R.string.save_project)
         val saveOptionsLabel = context.getString(R.string.project_save_options)
         val saveAsLabel = context.getString(R.string.save_project_as)
+        val unsavedLabel = context.getString(R.string.linked_project_unsaved)
         val confirmation = context.getString(R.string.replace_project_title)
+        val unsavedWarning = context.getString(
+            R.string.replace_project_unsaved_body,
+            "Linked-project.duckyproject",
+        )
         launchHarness(AccessibilityHarnessActivity.SCREEN_PROJECT).use {
-            val nodes = waitForNodes(setOf(newLabel, openLabel, saveLabel, saveOptionsLabel))
+            val nodes = waitForNodes(
+                setOf(newLabel, openLabel, saveLabel, saveOptionsLabel, unsavedLabel),
+            )
             val newProject = nodes.firstOrNull {
                 it.isClickable && it.effectiveLabel().contains(newLabel)
             }
@@ -625,6 +632,10 @@ class AccessibilityInstrumentedTest {
             assertNotNull("Open project must be an explicit action", open)
             assertNotNull("Save project must be an explicit action", save)
             assertNotNull("Save project options must be an explicit action", saveOptions)
+            assertTrue(
+                "A linked project with local changes must expose its unsaved state",
+                nodes.any { it.effectiveLabel().contains(unsavedLabel) },
+            )
             assertTrue(checkNotNull(newProject).isFocusable)
             assertTrue(checkNotNull(open).isFocusable)
             assertTrue(checkNotNull(save).isFocusable)
@@ -645,7 +656,10 @@ class AccessibilityInstrumentedTest {
             assertTrue(reopened.performAction(AccessibilityNodeInfo.ACTION_CLICK))
             assertTrue(
                 "Replacing a non-empty project must require confirmation",
-                waitForNodes(setOf(confirmation)).any { it.effectiveLabel().contains(confirmation) },
+                waitForNodes(setOf(confirmation, unsavedWarning)).let { warningNodes ->
+                    warningNodes.any { it.effectiveLabel().contains(confirmation) } &&
+                        warningNodes.any { it.effectiveLabel().contains(unsavedWarning) }
+                },
             )
         }
     }
