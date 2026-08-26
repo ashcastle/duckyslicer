@@ -5,6 +5,7 @@ import unittest
 from tools.verify_workflows import (
     ccache_lock_errors,
     literal_run_blocks,
+    manual_dispatch_errors,
     shell_syntax_errors,
 )
 
@@ -50,6 +51,26 @@ CCACHE_TOOL_SHA256=unverified
 """
         errors = ccache_lock_errors(source)
         self.assertGreaterEqual(len(errors), 4)
+
+    def test_accepts_manual_dispatch_recovery_path(self) -> None:
+        source = """on:
+  workflow_dispatch:
+jobs:
+  verify:
+"""
+        self.assertEqual([], manual_dispatch_errors("android.yml", source))
+
+    def test_rejects_workflow_without_manual_dispatch_recovery_path(self) -> None:
+        source = """on:
+  push:
+jobs:
+  verify:
+"""
+        errors = manual_dispatch_errors("android.yml", source)
+        self.assertEqual(
+            ["android.yml: manual dispatch recovery path is required"],
+            errors,
+        )
 
 
 if __name__ == "__main__":

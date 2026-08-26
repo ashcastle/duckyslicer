@@ -122,6 +122,16 @@ def shell_syntax_errors(name: str, workflow: str) -> list[str]:
     return errors
 
 
+def manual_dispatch_errors(name: str, workflow: str) -> list[str]:
+    """Require a workflow to remain recoverable when automatic events are delayed."""
+    header, separator, _ = workflow.partition("\njobs:\n")
+    if not separator:
+        return [f"{name}: missing jobs section"]
+    if "workflow_dispatch:" not in header:
+        return [f"{name}: manual dispatch recovery path is required"]
+    return []
+
+
 def main() -> None:
     errors: list[str] = []
     action_count = 0
@@ -143,6 +153,7 @@ def main() -> None:
                 errors.append(f"{workflow.name}: Action is not pinned to a full commit: {reference}")
 
     android_source = (WORKFLOW_ROOT / "android.yml").read_text(encoding="utf-8")
+    errors.extend(manual_dispatch_errors("android.yml", android_source))
     errors.extend(
         f"ccache.env: {error}"
         for error in ccache_lock_errors(
