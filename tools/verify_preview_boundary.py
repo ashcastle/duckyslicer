@@ -882,7 +882,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "showWorkspaceNavigationLabels(LocalDensity.current.fontScale)",
         "contentDescription = if (showLabels) null else labelText",
         "alwaysShowLabel = showLabels",
-        "workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading)",
+        "workspaceEditingBusy(\n        autoLaying,\n        arranging,\n        slicing,\n        displayedPreviewLoading,",
     ):
         if marker not in workspace:
             raise VerificationError(f"responsive workspace policy is missing: {marker}")

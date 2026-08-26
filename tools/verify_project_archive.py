@@ -28,6 +28,11 @@ MODEL_MIME_TYPES = {
     "model/obj",
     "application/x-tgif",
 }
+GCODE_MIME_TYPES = {
+    "text/x.gcode",
+    "application/x-gcode",
+    "application/gcode",
+}
 REQUIRED_STRINGS = {
     "cancel_project_import",
     "canceling_project_import",
@@ -654,8 +659,22 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         {"*"},
         {r".*\.3mf", r".*\.3MF"},
     )
+    gcode_custom_filter = (
+        expected_category,
+        {"content"},
+        GCODE_MIME_TYPES,
+        set(),
+        set(),
+    )
+    gcode_compatible_filter = (
+        expected_category,
+        {"content"},
+        {"application/octet-stream", "text/plain"},
+        {"*"},
+        {r".*\.gcode", r".*\.GCODE"},
+    )
     if (
-        len(view_filters) != 7
+        len(view_filters) != 9
         or custom_filter not in view_filters
         or compatible_filter not in view_filters
         or profile_custom_filter not in view_filters
@@ -663,9 +682,11 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         or model_custom_filter not in view_filters
         or model_compatible_filter not in view_filters
         or model_archive_filter not in view_filters
+        or gcode_custom_filter not in view_filters
+        or gcode_compatible_filter not in view_filters
     ):
         raise VerificationError(
-            "AndroidManifest.xml must expose only content project/profile/model MIME and extension VIEW filters"
+            "AndroidManifest.xml must expose only content project/profile/model/G-code MIME and extension VIEW filters"
         )
 
     send_filters: list[tuple[set[str], set[str], set[str], set[str], set[str]]] = []

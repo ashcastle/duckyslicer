@@ -371,8 +371,9 @@ def _verify_foreground_service_sources(repository_root: Path) -> None:
         if marker not in sources["slice composition"]
     ]
     ui_markers = (
-        "onSlice = { onSlice(false) }",
-        "onSliceAll = { onSlice(true) }",
+        "onSlice(false)",
+        "onSlice(true)",
+        "gcodePreviewImportModel.clearDocument()",
         "onClick = onSlice",
         "onClick = onSliceAll",
         "onClick = onCancelSlice",

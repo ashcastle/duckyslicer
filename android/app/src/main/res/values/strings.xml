@@ -678,6 +678,13 @@
     <string name="duration_minutes">%1$d min</string>
     <string name="duration_hours_minutes">%1$d h %2$d min</string>
     <string name="filament_usage_compact">%1$.1f g · %2$.2f m</string>
+    <string name="not_available_short">—</string>
+    <string name="open_gcode">Open G-code</string>
+    <string name="close_gcode">Close G-code</string>
+    <string name="cancel_gcode_import">Cancel G-code opening</string>
+    <string name="canceling_gcode_import">Canceling G-code opening…</string>
+    <string name="gcode_open_failed">Couldn’t open this G-code file.</string>
+    <string name="gcode_open_canceled">G-code opening canceled.</string>
     <string name="expand_preview_controls">Expand preview controls</string>
     <string name="collapse_preview_controls">Collapse preview controls</string>
     <string name="layer_range">Layers %1$d–%2$d of %3$d</string>

@@ -314,7 +314,7 @@ def valid_sources() -> dict[str, str]:
             " showWorkspaceNavigationLabels(LocalDensity.current.fontScale) "
             "contentDescription = if (showLabels) null else labelText "
             "alwaysShowLabel = showLabels "
-            "workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading)"
+            "workspaceEditingBusy(\n        autoLaying,\n        arranging,\n        slicing,\n        displayedPreviewLoading,"
             " internal fun facetPaintTarget( "
             "ceil(log2((longestEdge / targetDiameter).toDouble())) "
             "val paintedTargets = HashSet<FacetPaintTarget>() "

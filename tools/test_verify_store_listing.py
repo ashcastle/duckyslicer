@@ -223,7 +223,8 @@ return START_NOT_STICKY
         encoding="utf-8",
     )
     (kotlin_root / "WorkspaceScreen.kt").write_text(
-        "onSlice = { onSlice(false) }\nonSliceAll = { onSlice(true) }\n"
+        "onSlice = { gcodePreviewImportModel.clearDocument(); onSlice(false) }\n"
+        "onSliceAll = { gcodePreviewImportModel.clearDocument(); onSlice(true) }\n"
         "onClick = onSlice\nonClick = onSliceAll\nonClick = onCancelSlice\n",
         encoding="utf-8",
     )

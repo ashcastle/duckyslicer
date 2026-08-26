@@ -1,6 +1,7 @@
 package com.ashcastle.duckyslicer
 
 import java.io.File
+import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -173,6 +174,46 @@ class SliceArtifactStoreTest {
         native.writeBytes(ByteArray(1))
         free = 4
         assertTrue(store.activeOutputIsUnsafe())
+    }
+
+    @Test
+    fun externalDocumentImportIsAtomicBoundedAndDiscardable() = withRoot { root ->
+        val store = testStore(root, maximumOutputBytes = 10, maximumRetainedBytes = 20)
+
+        val retained = store.importDocument(ByteArrayInputStream(ByteArray(7) { 4 }))
+
+        assertEquals(7L, retained.length())
+        assertTrue(retained.extension == "gcode")
+        assertTrue(root.resolve("slices").listFiles { file -> file.name.endsWith(".tmp") }.orEmpty().isEmpty())
+        assertTrue(store.discard(retained))
+        assertFalse(retained.exists())
+    }
+
+    @Test
+    fun canceledOrOversizedExternalDocumentLeavesNoPartialArtifact() = withRoot { root ->
+        val store = testStore(root, maximumOutputBytes = 5, maximumRetainedBytes = 10)
+        var reads = 0
+        assertThrows(GcodeImportCanceledException::class.java) {
+            store.importDocument(
+                input = ByteArrayInputStream(ByteArray(5)),
+                cancellationRequested = { reads++ > 0 },
+            )
+        }
+        assertTrue(root.resolve("slices").listFiles().orEmpty().isEmpty())
+
+        assertThrows(IllegalArgumentException::class.java) {
+            store.importDocument(ByteArrayInputStream(ByteArray(6)))
+        }
+        assertTrue(root.resolve("slices").listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
+    fun discardRejectsFilesOutsideOwnedSliceDirectory() = withRoot { root ->
+        val store = testStore(root)
+        val outside = root.resolve("outside.gcode").apply { writeText("G1 X1") }
+
+        assertFalse(store.discard(outside))
+        assertTrue(outside.isFile)
     }
 
     private fun testStore(

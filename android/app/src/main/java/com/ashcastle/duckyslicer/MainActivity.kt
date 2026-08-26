@@ -27,15 +27,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.repeatOnLifecycle
 import java.util.UUID
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 
 private val DuckyColors = darkColorScheme(
     primary = Color(0xFFF6C945),
@@ -53,6 +48,28 @@ internal const val STL_DOCUMENT_MIME_TYPE = "model/stl"
 private const val DEFAULT_PROJECT_ARCHIVE_NAME = "DuckySlicer-project$PROJECT_ARCHIVE_FILE_EXTENSION"
 private const val DEFAULT_THREE_MF_NAME = "DuckySlicer-model.3mf"
 private const val DEFAULT_PROFILE_BUNDLE_NAME = "DuckySlicer-profiles$PROFILE_BUNDLE_FILE_EXTENSION"
+
+private fun remoteOperationMessageText(
+    resources: Resources,
+    message: RemoteOperationMessage?,
+): String? = when (message) {
+    RemoteOperationMessage.CONNECTED -> resources.getString(R.string.device_connected)
+    RemoteOperationMessage.UPLOADED -> resources.getString(R.string.gcode_sent)
+    RemoteOperationMessage.STARTED -> resources.getString(R.string.print_started)
+    RemoteOperationMessage.PAUSED -> resources.getString(R.string.print_paused)
+    RemoteOperationMessage.RESUMED -> resources.getString(R.string.print_resumed)
+    RemoteOperationMessage.CANCELED -> resources.getString(R.string.print_canceled)
+    RemoteOperationMessage.UPLOAD_CANCELED -> resources.getString(R.string.upload_canceled)
+    RemoteOperationMessage.REQUEST_CANCELED -> resources.getString(R.string.remote_request_canceled)
+    RemoteOperationMessage.PROFILE_SAVED -> resources.getString(R.string.device_saved)
+    RemoteOperationMessage.PROFILE_DELETED -> resources.getString(R.string.device_deleted)
+    RemoteOperationMessage.ACCESS_DENIED -> resources.getString(R.string.device_access_denied)
+    RemoteOperationMessage.CONNECTION_FAILED -> resources.getString(R.string.device_connection_error)
+    RemoteOperationMessage.COMMAND_FAILED -> resources.getString(R.string.device_command_error)
+    RemoteOperationMessage.PROFILE_SAVE_FAILED -> resources.getString(R.string.device_save_error)
+    RemoteOperationMessage.STORAGE_UNAVAILABLE -> resources.getString(R.string.saved_data_unavailable)
+    null -> null
+}
 
 data class ModelInfo(
     val fileName: String,
@@ -262,6 +279,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var externalModelModel: ExternalModelRequestViewModel
     private lateinit var externalProfileModel: ExternalProfileRequestViewModel
     private lateinit var externalProjectModel: ExternalProjectRequestViewModel
+    private lateinit var externalGcodeModel: ExternalGcodeRequestViewModel
     private lateinit var profileLibraryModel: ProfileLibraryViewModel
     private lateinit var projectTransferModel: ProjectTransferViewModel
 
@@ -278,11 +296,15 @@ class MainActivity : ComponentActivity() {
         externalModelModel = ViewModelProvider(this)[ExternalModelRequestViewModel::class.java]
         externalProfileModel = ViewModelProvider(this)[ExternalProfileRequestViewModel::class.java]
         externalProjectModel = ViewModelProvider(this)[ExternalProjectRequestViewModel::class.java]
+        externalGcodeModel = ViewModelProvider(this)[ExternalGcodeRequestViewModel::class.java]
+        val gcodePreviewImportModel =
+            ViewModelProvider(this)[GcodePreviewImportViewModel::class.java]
         projectTransferModel = ViewModelProvider(this)[ProjectTransferViewModel::class.java]
         if (savedInstanceState == null) {
             externalModelModel.enqueue(intent)
             externalProfileModel.enqueue(intent)
             externalProjectModel.enqueue(intent)
+            externalGcodeModel.enqueue(intent)
         }
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
@@ -296,27 +318,46 @@ class MainActivity : ComponentActivity() {
                     externalProjectModel.request.collectAsStateWithLifecycle()
                 val externalProfileRequest by
                     externalProfileModel.request.collectAsStateWithLifecycle()
-                DuckySlicerScreen(
-                    sliceOperationModel = sliceOperationModel,
-                    plateSliceBatchModel = plateSliceBatchModel,
-                    remoteOperationModel = remoteOperationModel,
-                    profileLibraryModel = profileLibraryModel,
-                    appSettingsModel = appSettingsModel,
-                    gcodeExportModel = gcodeExportModel,
-                    supportReportExportModel = supportReportExportModel,
-                    projectTransferModel = projectTransferModel,
-                    externalModelRequest = externalModelRequest,
-                    onExternalModelRequestStarted = externalModelModel::markStarted,
-                    onExternalModelRequestConsumed = externalModelModel::consume,
-                    onExternalModelRequestDiscarded = externalModelModel::discardUnstarted,
-                    externalProfileRequest = externalProfileRequest,
-                    onExternalProfileRequestStarted = externalProfileModel::markStarted,
-                    onExternalProfileRequestConsumed = externalProfileModel::consume,
-                    externalProjectRequest = externalProjectRequest,
-                    onExternalProjectRequestStarted = externalProjectModel::markStarted,
-                    onExternalProjectRequestConsumed = externalProjectModel::consume,
-                    onExternalProjectRequestDiscarded = externalProjectModel::discardUnstarted,
+                val externalGcodeRequest by
+                    externalGcodeModel.request.collectAsStateWithLifecycle()
+                val gcodePreviewImportState by
+                    gcodePreviewImportModel.state.collectAsStateWithLifecycle()
+                val foregroundSliceState by
+                    sliceOperationModel.state.collectAsStateWithLifecycle()
+                ExternalGcodeRequestStartEffect(
+                    request = externalGcodeRequest,
+                    state = gcodePreviewImportState,
+                    enabled = !foregroundSliceState.busy,
+                    onOpen = gcodePreviewImportModel::open,
+                    onRequestStarted = externalGcodeModel::markStarted,
+                    onRequestConsumed = externalGcodeModel::consume,
+                    onCancel = gcodePreviewImportModel::cancel,
                 )
+                androidx.compose.runtime.CompositionLocalProvider(
+                    LocalGcodePreviewImportModel provides gcodePreviewImportModel,
+                ) {
+                    DuckySlicerScreen(
+                        sliceOperationModel = sliceOperationModel,
+                        plateSliceBatchModel = plateSliceBatchModel,
+                        remoteOperationModel = remoteOperationModel,
+                        profileLibraryModel = profileLibraryModel,
+                        appSettingsModel = appSettingsModel,
+                        gcodeExportModel = gcodeExportModel,
+                        supportReportExportModel = supportReportExportModel,
+                        projectTransferModel = projectTransferModel,
+                        externalModelRequest = externalModelRequest,
+                        onExternalModelRequestStarted = externalModelModel::markStarted,
+                        onExternalModelRequestConsumed = externalModelModel::consume,
+                        onExternalModelRequestDiscarded = externalModelModel::discardUnstarted,
+                        externalProfileRequest = externalProfileRequest,
+                        onExternalProfileRequestStarted = externalProfileModel::markStarted,
+                        onExternalProfileRequestConsumed = externalProfileModel::consume,
+                        externalProjectRequest = externalProjectRequest,
+                        onExternalProjectRequestStarted = externalProjectModel::markStarted,
+                        onExternalProjectRequestConsumed = externalProjectModel::consume,
+                        onExternalProjectRequestDiscarded = externalProjectModel::discardUnstarted,
+                    )
+                }
             }
         }
     }
@@ -327,6 +368,7 @@ class MainActivity : ComponentActivity() {
         externalModelModel.enqueue(intent)
         externalProfileModel.enqueue(intent)
         externalProjectModel.enqueue(intent)
+        externalGcodeModel.enqueue(intent)
     }
 
     override fun onStop() {
@@ -738,20 +780,6 @@ private fun DuckySlicerScreen(
     val recentProjectRemoveError = resources.getString(R.string.recent_project_remove_error)
     val savedDataUnavailable = resources.getString(R.string.saved_data_unavailable)
     val previewError = resources.getString(R.string.preview_error)
-    val remoteSavedNotice = resources.getString(R.string.device_saved)
-    val remoteDeletedNotice = resources.getString(R.string.device_deleted)
-    val remoteConnectedNotice = resources.getString(R.string.device_connected)
-    val remoteUploadNotice = resources.getString(R.string.gcode_sent)
-    val remoteStartedNotice = resources.getString(R.string.print_started)
-    val remotePausedNotice = resources.getString(R.string.print_paused)
-    val remoteResumedNotice = resources.getString(R.string.print_resumed)
-    val remoteCanceledNotice = resources.getString(R.string.print_canceled)
-    val remoteUploadCanceledNotice = resources.getString(R.string.upload_canceled)
-    val remoteRequestCanceledNotice = resources.getString(R.string.remote_request_canceled)
-    val remoteConnectionError = resources.getString(R.string.device_connection_error)
-    val remoteUnauthorizedError = resources.getString(R.string.device_access_denied)
-    val remoteCommandError = resources.getString(R.string.device_command_error)
-    val remoteSaveError = resources.getString(R.string.device_save_error)
 
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -796,7 +824,6 @@ private fun DuckySlicerScreen(
     val plateSliceBatchProgress = plateSliceBatchState.currentNumber?.let { current ->
         PlateSliceBatchProgress(current, plateSliceBatchState.plateIds.size)
     }
-    val previewLoading = sliceOperationState.previewLoading
     val projectTransferState by projectTransferModel.state.collectAsStateWithLifecycle()
     val projectTransferBusy = projectTransferState.busy ||
         projectTransferState.completion != null || projectTransferState.editCompletion != null
@@ -820,6 +847,7 @@ private fun DuckySlicerScreen(
         visibleEdit == ProjectEditKind.SPLIT_PARTS
     val cutting = visibleEdit == ProjectEditKind.CUT
     val simplifying = visibleEdit == ProjectEditKind.SIMPLIFY
+    val previewLoading = sliceOperationState.previewLoading
     val projectFileBusy = !projectTransferState.restored ||
         (projectTransferBusy && visibleEdit == null)
     val projectHistory = projectTransferState.history
@@ -863,24 +891,7 @@ private fun DuckySlicerScreen(
     val remoteRequestCancellationRequested =
         remoteOperationState.requestCancellationRequestedFor(selectedRemoteDeviceId)
     val remoteOperationMessage = remoteOperationState.messageFor(selectedRemoteDeviceId)
-    val remoteMessage = when (remoteOperationMessage) {
-        RemoteOperationMessage.CONNECTED -> remoteConnectedNotice
-        RemoteOperationMessage.UPLOADED -> remoteUploadNotice
-        RemoteOperationMessage.STARTED -> remoteStartedNotice
-        RemoteOperationMessage.PAUSED -> remotePausedNotice
-        RemoteOperationMessage.RESUMED -> remoteResumedNotice
-        RemoteOperationMessage.CANCELED -> remoteCanceledNotice
-        RemoteOperationMessage.UPLOAD_CANCELED -> remoteUploadCanceledNotice
-        RemoteOperationMessage.REQUEST_CANCELED -> remoteRequestCanceledNotice
-        RemoteOperationMessage.PROFILE_SAVED -> remoteSavedNotice
-        RemoteOperationMessage.PROFILE_DELETED -> remoteDeletedNotice
-        RemoteOperationMessage.ACCESS_DENIED -> remoteUnauthorizedError
-        RemoteOperationMessage.CONNECTION_FAILED -> remoteConnectionError
-        RemoteOperationMessage.COMMAND_FAILED -> remoteCommandError
-        RemoteOperationMessage.PROFILE_SAVE_FAILED -> remoteSaveError
-        RemoteOperationMessage.STORAGE_UNAVAILABLE -> savedDataUnavailable
-        null -> null
-    }
+    val remoteMessage = remoteOperationMessageText(resources, remoteOperationMessage)
     val remoteMessageIsError = remoteOperationMessage?.isError ?: false
     val remoteBusy = remoteOperationState.busy
 
@@ -1487,7 +1498,10 @@ private fun DuckySlicerScreen(
             )
         }
     }
-    LaunchedEffect(selectedTab, sliceOutcome?.output?.absolutePath) {
+    LaunchedEffect(
+        selectedTab,
+        sliceOutcome?.output?.absolutePath,
+    ) {
         val completed = sliceOutcome
         if (
             selectedTab == WorkspaceTab.PREVIEW &&
@@ -1540,34 +1554,13 @@ private fun DuckySlicerScreen(
 
     fun selectedRemoteDevice(): RemoteDeviceProfile? = remoteOperationState.selectedProfile()
 
-    LaunchedEffect(
-        lifecycleOwner,
-        selectedTab,
-        selectedRemoteDeviceId,
-        appSettings.connectionTimeoutSeconds,
-    ) {
-        val profileId = selectedRemoteDeviceId
-        if (selectedTab != WorkspaceTab.DEVICE || profileId == null) return@LaunchedEffect
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            try {
-                while (currentCoroutineContext().isActive) {
-                    val current = remoteOperationModel.state.value
-                    remoteOperationModel.refreshInBackground(
-                        profileId,
-                        appSettings.connectionTimeoutSeconds,
-                    )
-                    delay(
-                        remoteMonitoringIntervalMillis(
-                            current.statusFor(profileId),
-                            current.messageFor(profileId),
-                        ),
-                    )
-                }
-            } finally {
-                remoteOperationModel.stopBackgroundRefresh(profileId)
-            }
-        }
-    }
+    RemoteMonitoringEffect(
+        lifecycleOwner = lifecycleOwner,
+        selectedTab = selectedTab,
+        profileId = selectedRemoteDeviceId,
+        connectionTimeoutSeconds = appSettings.connectionTimeoutSeconds,
+        model = remoteOperationModel,
+    )
 
     WorkspaceScreen(
         selectedTab = selectedTab,
@@ -1628,7 +1621,10 @@ private fun DuckySlicerScreen(
         notice = notice,
         onTabSelected = { tab ->
             selectedTab = tab
-            if (tab == WorkspaceTab.PREVIEW && sliceOutcome != null && layerPreview == null) {
+            if (
+                tab == WorkspaceTab.PREVIEW &&
+                sliceOutcome != null && layerPreview == null
+            ) {
                 loadPreviewRange(0, Int.MAX_VALUE)
             }
         },

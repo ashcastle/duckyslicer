@@ -23,16 +23,22 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelProvider
 import java.io.File
 
 /** Debug-only host for deterministic device accessibility regressions. */
 class AccessibilityHarnessActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val gcodePreviewImportModel =
+            ViewModelProvider(this)[GcodePreviewImportViewModel::class.java]
         setContent {
             MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
-                    when (intent.getStringExtra(EXTRA_SCREEN)) {
+                CompositionLocalProvider(
+                    LocalGcodePreviewImportModel provides gcodePreviewImportModel,
+                ) {
+                    Surface(Modifier.fillMaxSize()) {
+                        when (intent.getStringExtra(EXTRA_SCREEN)) {
                         SCREEN_PROFILE -> ProfileAccessibilityHarness()
                         SCREEN_DEVICE -> DeviceAccessibilityHarness()
                         SCREEN_DEVICE_TELEMETRY -> DeviceAccessibilityHarness(telemetry = true)
@@ -197,7 +203,8 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             }
                         }
                         SCREEN_WORKSPACE_PROFILES -> ProfileSettingsAccessibilityHarness()
-                        else -> PreviewAccessibilityHarness()
+                            else -> PreviewAccessibilityHarness()
+                        }
                     }
                 }
             }

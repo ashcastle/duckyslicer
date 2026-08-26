@@ -12,20 +12,22 @@ class PreviewSummaryTest {
     fun sliceResultKeepsTimeMassAndLengthWithoutReadingGcode() {
         val summary = outcome(seconds = 5_430f, millimeters = 4_250f, grams = 12.6f).previewSummary()
 
-        assertEquals(1, summary.duration.hours)
-        assertEquals(31, summary.duration.minutes)
-        assertFalse(summary.duration.underOneMinute)
-        assertEquals(4.25f, summary.filamentMeters, 0.001f)
-        assertEquals(12.6f, summary.filamentGrams, 0.001f)
+        val duration = requireNotNull(summary.duration)
+        assertEquals(1, duration.hours)
+        assertEquals(31, duration.minutes)
+        assertFalse(duration.underOneMinute)
+        assertEquals(4.25f, requireNotNull(summary.filamentMeters), 0.001f)
+        assertEquals(12.6f, requireNotNull(summary.filamentGrams), 0.001f)
     }
 
     @Test
     fun subMinuteEstimateUsesCompactFallback() {
         val summary = outcome(seconds = 42f, millimeters = 80f, grams = 0.2f).previewSummary()
 
-        assertTrue(summary.duration.underOneMinute)
-        assertEquals(0, summary.duration.hours)
-        assertEquals(1, summary.duration.minutes)
+        val duration = requireNotNull(summary.duration)
+        assertTrue(duration.underOneMinute)
+        assertEquals(0, duration.hours)
+        assertEquals(1, duration.minutes)
     }
 
     @Test

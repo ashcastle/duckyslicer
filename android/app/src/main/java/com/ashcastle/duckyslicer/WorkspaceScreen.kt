@@ -622,6 +622,22 @@ internal fun WorkspaceScreen(
     onRemoteResume: () -> Unit,
     onRemoteCancel: () -> Unit,
 ) = BoxWithConstraints {
+    val gcodePreviewImportModel = LocalGcodePreviewImportModel.current
+    var gcodePreviewMessage by remember { mutableStateOf<String?>(null) }
+    val importedGcode = rememberGcodePreviewUiBinding(
+        model = gcodePreviewImportModel,
+        onSucceeded = { onTabSelected(WorkspaceTab.PREVIEW) },
+        onPresentation = { nextNotice, nextError ->
+            gcodePreviewMessage = nextError ?: nextNotice
+        },
+    )
+    val importedGcodeState = importedGcode.state
+    val displayedPreview = if (importedGcodeState.document != null) {
+        importedGcodeState.document.preview
+    } else {
+        layerPreview
+    }
+    val displayedPreviewLoading = previewLoading || importedGcodeState.busy
     val exportingGcode = gcodeExportState.busy
     val gcodeExportCancellationRequested = gcodeExportState.cancellationRequested
     val selectedObject = projectObjects.firstOrNull { it.id == selectedObjectId }
@@ -636,7 +652,12 @@ internal fun WorkspaceScreen(
         listOf(it.maxX - it.minX, it.maxY - it.minY, it.maxZ - it.minZ)
     }
     val modelTransform = selectedObject?.transform ?: ModelTransform()
-    val editingBusy = workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading) ||
+    val editingBusy = workspaceEditingBusy(
+        autoLaying,
+        arranging,
+        slicing,
+        displayedPreviewLoading,
+    ) ||
         splitting || cutting || simplifying
     val tabletLayout = useWorkspaceNavigationRail(maxWidth.value, maxHeight.value)
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
@@ -690,12 +711,14 @@ internal fun WorkspaceScreen(
         projectPlates.sumOf { plate -> plate.objects.sumOf { it.volumes.size } } +
         projectObjects.sumOf { it.volumes.size } <= ProjectStore.MAX_PROJECT_VOLUMES
 
-    LaunchedEffect(error, notice) {
-        val message = error ?: notice ?: return@LaunchedEffect
+    LaunchedEffect(error, notice, gcodePreviewMessage) {
+        val message = error ?: notice ?: gcodePreviewMessage ?: return@LaunchedEffect
+        val presentedGcodeMessage = error == null && notice == null && gcodePreviewMessage != null
         statusHostState.showSnackbar(
             message = message,
             duration = if (error != null) SnackbarDuration.Long else SnackbarDuration.Short,
         )
+        if (presentedGcodeMessage) gcodePreviewMessage = null
     }
 
     fun beginBrimEditing(projectObject: ProjectObject) {
@@ -769,7 +792,7 @@ internal fun WorkspaceScreen(
                 BedScene(
                     projectObjects = projectObjects,
                     selectedObjectId = selectedObjectId,
-                    preview = if (selectedTab == WorkspaceTab.PREVIEW) layerPreview else null,
+                    preview = if (selectedTab == WorkspaceTab.PREVIEW) displayedPreview else null,
                     filamentColors = filamentColors,
                     bedSizeX = sliceOptions.bedSizeX,
                     bedSizeY = sliceOptions.bedSizeY,
@@ -853,6 +876,9 @@ internal fun WorkspaceScreen(
 
             WorkspaceMenu(
                 importing = importing,
+                gcodeImporting = importedGcodeState.importing,
+                gcodeImportCancellationRequested = importedGcodeState.cancellationRequested,
+                gcodeImported = importedGcodeState.document != null,
                 editingBusy = editingBusy,
                 profileBusy = profileBusy,
                 profileTransferDirection = profileTransferDirection,
@@ -863,7 +889,7 @@ internal fun WorkspaceScreen(
                 projectExporting = projectExporting,
                 projectTransferCancellationRequested = projectTransferCancellationRequested,
                 slicing = slicing,
-                previewLoading = previewLoading,
+                previewLoading = displayedPreviewLoading,
                 canExportModel = projectObjects.isNotEmpty(),
                 canExportSelectedStl = selectedObjectId != null,
                 canExport = sliceOutcome != null && !exportingGcode,
@@ -873,6 +899,9 @@ internal fun WorkspaceScreen(
                 exportCurrentFile = gcodeExportState.currentFile,
                 exportTotalFiles = gcodeExportState.totalFiles,
                 onImport = onChoose,
+                onOpenGcode = importedGcode.openPicker,
+                onCancelGcodeImport = gcodePreviewImportModel::cancel,
+                onCloseGcode = gcodePreviewImportModel::clearDocument,
                 onImportProfiles = onImportProfiles,
                 onExportProfiles = onExportProfiles,
                 onCancelProfileTransfer = onCancelProfileTransfer,
@@ -1114,7 +1143,7 @@ internal fun WorkspaceScreen(
                     importing = importing || editingBusy,
                     projectEditActive = projectEditActive,
                     projectEditCancellationRequested = projectEditCancellationRequested,
-                    previewLoading = previewLoading,
+                    previewLoading = displayedPreviewLoading,
                     slicing = slicing,
                     cancellationRequested = sliceCancellationRequested,
                     progress = sliceProgress.percent,
@@ -1122,8 +1151,14 @@ internal fun WorkspaceScreen(
                     sliceAllAvailable = projectPlates.count { it.objects.isNotEmpty() } >= 2,
                     error = error,
                     notice = notice,
-                    onSlice = { onSlice(false) },
-                    onSliceAll = { onSlice(true) },
+                    onSlice = {
+                        gcodePreviewImportModel.clearDocument()
+                        onSlice(false)
+                    },
+                    onSliceAll = {
+                        gcodePreviewImportModel.clearDocument()
+                        onSlice(true)
+                    },
                     onCancelSlice = onCancelSlice,
                     onCancelProjectEdit = onCancelProjectEdit,
                     onOptionsChanged = onSliceOptionsChanged,
@@ -1143,10 +1178,12 @@ internal fun WorkspaceScreen(
                 )
 
                 WorkspaceTab.PREVIEW -> PreviewSheet(
-                    outcome = previewOutcome,
-                    preview = layerPreview,
+                    outcome = previewOutcome.takeIf { importedGcodeState.document == null },
+                    importedSummary = importedGcodeState.document?.summary,
+                    imported = importedGcodeState.document != null,
+                    preview = displayedPreview,
                     stale = previewStale,
-                    loading = previewLoading,
+                    loading = displayedPreviewLoading,
                     error = error,
                     expanded = previewControlsExpanded,
                     onExpandedChanged = { previewControlsExpanded = it },
@@ -1174,7 +1211,13 @@ internal fun WorkspaceScreen(
                             visibleToolpathRoles - role
                         }
                     },
-                    onLayerRangeSelected = onLayerRangeSelected,
+                    onLayerRangeSelected = { startLayer, endLayer ->
+                        if (importedGcodeState.document != null) {
+                            gcodePreviewImportModel.loadRange(startLayer, endLayer)
+                        } else {
+                            onLayerRangeSelected(startLayer, endLayer)
+                        }
+                    },
                     onAddLayerPause = onAddLayerPause,
                     onRemoveLayerPause = onRemoveLayerPause,
                     onPutLayerFilamentChange = onPutLayerFilamentChange,
@@ -1182,6 +1225,7 @@ internal fun WorkspaceScreen(
                     onPutLayerCustomGCode = onPutLayerCustomGCode,
                     onRemoveLayerCustomGCode = onRemoveLayerCustomGCode,
                     onGoToSlice = { onTabSelected(WorkspaceTab.SLICE) },
+                    onOpenGcode = importedGcode.openPicker,
                     modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
 
@@ -3476,6 +3520,9 @@ private fun PlateSwitcher(
 @Composable
 private fun WorkspaceMenu(
     importing: Boolean,
+    gcodeImporting: Boolean,
+    gcodeImportCancellationRequested: Boolean,
+    gcodeImported: Boolean,
     editingBusy: Boolean,
     profileBusy: Boolean,
     profileTransferDirection: ProfileTransferDirection?,
@@ -3497,6 +3544,9 @@ private fun WorkspaceMenu(
     exportTotalFiles: Int,
     canArrange: Boolean,
     onImport: () -> Unit,
+    onOpenGcode: () -> Unit,
+    onCancelGcodeImport: () -> Unit,
+    onCloseGcode: () -> Unit,
     onImportProfiles: () -> Unit,
     onExportProfiles: () -> Unit,
     onCancelProfileTransfer: () -> Unit,
@@ -3531,7 +3581,10 @@ private fun WorkspaceMenu(
                     exportProgressDescription?.let { stateDescription = it }
                 },
             ) {
-                if (importing || editingBusy || profileTransferDirection != null || exportingGcode) {
+                if (
+                    importing || gcodeImporting || editingBusy ||
+                    profileTransferDirection != null || exportingGcode
+                ) {
                     CircularProgressIndicator(Modifier.size(22.dp), color = WorkspaceYellow, strokeWidth = 2.dp)
                 } else {
                     Icon(Icons.Default.Menu, contentDescription = null)
@@ -3539,6 +3592,37 @@ private fun WorkspaceMenu(
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (gcodeImporting) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(
+                                if (gcodeImportCancellationRequested) {
+                                    R.string.canceling_gcode_import
+                                } else {
+                                    R.string.cancel_gcode_import
+                                },
+                            ),
+                        )
+                    },
+                    leadingIcon = { Icon(Icons.Default.Close, null) },
+                    enabled = !gcodeImportCancellationRequested,
+                    onClick = {
+                        expanded = false
+                        onCancelGcodeImport()
+                    },
+                )
+            }
+            if (gcodeImported && !previewLoading) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.close_gcode)) },
+                    leadingIcon = { Icon(Icons.Default.Close, null) },
+                    onClick = {
+                        expanded = false
+                        onCloseGcode()
+                    },
+                )
+            }
             if (projectEditActive) {
                 DropdownMenuItem(
                     text = {
@@ -3614,6 +3698,15 @@ private fun WorkspaceMenu(
                 onClick = {
                     expanded = false
                     onImport()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.open_gcode)) },
+                leadingIcon = { Icon(Icons.Default.FileOpen, null) },
+                enabled = !gcodeImporting && !slicing && !previewLoading,
+                onClick = {
+                    expanded = false
+                    onOpenGcode()
                 },
             )
             DropdownMenuItem(
@@ -6915,6 +7008,8 @@ private fun SliceSheet(
 @Composable
 private fun PreviewSheet(
     outcome: SliceOutcome?,
+    importedSummary: PreviewSummary?,
+    imported: Boolean,
     preview: GcodeLayerPreview?,
     stale: Boolean,
     loading: Boolean,
@@ -6943,6 +7038,7 @@ private fun PreviewSheet(
     onPutLayerCustomGCode: (Int, Float, String) -> Unit,
     onRemoveLayerCustomGCode: (Float) -> Unit,
     onGoToSlice: () -> Unit,
+    onOpenGcode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -6960,15 +7056,21 @@ private fun PreviewSheet(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (outcome == null) {
+            val summary = importedSummary ?: outcome?.previewSummary()
+            if (summary == null) {
                 Text(stringResource(R.string.preview_requires_slice), fontWeight = FontWeight.SemiBold)
-                Button(onClick = onGoToSlice, colors = primaryButtonColors()) {
-                    Text(stringResource(R.string.tab_slice))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onGoToSlice, colors = primaryButtonColors()) {
+                        Text(stringResource(R.string.tab_slice))
+                    }
+                    OutlinedButton(onClick = onOpenGcode) {
+                        Text(stringResource(R.string.open_gcode))
+                    }
                 }
                 return@Column
             }
             PreviewSummaryHeader(
-                summary = outcome.previewSummary(),
+                summary = summary,
                 expanded = expanded,
                 loading = loading,
                 onToggle = { onExpandedChanged(!expanded) },
@@ -6980,7 +7082,7 @@ private fun PreviewSheet(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            if (SliceWarningCode.NOZZLE_HARDNESS in outcome.warnings) {
+            if (SliceWarningCode.NOZZLE_HARDNESS in outcome?.warnings.orEmpty()) {
                 Text(
                     stringResource(R.string.nozzle_hardness_warning),
                     color = Color(0xFFFFCC4D),
@@ -7015,6 +7117,7 @@ private fun PreviewSheet(
                             layerFilamentChanges = layerFilamentChanges,
                             layerCustomGCodeEvents = layerCustomGCodeEvents,
                             layerFilamentChangesAvailable = layerFilamentChangesAvailable,
+                            layerEventsEditable = !imported,
                             toolpathOpacity = toolpathOpacity,
                             onToolpathOpacityChanged = onToolpathOpacityChanged,
                             toolpathDepthContrast = toolpathDepthContrast,
@@ -7046,6 +7149,7 @@ private fun PreviewSummaryHeader(
     onToggle: () -> Unit,
 ) {
     val durationText = when {
+        summary.duration == null -> stringResource(R.string.not_available_short)
         summary.duration.underOneMinute -> stringResource(R.string.duration_under_one_minute)
         summary.duration.hours > 0 -> stringResource(
             R.string.duration_hours_minutes,
@@ -7053,6 +7157,15 @@ private fun PreviewSummaryHeader(
             summary.duration.minutes,
         )
         else -> stringResource(R.string.duration_minutes, summary.duration.minutes)
+    }
+    val filamentText = if (summary.filamentGrams != null && summary.filamentMeters != null) {
+        stringResource(
+            R.string.filament_usage_compact,
+            summary.filamentGrams,
+            summary.filamentMeters,
+        )
+    } else {
+        stringResource(R.string.not_available_short)
     }
     val toggleDescription = stringResource(
         if (expanded) R.string.collapse_preview_controls else R.string.expand_preview_controls,
@@ -7089,11 +7202,7 @@ private fun PreviewSummaryHeader(
                 tint = WorkspaceYellow,
             )
             Text(
-                stringResource(
-                    R.string.filament_usage_compact,
-                    summary.filamentGrams,
-                    summary.filamentMeters,
-                ),
+                filamentText,
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -7126,6 +7235,7 @@ internal fun PreviewControls(
     layerFilamentChanges: LayerFilamentChanges = LayerFilamentChanges(),
     layerCustomGCodeEvents: LayerCustomGCodeEvents = LayerCustomGCodeEvents(),
     layerFilamentChangesAvailable: Boolean = false,
+    layerEventsEditable: Boolean = true,
     toolpathOpacity: Float,
     onToolpathOpacityChanged: (Float) -> Unit,
     toolpathDepthContrast: Float,
@@ -7304,6 +7414,7 @@ internal fun PreviewControls(
                 )
             }
         }
+        if (layerEventsEditable) {
         val selectedLayerIndex = selectedRange.endInclusive.roundToInt()
         val selectedLayerZ = preview.printZForLayer(selectedLayerIndex)
         val selectedPause = selectedLayerZ?.let(layerPauseEvents::eventAt)
@@ -7524,6 +7635,7 @@ internal fun PreviewControls(
                     }
                 }
             }
+        }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),

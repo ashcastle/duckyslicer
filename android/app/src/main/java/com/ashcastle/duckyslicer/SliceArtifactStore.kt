@@ -4,12 +4,15 @@ import java.io.Closeable
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.io.RandomAccessFile
 import java.nio.channels.FileLock
 import java.nio.channels.OverlappingFileLockException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+
+internal class GcodeImportCanceledException : Exception()
 
 internal class SliceArtifactStore(
     private val filesRoot: File,
@@ -87,6 +90,62 @@ internal class SliceArtifactStore(
         } finally {
             deleteUnlocked(temporary)
         }
+    }
+
+    /** Copies an external G-code stream into the same bounded, private artifact store. */
+    fun importDocument(
+        input: InputStream,
+        protected: Set<File> = emptySet(),
+        cancellationRequested: () -> Boolean = { false },
+    ): File {
+        requirePolicy()
+        check(filesRoot.isDirectory || filesRoot.mkdirs()) { "G-code storage is unavailable" }
+        check(outputRoot.isDirectory || outputRoot.mkdirs()) { "G-code storage is unavailable" }
+        cleanupTemporaryFiles()
+        prune(protected)
+        check(usableSpace() >= minimumFreeBytes) { "Not enough free space to import G-code" }
+
+        val output = File(outputRoot, "${System.currentTimeMillis()}-${java.util.UUID.randomUUID()}.gcode")
+        val temporary = File(outputRoot, ".${output.name}.tmp")
+        try {
+            var copied = 0L
+            FileOutputStream(temporary).use { destination ->
+                val buffer = ByteArray(COPY_BUFFER_BYTES)
+                while (true) {
+                    if (cancellationRequested()) throw GcodeImportCanceledException()
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    copied = saturatingAdd(copied, count.toLong())
+                    require(copied <= maximumOutputBytes) { "G-code document is too large" }
+                    destination.write(buffer, 0, count)
+                }
+                destination.flush()
+                destination.fd.sync()
+            }
+            if (cancellationRequested()) throw GcodeImportCanceledException()
+            require(copied > 0L) { "G-code document is empty" }
+            check(move(temporary, output)) { "G-code document could not be finalized" }
+            check(output.isFile && output.length() == copied) { "G-code document is unavailable" }
+            prune(protected + output)
+            if (usableSpace() < minimumFreeBytes) {
+                deleteUnlocked(output)
+                error("Not enough free space to retain G-code")
+            }
+            return output
+        } catch (failure: Exception) {
+            deleteUnlocked(output)
+            throw failure
+        } finally {
+            deleteUnlocked(temporary)
+        }
+    }
+
+    /** Deletes only a complete direct child owned by this store. */
+    fun discard(file: File): Boolean {
+        val canonical = runCatching { file.canonicalFile }.getOrNull() ?: return false
+        val canonicalRoot = runCatching { outputRoot.canonicalFile }.getOrNull() ?: return false
+        if (canonical.parentFile != canonicalRoot || canonical.extension != "gcode") return false
+        return deleteUnlocked(canonical)
     }
 
     fun activeOutputIsUnsafe(): Boolean {

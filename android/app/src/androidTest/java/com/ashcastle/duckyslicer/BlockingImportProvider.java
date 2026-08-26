@@ -25,6 +25,7 @@ public final class BlockingImportProvider extends ContentProvider {
             "content://" + AUTHORITY + "/profiles.duckyprofiles"
     );
     public static final Uri MODEL_URI = Uri.parse("content://" + AUTHORITY + "/blocked-model.stl");
+    public static final Uri GCODE_URI = Uri.parse("content://" + AUTHORITY + "/preview.gcode");
     public static final String METHOD_PREPARE = "prepare";
     public static final String METHOD_PREPARE_DIRECT = "prepare_direct";
     public static final String METHOD_PREPARE_OPEN_BLOCK = "prepare_open_block";
@@ -54,6 +55,9 @@ public final class BlockingImportProvider extends ContentProvider {
         if (PROFILE_URI.equals(uri)) {
             return "application/vnd.duckyslicer.profiles+json";
         }
+        if (GCODE_URI.equals(uri)) {
+            return "text/x.gcode";
+        }
         return "application/vnd.duckyslicer.project+zip";
     }
 
@@ -74,6 +78,8 @@ public final class BlockingImportProvider extends ContentProvider {
             if (OpenableColumns.DISPLAY_NAME.equals(column)) {
                 if (MODEL_URI.equals(uri)) {
                     row.add("blocked-model.stl");
+                } else if (GCODE_URI.equals(uri)) {
+                    row.add("preview.gcode");
                 } else if (PROFILE_URI.equals(uri)) {
                     row.add("profiles.duckyprofiles");
                 } else {

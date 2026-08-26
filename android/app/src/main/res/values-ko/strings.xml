@@ -678,6 +678,13 @@
     <string name="duration_minutes">%1$d분</string>
     <string name="duration_hours_minutes">%1$d시간 %2$d분</string>
     <string name="filament_usage_compact">%1$.1f g · %2$.2f m</string>
+    <string name="not_available_short">—</string>
+    <string name="open_gcode">G-code 열기</string>
+    <string name="close_gcode">G-code 닫기</string>
+    <string name="cancel_gcode_import">G-code 열기 취소</string>
+    <string name="canceling_gcode_import">G-code 열기 취소 중…</string>
+    <string name="gcode_open_failed">이 G-code 파일을 열 수 없습니다.</string>
+    <string name="gcode_open_canceled">G-code 열기를 취소했습니다.</string>
     <string name="expand_preview_controls">미리보기 조절 펼치기</string>
     <string name="collapse_preview_controls">미리보기 조절 접기</string>
     <string name="layer_range">전체 %3$d개 중 %1$d–%2$d 레이어</string>

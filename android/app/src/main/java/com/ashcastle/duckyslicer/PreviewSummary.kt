@@ -9,9 +9,9 @@ internal data class PreviewDuration(
 )
 
 internal data class PreviewSummary(
-    val duration: PreviewDuration,
-    val filamentGrams: Float,
-    val filamentMeters: Float,
+    val duration: PreviewDuration?,
+    val filamentGrams: Float?,
+    val filamentMeters: Float?,
 )
 
 internal fun SliceOutcome.previewSummary(): PreviewSummary {

@@ -214,6 +214,36 @@ def _expected_main_filters() -> set[
             tuple(
                 sorted(
                     (
+                        (("mimeType", "application/gcode"),),
+                        (("mimeType", "application/x-gcode"),),
+                        (("mimeType", "text/x.gcode"),),
+                        (("scheme", "content"),),
+                    )
+                )
+            ),
+        ),
+        (
+            ("android.intent.action.VIEW",),
+            ("android.intent.category.DEFAULT",),
+            tuple(
+                sorted(
+                    (
+                        (("host", "*"),),
+                        (("mimeType", "application/octet-stream"),),
+                        (("mimeType", "text/plain"),),
+                        (("pathPattern", ".*.GCODE"),),
+                        (("pathPattern", ".*.gcode"),),
+                        (("scheme", "content"),),
+                    )
+                )
+            ),
+        ),
+        (
+            ("android.intent.action.VIEW",),
+            ("android.intent.category.DEFAULT",),
+            tuple(
+                sorted(
+                    (
                         (("mimeType", "application/sla"),),
                         (("mimeType", "application/vnd.ms-3mfdocument"),),
                         (("mimeType", "application/vnd.ms-package.3dmanufacturing-3dmodel+xml"),),
