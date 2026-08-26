@@ -307,7 +307,12 @@ class RemoteDeviceInstrumentedTest {
                 )
                 assertFalse("Settled cancellation was accepted again", model.cancelActiveRequest())
 
-                withServer("""{"state":"Operational"}""") { baseUrl, _ ->
+                withServer(
+                    listOf(
+                        """{"state":"Operational"}""",
+                        """{"temperature":{"tool0":{"actual":20,"target":0}}}""",
+                    ),
+                ) { baseUrl, _ ->
                     val followUp = profile.copy(id = "refresh-follow-up", baseUrl = baseUrl)
                     assertTrue(model.refresh(followUp, timeoutSeconds = 5))
                     waitForRemoteState(model, "Follow-up refresh did not finish") { !it.busy }
@@ -454,33 +459,52 @@ class RemoteDeviceInstrumentedTest {
     @Test
     fun octoPrintStatusUsesApiKeyAndParsesProgress() {
         withServer(
-            """{"state":"Printing","job":{"file":{"name":"duck.gcode"}},"progress":{"completion":42.8}}""",
-        ) { baseUrl, request ->
+            listOf(
+                """{"state":"Printing","job":{"file":{"name":"duck.gcode"}},"progress":{"completion":42.8,"printTime":125,"printTimeLeft":245}}""",
+                """{"temperature":{"tool0":{"actual":205.4,"target":210.0},"bed":{"actual":59.8,"target":60.0}}}""",
+            ),
+        ) { baseUrl, requests ->
             val profile = RemoteDeviceProfile("octo", "Workshop", RemoteDeviceKind.OCTOPRINT, baseUrl)
             val status = RemoteDeviceClient(2_000).status(profile, "octo-secret")
 
             assertEquals("Printing", status.state)
             assertEquals("duck.gcode", status.fileName)
             assertEquals(42, status.progressPercent)
-            val rawRequest = request.get()
-            assertTrue(rawRequest.startsWith("GET /api/job HTTP/1.1"))
-            assertTrue(rawRequest.contains("X-Api-Key: octo-secret", ignoreCase = true))
+            assertEquals(205.4, status.nozzleTemperatureC)
+            assertEquals(210.0, status.nozzleTargetC)
+            assertEquals(59.8, status.bedTemperatureC)
+            assertEquals(60.0, status.bedTargetC)
+            assertEquals(125L, status.elapsedSeconds)
+            assertEquals(245L, status.remainingSeconds)
+            assertTrue(requests[0].get().startsWith("GET /api/job HTTP/1.1"))
+            assertTrue(requests[1].get().startsWith("GET /api/printer?exclude=sd,state HTTP/1.1"))
+            assertTrue(requests.all { it.get().contains("X-Api-Key: octo-secret", ignoreCase = true) })
         }
     }
 
     @Test
     fun moonrakerStatusUsesApiKeyAndParsesProgress() {
         withServer(
-            """{"result":{"status":{"print_stats":{"state":"printing","filename":"duck.gcode"},"virtual_sdcard":{"progress":0.735}}}}""",
+            """{"result":{"status":{"print_stats":{"state":"printing","filename":"duck.gcode","print_duration":3600},"virtual_sdcard":{"progress":0.75},"extruder":{"temperature":214.5,"target":215.0},"heater_bed":{"temperature":64.8,"target":65.0}}}}""",
         ) { baseUrl, request ->
             val profile = RemoteDeviceProfile("klipper", "Workshop", RemoteDeviceKind.KLIPPER, baseUrl)
             val status = RemoteDeviceClient(2_000).status(profile, "moonraker-secret")
 
             assertEquals("printing", status.state)
             assertEquals("duck.gcode", status.fileName)
-            assertEquals(73, status.progressPercent)
+            assertEquals(75, status.progressPercent)
+            assertEquals(214.5, status.nozzleTemperatureC)
+            assertEquals(215.0, status.nozzleTargetC)
+            assertEquals(64.8, status.bedTemperatureC)
+            assertEquals(65.0, status.bedTargetC)
+            assertEquals(3_600L, status.elapsedSeconds)
+            assertEquals(1_200L, status.remainingSeconds)
             val rawRequest = request.get()
-            assertTrue(rawRequest.startsWith("GET /printer/objects/query?print_stats&virtual_sdcard HTTP/1.1"))
+            assertTrue(
+                rawRequest.startsWith(
+                    "GET /printer/objects/query?print_stats&virtual_sdcard&extruder&heater_bed HTTP/1.1",
+                ),
+            )
             assertTrue(rawRequest.contains("X-Api-Key: moonraker-secret", ignoreCase = true))
         }
     }
@@ -680,7 +704,12 @@ class RemoteDeviceInstrumentedTest {
 
     @Test
     fun cleartextHostnameRequestUsesOneValidatedPinnedAddress() {
-        withServer("""{"state":"Operational"}""") { baseUrl, request ->
+        withServer(
+            listOf(
+                """{"state":"Operational"}""",
+                """{"temperature":{"tool0":{"actual":20,"target":0}}}""",
+            ),
+        ) { baseUrl, requests ->
             val port = URI(baseUrl).port
             val profile = RemoteDeviceProfile(
                 "dns-pinned",
@@ -694,49 +723,59 @@ class RemoteDeviceInstrumentedTest {
             }
 
             assertEquals("Operational", client.status(profile, "pinned-secret").state)
-            assertTrue(request.get().contains("X-Api-Key: pinned-secret", ignoreCase = true))
-            assertTrue(request.get().contains("Host: printer.local:$port", ignoreCase = true))
+            assertTrue(requests.all { it.get().contains("X-Api-Key: pinned-secret", ignoreCase = true) })
+            assertTrue(requests.all { it.get().contains("Host: printer.local:$port", ignoreCase = true) })
         }
     }
 
     private fun withServer(
         responseBody: String,
         block: (String, AtomicReference<String>) -> Unit,
+    ) = withServer(listOf(responseBody)) { baseUrl, requests ->
+        block(baseUrl, requests.single())
+    }
+
+    private fun withServer(
+        responseBodies: List<String>,
+        block: (String, List<AtomicReference<String>>) -> Unit,
     ) {
-        val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
-        val request = AtomicReference("")
+        require(responseBodies.isNotEmpty())
+        val server = ServerSocket(0, responseBodies.size, InetAddress.getByName("127.0.0.1"))
+        val requests = responseBodies.map { AtomicReference("") }
         val failure = AtomicReference<Throwable?>(null)
         val worker = Thread {
             runCatching {
-                server.accept().use { socket ->
-                    val input = BufferedInputStream(socket.getInputStream())
-                    val received = StringBuilder()
-                    var current: Int
-                    while (input.read().also { current = it } >= 0) {
-                        received.append(current.toChar())
-                        if (received.endsWith("\r\n\r\n")) break
-                    }
-                    val contentLength = Regex("(?i)Content-Length: (\\d+)")
-                        .find(received)?.groupValues?.get(1)?.toInt() ?: 0
-                    repeat(contentLength) {
-                        val value = input.read()
-                        if (value >= 0) received.append(value.toChar())
-                    }
-                    request.set(received.toString())
-                    val bytes = responseBody.toByteArray(StandardCharsets.UTF_8)
-                    socket.getOutputStream().use { output ->
-                        output.write("HTTP/1.1 200 OK\r\n".toByteArray())
-                        output.write("Content-Type: application/json\r\n".toByteArray())
-                        output.write("Content-Length: ${bytes.size}\r\n".toByteArray())
-                        output.write("Connection: close\r\n\r\n".toByteArray())
-                        output.write(bytes)
+                responseBodies.forEachIndexed { index, responseBody ->
+                    server.accept().use { socket ->
+                        val input = BufferedInputStream(socket.getInputStream())
+                        val received = StringBuilder()
+                        var current: Int
+                        while (input.read().also { current = it } >= 0) {
+                            received.append(current.toChar())
+                            if (received.endsWith("\r\n\r\n")) break
+                        }
+                        val contentLength = Regex("(?i)Content-Length: (\\d+)")
+                            .find(received)?.groupValues?.get(1)?.toInt() ?: 0
+                        repeat(contentLength) {
+                            val value = input.read()
+                            if (value >= 0) received.append(value.toChar())
+                        }
+                        requests[index].set(received.toString())
+                        val bytes = responseBody.toByteArray(StandardCharsets.UTF_8)
+                        socket.getOutputStream().use { output ->
+                            output.write("HTTP/1.1 200 OK\r\n".toByteArray())
+                            output.write("Content-Type: application/json\r\n".toByteArray())
+                            output.write("Content-Length: ${bytes.size}\r\n".toByteArray())
+                            output.write("Connection: close\r\n\r\n".toByteArray())
+                            output.write(bytes)
+                        }
                     }
                 }
             }.onFailure { failure.set(it) }
         }.apply { start() }
 
         try {
-            block("http://127.0.0.1:${server.localPort}", request)
+            block("http://127.0.0.1:${server.localPort}", requests)
         } finally {
             worker.join(3_000)
             server.close()

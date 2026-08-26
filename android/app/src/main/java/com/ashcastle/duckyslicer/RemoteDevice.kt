@@ -22,11 +22,15 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import kotlin.math.roundToLong
 
 private const val MAX_REMOTE_CREDENTIAL_BYTES = 8 * 1_024
 private const val MAX_REMOTE_RESPONSE_BYTES = 1 * 1_024 * 1_024
 private const val MAX_REMOTE_GCODE_BYTES = 2L * 1_024 * 1_024 * 1_024
 private const val MAX_REMOTE_PATH_LENGTH = 1_024
+private const val MAX_REMOTE_DURATION_SECONDS = 365L * 24 * 60 * 60
+private const val MIN_REMOTE_TEMPERATURE_C = -100.0
+private const val MAX_REMOTE_TEMPERATURE_C = 1_000.0
 
 enum class RemoteDeviceKind {
     OCTOPRINT,
@@ -77,7 +81,75 @@ data class RemoteDeviceStatus(
     val state: String,
     val fileName: String? = null,
     val progressPercent: Int? = null,
+    val nozzleTemperatureC: Double? = null,
+    val nozzleTargetC: Double? = null,
+    val bedTemperatureC: Double? = null,
+    val bedTargetC: Double? = null,
+    val elapsedSeconds: Long? = null,
+    val remainingSeconds: Long? = null,
 )
+
+internal fun parseOctoPrintStatus(
+    jobResponse: JSONObject,
+    printerResponse: JSONObject? = null,
+): RemoteDeviceStatus {
+    val progress = jobResponse.optJSONObject("progress")
+    val temperatures = printerResponse?.optJSONObject("temperature")
+    val nozzle = temperatures?.optJSONObject("tool0")
+    val bed = temperatures?.optJSONObject("bed")
+    return RemoteDeviceStatus(
+        state = jobResponse.optString("state", "Unknown").take(200),
+        fileName = jobResponse.optJSONObject("job")?.optJSONObject("file")?.optString("name")
+            ?.take(MAX_REMOTE_PATH_LENGTH)?.takeIf(String::isNotBlank),
+        progressPercent = progress?.finiteDouble("completion")?.toInt()?.coerceIn(0, 100),
+        nozzleTemperatureC = nozzle?.boundedTemperature("actual"),
+        nozzleTargetC = nozzle?.boundedTemperature("target"),
+        bedTemperatureC = bed?.boundedTemperature("actual"),
+        bedTargetC = bed?.boundedTemperature("target"),
+        elapsedSeconds = progress?.boundedDuration("printTime"),
+        remainingSeconds = progress?.boundedDuration("printTimeLeft"),
+    )
+}
+
+internal fun parseMoonrakerStatus(response: JSONObject): RemoteDeviceStatus {
+    val status = response.optJSONObject("result")?.optJSONObject("status")
+    val printStats = status?.optJSONObject("print_stats")
+    val virtualSdCard = status?.optJSONObject("virtual_sdcard")
+    val progress = virtualSdCard?.finiteDouble("progress")?.coerceIn(0.0, 1.0)
+    val elapsedSeconds = printStats?.boundedDuration("print_duration")
+    val nozzle = status?.optJSONObject("extruder")
+    val bed = status?.optJSONObject("heater_bed")
+    return RemoteDeviceStatus(
+        state = printStats?.optString("state", "unknown")?.take(200) ?: "unknown",
+        fileName = printStats?.optString("filename")?.take(MAX_REMOTE_PATH_LENGTH)
+            ?.takeIf(String::isNotBlank),
+        progressPercent = progress?.times(100)?.toInt()?.coerceIn(0, 100),
+        nozzleTemperatureC = nozzle?.boundedTemperature("temperature"),
+        nozzleTargetC = nozzle?.boundedTemperature("target"),
+        bedTemperatureC = bed?.boundedTemperature("temperature"),
+        bedTargetC = bed?.boundedTemperature("target"),
+        elapsedSeconds = elapsedSeconds,
+        remainingSeconds = estimateRemainingSeconds(elapsedSeconds, progress),
+    )
+}
+
+private fun JSONObject.finiteDouble(key: String): Double? =
+    optDouble(key, Double.NaN).takeIf(Double::isFinite)
+
+private fun JSONObject.boundedTemperature(key: String): Double? =
+    finiteDouble(key)?.takeIf { it in MIN_REMOTE_TEMPERATURE_C..MAX_REMOTE_TEMPERATURE_C }
+
+private fun JSONObject.boundedDuration(key: String): Long? = finiteDouble(key)
+    ?.takeIf { it in 0.0..MAX_REMOTE_DURATION_SECONDS.toDouble() }
+    ?.toLong()
+
+private fun estimateRemainingSeconds(elapsedSeconds: Long?, progress: Double?): Long? {
+    if (elapsedSeconds == null || progress == null || progress <= 0.0) return null
+    val estimate = elapsedSeconds.toDouble() * (1.0 / progress - 1.0)
+    return estimate.takeIf(Double::isFinite)
+        ?.takeIf { it in 0.0..MAX_REMOTE_DURATION_SECONDS.toDouble() }
+        ?.roundToLong()
+}
 
 data class RemoteUpload(
     val profileId: String,
@@ -693,20 +765,27 @@ class RemoteDeviceClient(
         credential: String,
         cancellation: RemoteRequestCancellation,
     ): RemoteDeviceStatus {
-        val response = request(
+        val jobResponse = request(
             profile,
             credential,
             "GET",
             "/api/job",
             cancellation = cancellation,
         )
-        return RemoteDeviceStatus(
-            state = response.optString("state", "Unknown").take(200),
-            fileName = response.optJSONObject("job")?.optJSONObject("file")?.optString("name")
-                ?.take(MAX_REMOTE_PATH_LENGTH)?.takeIf(String::isNotBlank),
-            progressPercent = response.optJSONObject("progress")?.optDouble("completion")
-                ?.takeIf(Double::isFinite)?.toInt()?.coerceIn(0, 100),
-        )
+        val printerResponse = try {
+            request(
+                profile,
+                credential,
+                "GET",
+                "/api/printer?exclude=sd,state",
+                cancellation = cancellation,
+            )
+        } catch (canceled: RemoteRequestCancelledException) {
+            throw canceled
+        } catch (_: Exception) {
+            null
+        }
+        return parseOctoPrintStatus(jobResponse, printerResponse)
     }
 
     private fun moonrakerStatus(
@@ -718,19 +797,10 @@ class RemoteDeviceClient(
             profile,
             credential,
             "GET",
-            "/printer/objects/query?print_stats&virtual_sdcard",
+            "/printer/objects/query?print_stats&virtual_sdcard&extruder&heater_bed",
             cancellation = cancellation,
         )
-        val status = response.optJSONObject("result")?.optJSONObject("status")
-        val printStats = status?.optJSONObject("print_stats")
-        val progress = status?.optJSONObject("virtual_sdcard")?.optDouble("progress")
-        return RemoteDeviceStatus(
-            state = printStats?.optString("state", "unknown")?.take(200) ?: "unknown",
-            fileName = printStats?.optString("filename")?.take(MAX_REMOTE_PATH_LENGTH)
-                ?.takeIf(String::isNotBlank),
-            progressPercent = progress?.takeIf(Double::isFinite)?.times(100)?.toInt()
-                ?.coerceIn(0, 100),
-        )
+        return parseMoonrakerStatus(response)
     }
 
     private fun request(

@@ -34,6 +34,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                     when (intent.getStringExtra(EXTRA_SCREEN)) {
                         SCREEN_PROFILE -> ProfileAccessibilityHarness()
                         SCREEN_DEVICE -> DeviceAccessibilityHarness()
+                        SCREEN_DEVICE_TELEMETRY -> DeviceAccessibilityHarness(telemetry = true)
                         SCREEN_REMOTE_REQUEST -> DeviceAccessibilityHarness(requestActive = true)
                         SCREEN_SETTINGS -> SettingsAccessibilityHarness()
                         SCREEN_SUPPORT_EXPORT -> SettingsAccessibilityHarness(supportExporting = true)
@@ -147,6 +148,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_PREVIEW = "preview"
         const val SCREEN_PROFILE = "profile"
         const val SCREEN_DEVICE = "device"
+        const val SCREEN_DEVICE_TELEMETRY = "device-telemetry"
         const val SCREEN_REMOTE_REQUEST = "remote-request"
         const val SCREEN_SETTINGS = "settings"
         const val SCREEN_SUPPORT_EXPORT = "support-export"
@@ -309,7 +311,10 @@ private fun ProfileAccessibilityHarness() {
 }
 
 @Composable
-private fun DeviceAccessibilityHarness(requestActive: Boolean = false) {
+private fun DeviceAccessibilityHarness(
+    requestActive: Boolean = false,
+    telemetry: Boolean = false,
+) {
     DeviceSheet(
         profiles = listOf(
             RemoteDeviceProfile(
@@ -319,8 +324,18 @@ private fun DeviceAccessibilityHarness(requestActive: Boolean = false) {
                 baseUrl = "http://127.0.0.1",
             ),
         ),
-        selectedProfileId = "accessibility-device".takeIf { requestActive },
-        status = null,
+        selectedProfileId = "accessibility-device".takeIf { requestActive || telemetry },
+        status = RemoteDeviceStatus(
+            state = "Printing",
+            fileName = "accessibility.gcode",
+            progressPercent = 40,
+            nozzleTemperatureC = 205.4,
+            nozzleTargetC = 210.0,
+            bedTemperatureC = 59.8,
+            bedTargetC = 60.0,
+            elapsedSeconds = 3_660,
+            remainingSeconds = 1_200,
+        ).takeIf { telemetry },
         upload = null,
         gcodeAvailable = false,
         busy = requestActive,

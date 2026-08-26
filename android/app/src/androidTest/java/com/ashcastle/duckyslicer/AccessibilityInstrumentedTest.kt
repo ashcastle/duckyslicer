@@ -336,6 +336,22 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun remoteDeviceTelemetryExposesTemperaturesAndPrintTimesAsText() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val nozzle = context.getString(R.string.nozzle_temperature)
+        val bed = context.getString(R.string.bed_temperature)
+        val elapsed = context.getString(R.string.remote_elapsed_time, "")
+        val remaining = context.getString(R.string.remote_remaining_time, "")
+        launchHarness(AccessibilityHarnessActivity.SCREEN_DEVICE_TELEMETRY).use {
+            val nodes = waitForNodes(setOf(nozzle, bed, elapsed.trim(), remaining.trim()))
+            assertTrue(nodes.any { it.isVisibleToUser && it.effectiveLabel().contains(nozzle) })
+            assertTrue(nodes.any { it.isVisibleToUser && it.effectiveLabel().contains(bed) })
+            assertTrue(nodes.any { it.isVisibleToUser && it.effectiveLabel().contains(elapsed.trim()) })
+            assertTrue(nodes.any { it.isVisibleToUser && it.effectiveLabel().contains(remaining.trim()) })
+        }
+    }
+
+    @Test
     fun activeRemoteRequestExposesOneNamedStopAction() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val stopLabel = context.getString(R.string.stop_remote_request)

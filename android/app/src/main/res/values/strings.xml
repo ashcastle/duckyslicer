@@ -769,6 +769,10 @@
     <string name="save">Save</string>
     <string name="cancel">Cancel</string>
     <string name="device_not_checked">Tap refresh to check this printer.</string>
+    <string name="remote_temperature_current">%1$.1f °C</string>
+    <string name="remote_temperature_current_target">%1$.1f / %2$.1f °C</string>
+    <string name="remote_elapsed_time">Elapsed %1$s</string>
+    <string name="remote_remaining_time">Remaining %1$s</string>
     <string name="refresh_device">Refresh</string>
     <string name="send_gcode">Send G-code</string>
     <string name="slice_before_sending">Slice a model before sending</string>

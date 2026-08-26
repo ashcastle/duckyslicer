@@ -202,6 +202,7 @@ internal fun DeviceSheet(
                         Icon(Icons.Default.Refresh, stringResource(R.string.refresh_device))
                     }
                 }
+                status?.let { RemoteDeviceTelemetry(it) }
 
                 if (message != null) {
                     Text(message, color = if (isError) Color(0xFFFF8A80) else Color(0xFFF6C945))
@@ -441,6 +442,68 @@ private fun DeviceEditorDialog(
 private fun RemoteDeviceKind.displayName(): String = when (this) {
     RemoteDeviceKind.OCTOPRINT -> "OctoPrint"
     RemoteDeviceKind.KLIPPER -> "Klipper"
+}
+
+@Composable
+private fun RemoteDeviceTelemetry(status: RemoteDeviceStatus) {
+    val nozzleText = status.nozzleTemperatureC?.let { actual ->
+        formatRemoteTemperature(actual, status.nozzleTargetC)
+    }
+    val bedText = status.bedTemperatureC?.let { actual ->
+        formatRemoteTemperature(actual, status.bedTargetC)
+    }
+    val elapsedText = status.elapsedSeconds?.let { seconds ->
+        stringResource(R.string.remote_elapsed_time, formatRemoteDuration(seconds))
+    }
+    val remainingText = status.remainingSeconds?.let { seconds ->
+        stringResource(R.string.remote_remaining_time, formatRemoteDuration(seconds))
+    }
+    val timingTexts = listOfNotNull(elapsedText, remainingText)
+    if (nozzleText == null && bedText == null && elapsedText == null && remainingText == null) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        nozzleText?.let {
+            Text(
+                "${stringResource(R.string.nozzle_temperature)} · $it",
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        bedText?.let {
+            Text(
+                "${stringResource(R.string.bed_temperature)} · $it",
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (timingTexts.isNotEmpty()) {
+            Text(
+                timingTexts.joinToString(" · "),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+@Composable
+private fun formatRemoteTemperature(actual: Double, target: Double?): String = if (target == null) {
+    stringResource(R.string.remote_temperature_current, actual)
+} else {
+    stringResource(R.string.remote_temperature_current_target, actual, target)
+}
+
+@Composable
+private fun formatRemoteDuration(seconds: Long): String {
+    if (seconds < 60L) return stringResource(R.string.duration_under_one_minute)
+    val totalMinutes = seconds / 60L
+    val hours = totalMinutes / 60L
+    val minutes = totalMinutes % 60L
+    return if (hours > 0L) {
+        stringResource(R.string.duration_hours_minutes, hours, minutes)
+    } else {
+        stringResource(R.string.duration_minutes, minutes)
+    }
 }
 
 @Composable
