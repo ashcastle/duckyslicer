@@ -432,6 +432,11 @@ private fun DuckySlicerScreen(
             notice = null
         }
     }
+    val profileActions = ProfileLibraryActions(
+        model = profileLibraryModel,
+        sessionRevision = { projectTransferModel.state.value.sessionRevision },
+        accept = acceptProfileSave,
+    )
     var externalProjectConfirmation by remember { mutableStateOf<ExternalProjectRequest?>(null) }
     var plateSliceResults by rememberSaveable { mutableStateOf(PlateSliceResults()) }
     var pendingGcodeExport by rememberSaveable { mutableStateOf<PlateSliceResult?>(null) }
@@ -1948,62 +1953,15 @@ private fun DuckySlicerScreen(
         onSave = saveGcode,
         onCancelGcodeExport = gcodeExportModel::cancelActiveExport,
         onSliceOptionsChanged = ::applyOptions,
-        onSavePrinterProfile = { name, options ->
-            acceptProfileSave(
-                profileLibraryModel.savePrinter(
-                    name,
-                    options,
-                    projectTransferModel.state.value.sessionRevision,
-                ),
-            )
-        },
-        onSaveFilamentProfile = { name, options, slot ->
-            acceptProfileSave(
-                profileLibraryModel.saveFilament(
-                    name,
-                    options,
-                    slot,
-                    projectTransferModel.state.value.sessionRevision,
-                ),
-            )
-        },
-        onSaveSlicingProfile = { name, options ->
-            acceptProfileSave(
-                profileLibraryModel.saveSlicing(
-                    name,
-                    options,
-                    projectTransferModel.state.value.sessionRevision,
-                ),
-            )
-        },
-        onUpdatePrinterProfile = { profileId, options ->
-            acceptProfileSave(
-                profileLibraryModel.updatePrinter(
-                    profileId,
-                    options,
-                    projectTransferModel.state.value.sessionRevision,
-                ),
-            )
-        },
-        onUpdateFilamentProfile = { profileId, options, slot ->
-            acceptProfileSave(
-                profileLibraryModel.updateFilament(
-                    profileId,
-                    options,
-                    slot,
-                    projectTransferModel.state.value.sessionRevision,
-                ),
-            )
-        },
-        onUpdateSlicingProfile = { profileId, options ->
-            acceptProfileSave(
-                profileLibraryModel.updateSlicing(
-                    profileId,
-                    options,
-                    projectTransferModel.state.value.sessionRevision,
-                ),
-            )
-        },
+        onSavePrinterProfile = profileActions::savePrinter,
+        onSaveFilamentProfile = profileActions::saveFilament,
+        onSaveSlicingProfile = profileActions::saveSlicing,
+        onUpdatePrinterProfile = profileActions::updatePrinter,
+        onUpdateFilamentProfile = profileActions::updateFilament,
+        onUpdateSlicingProfile = profileActions::updateSlicing,
+        onRenamePrinterProfile = profileActions::renamePrinter,
+        onRenameFilamentProfile = profileActions::renameFilament,
+        onRenameSlicingProfile = profileActions::renameSlicing,
         onDeletePrinterProfile = { profileId ->
             if (!profileLibraryModel.deletePrinter(profileId)) {
                 error = profileDeleteError
@@ -2160,6 +2118,39 @@ private fun DuckySlicerScreen(
             },
         )
     }
+}
+
+private class ProfileLibraryActions(
+    private val model: ProfileLibraryViewModel,
+    private val sessionRevision: () -> Long,
+    private val accept: (Boolean) -> Unit,
+) {
+    fun savePrinter(name: String, options: SliceOptions) =
+        accept(model.savePrinter(name, options, sessionRevision()))
+
+    fun saveFilament(name: String, options: SliceOptions, slot: Int) =
+        accept(model.saveFilament(name, options, slot, sessionRevision()))
+
+    fun saveSlicing(name: String, options: SliceOptions) =
+        accept(model.saveSlicing(name, options, sessionRevision()))
+
+    fun updatePrinter(profileId: String, options: SliceOptions) =
+        accept(model.updatePrinter(profileId, options, sessionRevision()))
+
+    fun updateFilament(profileId: String, options: SliceOptions, slot: Int) =
+        accept(model.updateFilament(profileId, options, slot, sessionRevision()))
+
+    fun updateSlicing(profileId: String, options: SliceOptions) =
+        accept(model.updateSlicing(profileId, options, sessionRevision()))
+
+    fun renamePrinter(profileId: String, name: String, options: SliceOptions) =
+        accept(model.renamePrinter(profileId, name, options, sessionRevision()))
+
+    fun renameFilament(profileId: String, name: String, options: SliceOptions) =
+        accept(model.renameFilament(profileId, name, options, sessionRevision()))
+
+    fun renameSlicing(profileId: String, name: String, options: SliceOptions) =
+        accept(model.renameSlicing(profileId, name, options, sessionRevision()))
 }
 
 internal fun initialWorkspaceReady(

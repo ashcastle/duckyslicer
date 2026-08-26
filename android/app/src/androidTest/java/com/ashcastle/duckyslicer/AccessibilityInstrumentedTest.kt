@@ -941,6 +941,42 @@ class AccessibilityInstrumentedTest {
 
     @Test
     @Suppress("DEPRECATION")
+    fun userProfileCanBeRenamedWithoutSelectingIt() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val printerProfile = context.getString(R.string.printer_profile)
+        val profileList = context.getString(R.string.profile_list)
+        val myProfiles = context.getString(R.string.my_profiles)
+        val profileName = context.getString(R.string.profile_name)
+        val rename = context.getString(R.string.rename_profile)
+        val originalName = "My accessibility printer"
+        val renamedName = "Renamed accessibility printer"
+        val renameNamed = context.getString(R.string.rename_profile_named, originalName)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
+            assertTrue(
+                waitForNode(printerProfile) { it.isClickable }
+                    .performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            )
+            assertTrue(
+                waitForNode(profileList) { it.isClickable }
+                    .performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            )
+            assertTrue(
+                waitForNode(myProfiles) { it.isClickable }
+                    .performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            )
+            clickNamedAction(renameNamed)
+
+            waitForNodes(setOf(rename, profileName, originalName))
+            replaceEditableText(profileName, renamedName)
+            clickNamedAction(rename)
+
+            val renamed = waitForNode(renamedName) { it.isClickable && it.isCheckable }
+            assertFalse("Renaming a library entry must not select it", renamed.isChecked)
+        }
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
     fun filamentProfileExposesAProjectColorPickerAndStickyApplyActions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val filamentProfile = context.getString(R.string.filament_profile)

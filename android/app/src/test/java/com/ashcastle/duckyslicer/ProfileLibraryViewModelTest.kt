@@ -53,6 +53,53 @@ class ProfileLibraryViewModelTest {
     }
 
     @Test
+    fun renamedProfilesOnlyReplaceMatchingCurrentSelections() {
+        val source = SliceOptions().copy(
+            filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PLA),
+        )
+        val unrelatedPrinter = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            id = "user-unrelated-printer",
+            name = "Renamed printer",
+            builtIn = false,
+        )
+        val printerOptions = requireNotNull(
+            ProfileSaveCompletion.Printer(
+                1,
+                7,
+                source,
+                unrelatedPrinter,
+                selectSaved = false,
+            ).optionsForSession(7),
+        )
+        assertEquals(source, printerOptions)
+
+        val renamedFilament = FilamentProfile.PLA.copy(name = "Renamed PLA", builtIn = false)
+        val filamentOptions = requireNotNull(
+            ProfileSaveCompletion.Filament(
+                2,
+                7,
+                source,
+                0,
+                renamedFilament,
+                selectSaved = false,
+            ).optionsForSession(7),
+        )
+        assertTrue(filamentOptions.resolvedFilamentSlots().all { it.name == "Renamed PLA" })
+
+        val selectedSlicing = source.quality.copy(name = "Renamed slicing", builtIn = false)
+        val slicingOptions = requireNotNull(
+            ProfileSaveCompletion.Slicing(
+                3,
+                7,
+                source,
+                selectedSlicing,
+                selectSaved = false,
+            ).optionsForSession(7),
+        )
+        assertEquals("Renamed slicing", slicingOptions.quality.name)
+    }
+
+    @Test
     fun profileTransferStateRejectsStaleTransitionsAndSettlesCancellation() {
         val idle = ProfileLibraryState(busy = false, catalogLoaded = true)
         assertNull(

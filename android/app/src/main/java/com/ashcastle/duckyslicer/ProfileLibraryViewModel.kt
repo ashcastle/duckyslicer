@@ -62,6 +62,7 @@ internal sealed interface ProfileSaveCompletion {
         override val sessionRevision: Long,
         override val sourceOptions: SliceOptions,
         val saved: PrinterProfile,
+        val selectSaved: Boolean = true,
     ) : ProfileSaveCompletion
 
     data class Filament(
@@ -70,6 +71,7 @@ internal sealed interface ProfileSaveCompletion {
         override val sourceOptions: SliceOptions,
         val slot: Int,
         val saved: FilamentProfile,
+        val selectSaved: Boolean = true,
     ) : ProfileSaveCompletion
 
     data class Slicing(
@@ -77,17 +79,44 @@ internal sealed interface ProfileSaveCompletion {
         override val sessionRevision: Long,
         override val sourceOptions: SliceOptions,
         val saved: QualityProfile,
+        val selectSaved: Boolean = true,
     ) : ProfileSaveCompletion
 }
 
 internal fun ProfileSaveCompletion.optionsForSession(currentRevision: Long): SliceOptions? {
     if (sessionRevision != currentRevision) return null
     return when (this) {
-        is ProfileSaveCompletion.Printer -> sourceOptions.selectPrinter(saved)
-        is ProfileSaveCompletion.Filament -> sourceOptions.updateFilamentSlot(slot, saved)
-        is ProfileSaveCompletion.Slicing -> sourceOptions.selectQuality(saved)
+        is ProfileSaveCompletion.Printer -> if (selectSaved) {
+            sourceOptions.selectPrinter(saved)
+        } else {
+            sourceOptions.replaceSelectedPrinter(saved)
+        }
+        is ProfileSaveCompletion.Filament -> if (selectSaved) {
+            sourceOptions.updateFilamentSlot(slot, saved)
+        } else {
+            sourceOptions.replaceSelectedFilaments(saved)
+        }
+        is ProfileSaveCompletion.Slicing -> if (selectSaved) {
+            sourceOptions.selectQuality(saved)
+        } else {
+            sourceOptions.replaceSelectedSlicing(saved)
+        }
     }
 }
+
+private fun SliceOptions.replaceSelectedPrinter(saved: PrinterProfile): SliceOptions =
+    if (printerProfile.id == saved.id) selectPrinter(saved) else this
+
+private fun SliceOptions.replaceSelectedFilaments(saved: FilamentProfile): SliceOptions {
+    var updated = this
+    resolvedFilamentSlots().forEachIndexed { index, profile ->
+        if (profile.id == saved.id) updated = updated.updateFilamentSlot(index, saved)
+    }
+    return updated
+}
+
+private fun SliceOptions.replaceSelectedSlicing(saved: QualityProfile): SliceOptions =
+    if (quality.id == saved.id) selectQuality(saved) else this
 
 internal data class ProfileLibraryState(
     val busy: Boolean = true,
@@ -229,6 +258,32 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
         )
     }
 
+    fun renamePrinter(
+        profileId: String,
+        name: String,
+        options: SliceOptions,
+        sessionRevision: Long,
+    ): Boolean = launchSave(
+        failureEvent = SupportEvent.PRINTER_PROFILE_SAVE_FAILED,
+        editableProfile = { catalog ->
+            catalog.printers.any { it.id == profileId && !it.builtIn }
+        },
+    ) { operationId, catalog ->
+        val saved = profileStore.renamePrinter(profileId, name)
+        ProfileSaveResult(
+            catalog = catalog.copy(
+                printers = catalog.printers.replaceProfile(saved, PrinterProfile::id),
+            ),
+            completion = ProfileSaveCompletion.Printer(
+                operationId,
+                sessionRevision,
+                options,
+                saved,
+                selectSaved = false,
+            ),
+        )
+    }
+
     fun saveFilament(
         name: String,
         options: SliceOptions,
@@ -279,6 +334,33 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
         )
     }
 
+    fun renameFilament(
+        profileId: String,
+        name: String,
+        options: SliceOptions,
+        sessionRevision: Long,
+    ): Boolean = launchSave(
+        failureEvent = SupportEvent.FILAMENT_PROFILE_SAVE_FAILED,
+        editableProfile = { catalog ->
+            catalog.filaments.any { it.id == profileId && !it.builtIn }
+        },
+    ) { operationId, catalog ->
+        val saved = profileStore.renameFilament(profileId, name)
+        ProfileSaveResult(
+            catalog = catalog.copy(
+                filaments = catalog.filaments.replaceProfile(saved, FilamentProfile::id),
+            ),
+            completion = ProfileSaveCompletion.Filament(
+                operationId,
+                sessionRevision,
+                options,
+                slot = 0,
+                saved = saved,
+                selectSaved = false,
+            ),
+        )
+    }
+
     fun saveSlicing(name: String, options: SliceOptions, sessionRevision: Long): Boolean =
         launchSave(SupportEvent.SLICING_PROFILE_SAVE_FAILED) { operationId, catalog ->
             val saved = profileStore.saveSlicing(name, options)
@@ -314,6 +396,32 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
                 sessionRevision,
                 options,
                 saved,
+            ),
+        )
+    }
+
+    fun renameSlicing(
+        profileId: String,
+        name: String,
+        options: SliceOptions,
+        sessionRevision: Long,
+    ): Boolean = launchSave(
+        failureEvent = SupportEvent.SLICING_PROFILE_SAVE_FAILED,
+        editableProfile = { catalog ->
+            catalog.slicing.any { it.id == profileId && !it.builtIn }
+        },
+    ) { operationId, catalog ->
+        val saved = profileStore.renameSlicing(profileId, name)
+        ProfileSaveResult(
+            catalog = catalog.copy(
+                slicing = catalog.slicing.replaceProfile(saved, QualityProfile::id),
+            ),
+            completion = ProfileSaveCompletion.Slicing(
+                operationId,
+                sessionRevision,
+                options,
+                saved,
+                selectSaved = false,
             ),
         )
     }

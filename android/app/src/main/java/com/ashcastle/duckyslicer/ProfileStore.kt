@@ -5,6 +5,7 @@ import com.u1.slicer.data.DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.Locale
 import java.util.UUID
 
 internal const val USER_PROFILE_SCHEMA_VERSION = 102
@@ -51,6 +52,15 @@ class ProfileStore private constructor(
     @Synchronized
     fun updatePrinter(id: String, name: String, options: SliceOptions): PrinterProfile =
         writePrinter(id, name, options, replace = true)
+
+    @Synchronized
+    fun renamePrinter(id: String, name: String): PrinterProfile = renameProfile(
+        key = "printers",
+        id = id,
+        name = name,
+        parse = JSONObject::toPrinterProfileOrNull,
+        validate = ProfileValidation::printer,
+    )
 
     private fun writePrinter(
         id: String,
@@ -181,6 +191,15 @@ class ProfileStore private constructor(
         options: SliceOptions,
         slot: Int = 0,
     ): FilamentProfile = writeFilament(id, name, options, slot, replace = true)
+
+    @Synchronized
+    fun renameFilament(id: String, name: String): FilamentProfile = renameProfile(
+        key = "filaments",
+        id = id,
+        name = name,
+        parse = JSONObject::toFilamentProfileOrNull,
+        validate = ProfileValidation::filament,
+    )
 
     private fun writeFilament(
         id: String,
@@ -347,6 +366,15 @@ class ProfileStore private constructor(
     @Synchronized
     fun updateSlicing(id: String, name: String, options: SliceOptions): QualityProfile =
         writeSlicing(id, name, options, replace = true)
+
+    @Synchronized
+    fun renameSlicing(id: String, name: String): QualityProfile = renameProfile(
+        key = "slicing",
+        id = id,
+        name = name,
+        parse = JSONObject::toQualityProfileOrNull,
+        validate = ProfileValidation::slicing,
+    )
 
     private fun writeSlicing(
         id: String,
@@ -625,35 +653,67 @@ class ProfileStore private constructor(
         return merged.result
     }
 
-    private fun append(key: String, value: JSONObject) {
-        val root = readRoot(forMutation = true)
-        root.put("schemaVersion", USER_PROFILE_SCHEMA_VERSION)
-        val values = root.optJSONArray(key) ?: JSONArray().also { root.put(key, it) }
-        values.put(value)
-        writeRoot(root)
-    }
-
     private fun writeProfile(
         key: String,
         id: String,
         value: JSONObject,
         replace: Boolean,
     ) {
-        if (!replace) {
-            append(key, value)
-            return
-        }
         require(id.isSafeStoredProfileId()) { "profile_id_invalid" }
         val root = readRoot(forMutation = true)
-        val values = root.optJSONArray(key) ?: error("profile_not_found")
-        val matchingIndices = (0 until values.length()).filter { entryIndex ->
-            values.optJSONObject(entryIndex)?.optString("id") == id
+        val values = root.optJSONArray(key) ?: if (replace) {
+            error("profile_not_found")
+        } else {
+            JSONArray().also { root.put(key, it) }
         }
-        check(matchingIndices.size == 1) { "profile_not_found" }
-        val index = matchingIndices.single()
-        values.put(index, value)
+        requireUniqueProfileName(values, id, value.getString("name"))
+        if (replace) {
+            val matchingIndices = values.matchingProfileIndices(id)
+            check(matchingIndices.size == 1) { "profile_not_found" }
+            values.put(matchingIndices.single(), value)
+        } else {
+            check(values.matchingProfileIndices(id).isEmpty()) { "profile_id_in_use" }
+            values.put(value)
+        }
         root.put("schemaVersion", USER_PROFILE_SCHEMA_VERSION)
         writeRoot(root)
+    }
+
+    private fun <T> renameProfile(
+        key: String,
+        id: String,
+        name: String,
+        parse: (JSONObject) -> T?,
+        validate: (T) -> Boolean,
+    ): T {
+        require(id.isSafeStoredProfileId()) { "profile_id_invalid" }
+        val normalizedName = requireName(name)
+        val root = readRoot(forMutation = true)
+        val values = root.optJSONArray(key) ?: error("profile_not_found")
+        val matchingIndices = values.matchingProfileIndices(id)
+        check(matchingIndices.size == 1) { "profile_not_found" }
+        requireUniqueProfileName(values, id, normalizedName)
+        val index = matchingIndices.single()
+        val renamedJson = JSONObject(values.getJSONObject(index).toString())
+            .put("name", normalizedName)
+        val renamed = requireNotNull(parse(renamedJson)) { "profile_invalid" }
+        require(validate(renamed)) { "profile_invalid" }
+        values.put(index, renamedJson)
+        root.put("schemaVersion", USER_PROFILE_SCHEMA_VERSION)
+        writeRoot(root)
+        return renamed
+    }
+
+    private fun requireUniqueProfileName(values: JSONArray, id: String, name: String) {
+        val normalizedName = name.trim().lowercase(Locale.ROOT)
+        require(
+            (0 until values.length()).none { index ->
+                values.optJSONObject(index)?.let { value ->
+                    value.optString("id") != id &&
+                        value.optString("name").trim().lowercase(Locale.ROOT) == normalizedName
+                } == true
+            },
+        ) { "profile_name_in_use" }
     }
 
     private fun delete(key: String, id: String): Boolean {
@@ -725,6 +785,9 @@ class ProfileStore private constructor(
 
 private fun String.isSafeStoredProfileId(): Boolean =
     isNotBlank() && length <= 512 && none(Char::isISOControl)
+
+private fun JSONArray.matchingProfileIndices(id: String): List<Int> =
+    (0 until length()).filter { index -> optJSONObject(index)?.optString("id") == id }
 
 internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("id", id).put("name", name)

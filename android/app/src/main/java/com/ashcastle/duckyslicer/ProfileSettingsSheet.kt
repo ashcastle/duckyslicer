@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Search
@@ -157,6 +158,9 @@ internal fun ProfileSettings(
     onUpdatePrinter: (String, SliceOptions) -> Unit,
     onUpdateFilament: (String, SliceOptions, Int) -> Unit,
     onUpdateSlicing: (String, SliceOptions) -> Unit,
+    onRenamePrinter: (String, String, SliceOptions) -> Unit,
+    onRenameFilament: (String, String, SliceOptions) -> Unit,
+    onRenameSlicing: (String, String, SliceOptions) -> Unit,
     onDeletePrinter: (String) -> Unit,
     onDeleteFilament: (String) -> Unit,
     onDeleteSlicing: (String) -> Unit,
@@ -274,6 +278,9 @@ internal fun ProfileSettings(
                 onOptionsChanged(staged)
                 onUpdatePrinter(staged.printerProfile.id, staged)
             },
+            onRename = { profile, name ->
+                onRenamePrinter(profile.id, name, activeEditor.session.working)
+            },
             onDelete = onDeletePrinter,
             dirty = activeEditor.session.isDirty,
             onRevert = ::revertEditor,
@@ -301,6 +308,9 @@ internal fun ProfileSettings(
                     slot,
                 )
             },
+            onRename = { profile, name ->
+                onRenameFilament(profile.id, name, activeEditor.session.working)
+            },
             onDelete = onDeleteFilament,
             dirty = activeEditor.session.isDirty,
             onRevert = ::revertEditor,
@@ -326,6 +336,9 @@ internal fun ProfileSettings(
             onUpdate = { staged ->
                 onOptionsChanged(staged)
                 onUpdateSlicing(staged.quality.id, staged)
+            },
+            onRename = { profile, name ->
+                onRenameSlicing(profile.id, name, activeEditor.session.working)
             },
             onDelete = onDeleteSlicing,
             dirty = activeEditor.session.isDirty,
@@ -371,6 +384,7 @@ private fun PrinterSettingsSheet(
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String, SliceOptions) -> Unit,
     onUpdate: (SliceOptions) -> Unit,
+    onRename: (PrinterProfile, String) -> Unit,
     onDelete: (String) -> Unit,
     dirty: Boolean,
     onRevert: () -> Unit,
@@ -1762,6 +1776,7 @@ private fun PrinterSettingsSheet(
                 profilesOpen = false
             },
             onDelete = { onDelete(it.id) },
+            onRename = onRename,
             onDismiss = { profilesOpen = false },
         )
     }
@@ -1775,6 +1790,7 @@ private fun FilamentSettingsSheet(
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String, SliceOptions, Int) -> Unit,
     onUpdate: (SliceOptions, Int) -> Unit,
+    onRename: (FilamentProfile, String) -> Unit,
     onDelete: (String) -> Unit,
     dirty: Boolean,
     onRevert: () -> Unit,
@@ -3014,6 +3030,7 @@ private fun FilamentSettingsSheet(
                 profilesOpen = false
             },
             onDelete = { onDelete(it.id) },
+            onRename = onRename,
             onDismiss = { profilesOpen = false },
         )
     }
@@ -3184,6 +3201,7 @@ private fun SlicingSettingsSheet(
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String, SliceOptions) -> Unit,
     onUpdate: (SliceOptions) -> Unit,
+    onRename: (QualityProfile, String) -> Unit,
     onDelete: (String) -> Unit,
     dirty: Boolean,
     onRevert: () -> Unit,
@@ -7087,6 +7105,7 @@ private fun SlicingSettingsSheet(
                 profilesOpen = false
             },
             onDelete = { onDelete(it.id) },
+            onRename = onRename,
             onDismiss = { profilesOpen = false },
         )
     }
@@ -8512,6 +8531,7 @@ private fun <T> ProfileChooserSheet(
     searchTerms: (T) -> List<String>,
     onSelected: (T) -> Unit,
     onDelete: (T) -> Unit,
+    onRename: (T, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -8519,6 +8539,8 @@ private fun <T> ProfileChooserSheet(
         LocalWindowInfo.current.containerSize.height.toDp()
     } * 0.88f
     var pendingDeletion by remember { mutableStateOf<T?>(null) }
+    var pendingRename by remember { mutableStateOf<T?>(null) }
+    var renameValue by remember { mutableStateOf("") }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
@@ -8547,6 +8569,10 @@ private fun <T> ProfileChooserSheet(
                 searchTerms = searchTerms,
                 onSelected = onSelected,
                 onDelete = { pendingDeletion = it },
+                onRename = {
+                    pendingRename = it
+                    renameValue = name(it)
+                },
             )
             Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.done))
@@ -8575,6 +8601,38 @@ private fun <T> ProfileChooserSheet(
             dismissButton = {
                 TextButton(onClick = { pendingDeletion = null }) {
                     Text(stringResource(R.string.keep_profile))
+                }
+            },
+        )
+    }
+    pendingRename?.let { profile ->
+        val currentName = name(profile)
+        val normalizedName = renameValue.trim()
+        AlertDialog(
+            onDismissRequest = { pendingRename = null },
+            title = { Text(stringResource(R.string.rename_profile)) },
+            text = {
+                OutlinedTextField(
+                    value = renameValue,
+                    onValueChange = { renameValue = it },
+                    label = { Text(stringResource(R.string.profile_name)) },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onRename(profile, normalizedName)
+                        pendingRename = null
+                    },
+                    enabled = normalizedName.isNotEmpty() && normalizedName != currentName,
+                ) {
+                    Text(stringResource(R.string.rename_profile))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRename = null }) {
+                    Text(stringResource(R.string.cancel))
                 }
             },
         )
@@ -8741,7 +8799,8 @@ internal fun <T> SearchableGroupedProfileChoices(
     builtIn: (T) -> Boolean,
     searchTerms: (T) -> List<String>,
     onSelected: (T) -> Unit,
-    onDelete: (T) -> Unit = {},
+    onDelete: ((T) -> Unit)? = null,
+    onRename: ((T) -> Unit)? = null,
 ) {
     val myProfiles = stringResource(R.string.my_profiles)
     val otherProfiles = stringResource(R.string.other_profiles)
@@ -8757,7 +8816,7 @@ internal fun <T> SearchableGroupedProfileChoices(
     } else {
         myProfilesKey
     }
-    var expandedGroups by remember(uniqueEntries, recentIds) {
+    var expandedGroups by remember(recentIds, selectedGroupKey) {
         mutableStateOf(setOf(recentProfilesKey, selectedGroupKey))
     }
     val normalizedQuery = query.trim().lowercase(Locale.ROOT)
@@ -8871,7 +8930,18 @@ internal fun <T> SearchableGroupedProfileChoices(
                                 )
                                 Text(label(entry), maxLines = 1)
                             }
-                            if (group.key == myProfilesKey) {
+                            if (group.key == myProfilesKey && onRename != null) {
+                                IconButton(onClick = { onRename(entry) }) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = stringResource(
+                                            R.string.rename_profile_named,
+                                            label(entry),
+                                        ),
+                                    )
+                                }
+                            }
+                            if (group.key == myProfilesKey && onDelete != null) {
                                 IconButton(onClick = { onDelete(entry) }) {
                                     Icon(
                                         Icons.Default.DeleteOutline,

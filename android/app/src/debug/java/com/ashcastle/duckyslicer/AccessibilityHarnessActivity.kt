@@ -227,6 +227,15 @@ private fun ProfileSettingsAccessibilityHarness() {
             onUpdatePrinter = { _, _ -> },
             onUpdateFilament = { _, _, _ -> },
             onUpdateSlicing = { _, _ -> },
+            onRenamePrinter = { id, name, _ ->
+                val renamed = catalog.printers.single { it.id == id }.copy(name = name)
+                catalog = catalog.copy(
+                    printers = catalog.printers.map { if (it.id == id) renamed else it },
+                )
+                if (options.printerProfile.id == id) options = options.selectPrinter(renamed)
+            },
+            onRenameFilament = { _, _, _ -> },
+            onRenameSlicing = { _, _, _ -> },
             onDeletePrinter = { id ->
                 catalog = catalog.copy(printers = catalog.printers.filterNot { it.id == id })
             },
@@ -672,6 +681,9 @@ private fun WorkspaceAccessibilityHarness(
         onUpdatePrinterProfile = { _, _ -> },
         onUpdateFilamentProfile = { _, _, _ -> },
         onUpdateSlicingProfile = { _, _ -> },
+        onRenamePrinterProfile = { _, _, _ -> },
+        onRenameFilamentProfile = { _, _, _ -> },
+        onRenameSlicingProfile = { _, _, _ -> },
         onDeletePrinterProfile = {},
         onDeleteFilamentProfile = {},
         onDeleteSlicingProfile = {},
