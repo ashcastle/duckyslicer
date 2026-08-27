@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 115
+SCHEMA_VERSION = 116
 MAX_FILAMENT_SLOTS = 16
 NO_FILAMENT_COLOR = -1
 MAX_GCODE_THUMBNAILS = 8
@@ -1221,6 +1221,7 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         ),
         "requiredNozzleHrc": integer(raw.get("required_nozzle_HRC"), 0),
         "compatiblePrinters": values(raw.get("compatible_printers")),
+        "compatiblePrints": values(raw.get("compatible_prints")),
     }
     if not (
         all(

@@ -87,6 +87,25 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(55, profile["bedTemp"])
         self.assertEqual(60, profile["firstLayerBedTemp"])
 
+    def test_preserves_filament_print_profile_compatibility(self) -> None:
+        profile = build_filament(
+            "Example",
+            {
+                "name": "Specialized filament",
+                "filament_type": ["PLA"],
+                "nozzle_temperature": ["215"],
+                "hot_plate_temp": ["60"],
+                "compatible_printers": ["Example printer"],
+                "compatible_prints": ["Special quality", "Special draft"],
+            },
+        )
+
+        self.assertEqual(["Example printer"], profile["compatiblePrinters"])
+        self.assertEqual(
+            ["Special quality", "Special draft"],
+            profile["compatiblePrints"],
+        )
+
     def test_preserves_pellet_printer_and_flow_coefficient(self) -> None:
         printer = build_printer(
             "Example",

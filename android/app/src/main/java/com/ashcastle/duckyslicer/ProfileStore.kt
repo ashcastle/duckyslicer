@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 115
+internal const val USER_PROFILE_SCHEMA_VERSION = 116
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -382,6 +382,8 @@ class ProfileStore internal constructor(
             airFiltration = effective.airFiltration,
             duringPrintExhaustFanSpeed = effective.duringPrintExhaustFanSpeed,
             completePrintExhaustFanSpeed = effective.completePrintExhaustFanSpeed,
+            compatiblePrinters = effective.compatiblePrinters,
+            compatiblePrints = effective.compatiblePrints,
         )
         require(ProfileValidation.filament(profile)) { "Filament profile contains unsafe values" }
         writeProfile("filaments", profile.id, profile.toProfileJson(), replace)
@@ -1022,6 +1024,7 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
     .put("compatiblePrinters", JSONArray(compatiblePrinters))
+    .put("compatiblePrints", JSONArray(compatiblePrints))
 
 internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("id", id).put("name", name)
@@ -1614,6 +1617,7 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         requiredNozzleHrc = optInt("requiredNozzleHrc", 0),
         defaultColor = optInt("defaultColor", NO_FILAMENT_COLOR),
         compatiblePrinters = stringList("compatiblePrinters"),
+        compatiblePrints = stringList("compatiblePrints"),
         diameter = diameter,
         pelletFlowCoefficient = optDouble(
             "pelletFlowCoefficient",

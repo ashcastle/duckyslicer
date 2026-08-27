@@ -2823,7 +2823,7 @@ class NativeEngineInstrumentedTest {
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
         assertFalse(loadResult.bundledCatalogUnavailable)
-        assertEquals(115, catalog.schemaVersion)
+        assertEquals(116, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertEquals(789, catalog.printers.count { it.id.startsWith("orca-printer-") })
@@ -2839,6 +2839,11 @@ class NativeEngineInstrumentedTest {
             assertEquals(1f, filament.pelletFlowCoefficient, 0.000001f)
             assertEquals(1.12838f, filament.diameter, 0.00001f)
         }
+        assertEquals(
+            listOf("0.25 Benchy @Snapmaker U1 (0.4 nozzle)"),
+            catalog.filaments.single { it.name == "Snapmaker ABS Benchy @U1" }
+                .compatiblePrints,
+        )
         assertEquals(3_314, catalog.filaments.count { it.id.startsWith("orca-filament-") })
         assertEquals(2_319, catalog.slicing.count { it.id.startsWith("orca-process-") })
         assertEquals(57, catalog.rejectedCount)

@@ -173,6 +173,7 @@ class ProfileStoreMigrationTest {
             assertEquals(listOf(0.8f), restoredPrinter.toolChangeRetractLengths)
             assertEquals(listOf(0f), restoredPrinter.toolChangeRetractRestartExtras)
             assertTrue(restoredFilament.compatiblePrinters.isEmpty())
+            assertTrue(restoredFilament.compatiblePrints.isEmpty())
             assertTrue(restoredSlicing.compatiblePrinters.isEmpty())
             assertEquals("V3 Filament", restoredFilament.name)
             assertEquals(1.75f, restoredFilament.diameter)

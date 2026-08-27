@@ -579,6 +579,7 @@ data class FilamentProfile(
         AdaptivePressureAdvanceSettings(),
     val requiredNozzleHrc: Int = 0,
     val compatiblePrinters: List<String> = emptyList(),
+    val compatiblePrints: List<String> = emptyList(),
     val diameter: Float = 1.75f,
     val pelletFlowCoefficient: Float = pelletFlowCoefficientFromDiameter(diameter),
     val density: Float = 1.24f,
@@ -1420,7 +1421,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 115,
+    val schemaVersion: Int = 116,
     val sourceRevision: String = FALLBACK_PROFILE_CATALOG_REVISION,
     val rejectedCount: Int = 0,
 )
@@ -1877,7 +1878,7 @@ data class SliceOptions(
             }
             if (replacement != null) updated = updated.selectQuality(replacement)
         }
-        return updated
+        return updated.reconcileFilamentsForQuality(catalog)
     }
 
     fun selectFilament(profile: FilamentProfile) = copy(
@@ -2213,6 +2214,30 @@ data class SliceOptions(
         spiralStartingFlowRatio = profile.spiralStartingFlowRatio,
         spiralFinishingFlowRatio = profile.spiralFinishingFlowRatio,
     )
+
+    internal fun selectQuality(profile: QualityProfile, catalog: ProfileCatalog): SliceOptions =
+        selectQuality(profile).reconcileFilamentsForQuality(catalog)
+
+    private fun reconcileFilamentsForQuality(catalog: ProfileCatalog): SliceOptions {
+        val current = resolvedFilamentSlots()
+        if (current.all { it.compatiblePrints.matchesQuality(quality) }) return this
+        val candidates = catalog.filaments.filter {
+            it.compatiblePrinters.matchesPrinter(printerProfile) &&
+                it.compatiblePrints.matchesQuality(quality)
+        }
+        val primary = current.firstOrNull()?.takeIf {
+            it.compatiblePrints.matchesQuality(quality)
+        } ?: candidates.firstOrNull() ?: return this
+        val reconciled = current.map { filament ->
+            filament.takeIf {
+                it.compatiblePrints.matchesQuality(quality) &&
+                    it.hasCompatibleDiameter(primary)
+            } ?: candidates.firstOrNull { it.hasCompatibleDiameter(primary) } ?: primary
+        }
+        return selectFilament(primary)
+            .copy(filamentSlots = reconciled)
+            .boundedToFilamentSlots(reconciled.size)
+    }
 
     fun toNativeConfig(): SliceConfig {
         require(printerStructure in PRINTER_STRUCTURES) { "Invalid printer structure" }

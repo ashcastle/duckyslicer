@@ -11,7 +11,15 @@ class ProfileUpdateTest {
     @Test
     fun userProfilesUpdateInPlaceAndSurviveReload() = withStore { file, store ->
         val printer = store.savePrinter("My printer", SliceOptions())
-        val filament = store.saveFilament("My filament", SliceOptions())
+        val filament = store.saveFilament(
+            "My filament",
+            SliceOptions().selectFilament(
+                FilamentProfile.GENERIC_PLA.copy(
+                    compatiblePrinters = listOf(PrinterProfile.U1_04.name),
+                    compatiblePrints = listOf(QualityProfile.STANDARD.name),
+                ),
+            ),
+        )
         val slicing = store.saveSlicing("My slicing", SliceOptions())
 
         val updatedPrinter = store.updatePrinter(
@@ -43,6 +51,14 @@ class ProfileUpdateTest {
         assertEquals(231, restored.filaments.single { it.id == filament.id }.nozzleTemp)
         assertEquals(0.97f, restored.filaments.single { it.id == filament.id }.flowRatio)
         assertEquals(0x124943, restored.filaments.single { it.id == filament.id }.defaultColor)
+        assertEquals(
+            listOf(PrinterProfile.U1_04.name),
+            restored.filaments.single { it.id == filament.id }.compatiblePrinters,
+        )
+        assertEquals(
+            listOf(QualityProfile.STANDARD.name),
+            restored.filaments.single { it.id == filament.id }.compatiblePrints,
+        )
         assertEquals(1, restored.slicing.count { it.id == slicing.id })
         assertEquals(0.18f, restored.slicing.single { it.id == slicing.id }.layerHeightMm)
         assertEquals(5, restored.slicing.single { it.id == slicing.id }.perimeters)

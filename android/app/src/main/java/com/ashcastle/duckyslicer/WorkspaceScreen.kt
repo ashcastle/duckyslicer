@@ -3245,6 +3245,7 @@ private fun FilamentAssignmentSheet(
     val profiles = catalog.filaments
         .asSequence()
         .filter { it.compatiblePrinters.matchesPrinter(options.printerProfile) }
+        .filter { it.compatiblePrints.matchesQuality(options.quality) }
         .filter { candidate ->
             selectedSlot == 0 || candidate.hasCompatibleDiameter(options.filamentProfile)
         }

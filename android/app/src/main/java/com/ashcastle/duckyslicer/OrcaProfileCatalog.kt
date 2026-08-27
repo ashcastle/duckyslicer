@@ -53,7 +53,7 @@ class OrcaProfileCatalog internal constructor(
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 115) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 116) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -310,6 +310,7 @@ class OrcaProfileCatalog internal constructor(
         ),
         requiredNozzleHrc = input.readInt(),
         compatiblePrinters = input.readCatalogStringList(),
+        compatiblePrints = input.readCatalogStringList(),
         builtIn = true,
     )
 
@@ -609,4 +610,5 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("adaptivePressureAdvanceBridge", BINARY_FLOAT),
     BinaryField("requiredNozzleHrc", BINARY_INT),
     BinaryField("compatiblePrinters", BINARY_STRING_LIST),
+    BinaryField("compatiblePrints", BINARY_STRING_LIST),
 )

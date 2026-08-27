@@ -418,7 +418,10 @@ internal fun ProfileSettings(
             recentIds = recents.filamentIds,
             profiles = catalog.filaments.filter {
                 it == activeEditor.session.working.filamentProfile ||
-                    it.compatiblePrinters.matchesPrinter(activeEditor.session.working.printerProfile)
+                    (
+                        it.compatiblePrinters.matchesPrinter(activeEditor.session.working.printerProfile) &&
+                            it.compatiblePrints.matchesQuality(activeEditor.session.working.quality)
+                        )
             },
             onOptionsChanged = ::updateEditor,
             onSave = { name, staged, slot ->
@@ -445,6 +448,7 @@ internal fun ProfileSettings(
 
         ProfileSettingsKind.SLICING -> SlicingSettingsSheet(
             options = activeEditor.session.working,
+            catalog = catalog,
             recentIds = recents.slicingIds,
             profiles = catalog.slicing.filter {
                 it == activeEditor.session.working.quality ||
@@ -3587,6 +3591,7 @@ private fun FilamentColorSetting(
 @Composable
 private fun SlicingSettingsSheet(
     options: SliceOptions,
+    catalog: ProfileCatalog,
     profiles: List<QualityProfile>,
     recentIds: List<String>,
     onOptionsChanged: (SliceOptions) -> Unit,
@@ -7509,7 +7514,7 @@ private fun SlicingSettingsSheet(
                 listOf(it.name, it.brand.orEmpty(), it.layerHeightMm.toString())
             },
             onSelected = {
-                onOptionsChanged(options.selectQuality(it))
+                onOptionsChanged(options.selectQuality(it, catalog))
                 profilesOpen = false
             },
             onDelete = { onDelete(it.id) },
@@ -9207,6 +9212,9 @@ private data class ProfileChoiceGroup<T>(
 
 internal fun List<String>.matchesPrinter(printer: PrinterProfile): Boolean =
     isEmpty() || printer.name in this
+
+internal fun List<String>.matchesQuality(quality: QualityProfile): Boolean =
+    isEmpty() || quality.name in this
 
 internal fun <T> deduplicateProfileChoices(
     entries: List<T>,

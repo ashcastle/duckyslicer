@@ -140,6 +140,32 @@ class PrinterDefaultSelectionTest {
         assertEquals(listOf(preferred.id), updated.resolvedFilamentSlots().map(FilamentProfile::id))
     }
 
+    @Test
+    fun selectingQualityReplacesOnlyFilamentsRestrictedToAnotherPrintProfile() {
+        val printer = printer()
+        val restricted = filament("restricted", "Restricted", printer).copy(
+            compatiblePrints = listOf("Special quality"),
+        )
+        val general = filament("general", "General", printer)
+        val normalQuality = quality("normal", "Normal quality", printer)
+        val specialQuality = quality("special", "Special quality", printer)
+        val catalog = ProfileCatalog(
+            printers = listOf(printer),
+            filaments = listOf(general, restricted),
+            slicing = listOf(normalQuality, specialQuality),
+        )
+
+        val retained = SliceOptions()
+            .selectPrinter(printer)
+            .selectFilament(restricted)
+            .selectQuality(specialQuality, catalog)
+        val replaced = retained.selectQuality(normalQuality, catalog)
+
+        assertEquals(restricted.id, retained.filamentProfile.id)
+        assertEquals(general.id, replaced.filamentProfile.id)
+        assertEquals(listOf(general.id), replaced.resolvedFilamentSlots().map(FilamentProfile::id))
+    }
+
     private fun printer(
         extruderCount: Int = 1,
         singleExtruderMultiMaterial: Boolean = false,

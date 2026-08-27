@@ -231,7 +231,8 @@ internal object ProfileValidation {
                     adaptivePressureAdvanceModelIsValid(profile.adaptivePressureAdvance.model))) &&
             profile.filamentStartGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
             profile.filamentEndGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
-            profile.compatiblePrinters.isSafeCompatibilityList()
+            profile.compatiblePrinters.isSafeCompatibilityList() &&
+            profile.compatiblePrints.isSafeCompatibilityList()
 
     fun slicing(profile: QualityProfile): Boolean =
         profile.id.isSafeLabel() &&
