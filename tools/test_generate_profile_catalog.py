@@ -17,9 +17,11 @@ from tools.generate_profile_catalog import (
     canonical_profiles,
     coordinate_pair,
     extra_solid_infills,
+    filament_vendor,
     nozzle_material,
     printable_geometry,
     small_area_flow_compensation_model,
+    stable_id,
     support_type,
     thumbnail_definitions,
     timelapse_type,
@@ -27,6 +29,25 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_groups_filaments_by_material_vendor_without_changing_stable_ids(self) -> None:
+        raw = {
+            "name": "PolyLite PLA @Example",
+            "filament_vendor": ["Polymaker"],
+            "filament_type": ["PLA"],
+            "nozzle_temperature": ["220"],
+            "hot_plate_temp": ["60"],
+        }
+
+        profile = build_filament("PrinterVendor", raw)
+
+        self.assertEqual("Polymaker", profile["brand"])
+        self.assertEqual(
+            stable_id("filament", "PrinterVendor", "PolyLite PLA @Example"),
+            profile["id"],
+        )
+        self.assertEqual("PrinterVendor", filament_vendor([""], "PrinterVendor"))
+        self.assertEqual("Snapmaker", filament_vendor(["snapmaker"], "Other"))
+
     def test_indexes_only_non_instantiable_untyped_filament_parents(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             profile_root = Path(temporary)

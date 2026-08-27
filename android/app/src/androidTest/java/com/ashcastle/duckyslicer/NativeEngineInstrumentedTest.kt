@@ -2792,6 +2792,14 @@ class NativeEngineInstrumentedTest {
                 .toSet(),
         )
         assertEquals(
+            "Polymaker",
+            catalog.filaments.single { it.name == "PolyLite PLA @BBL X1C" }.brand,
+        )
+        assertEquals(
+            "Generic",
+            catalog.filaments.single { it.name == "Anker Generic PLA" }.brand,
+        )
+        assertEquals(
             "i3",
             catalog.printers.single { it.name == "Anker M5 0.4 nozzle" }.printerStructure,
         )

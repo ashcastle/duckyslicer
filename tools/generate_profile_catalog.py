@@ -86,6 +86,15 @@ def nozzle_material(value: Any) -> str:
     return candidate
 
 
+def filament_vendor(value: Any, source_brand: str) -> str:
+    candidate = str(scalar(value, source_brand)).strip()
+    if not candidate:
+        return source_brand
+    return {
+        "snapmaker": "Snapmaker",
+    }.get(candidate.casefold(), candidate)
+
+
 def boolean(value: Any, default: bool = False) -> bool:
     candidate = str(scalar(value, "1" if default else "0")).strip().lower()
     return candidate in {"1", "true", "yes", "on"}
@@ -923,6 +932,7 @@ def extra_solid_infills(value: Any, default: str = "") -> str:
 
 def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     name = str(raw["name"])
+    vendor = filament_vendor(raw.get("filament_vendor"), brand)
     filament_type = str(scalar(raw.get("filament_type"), "")).strip()
     nozzle = integer(raw.get("nozzle_temperature"), 0)
     first_nozzle = integer(raw.get("nozzle_temperature_initial_layer"), nozzle)
@@ -966,7 +976,7 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     profile = {
         "id": stable_id("filament", brand, name),
         "name": name,
-        "brand": brand,
+        "brand": vendor,
         "nativeName": filament_type,
         "nozzleTemp": nozzle,
         "firstLayerNozzleTemp": first_nozzle,
