@@ -3,13 +3,7 @@ package com.ashcastle.duckyslicer
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import java.io.BufferedOutputStream
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -21,8 +15,8 @@ class ModelImportPerformanceInstrumentedTest {
     fun denseBinaryStlUsesBoundedPrimitiveImportWithinBudget() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val modelFile = File(context.cacheDir, "dense-import-benchmark.stl")
-        writeTorus(modelFile, majorSegments = 400, minorSegments = 250)
         try {
+            DenseBinaryStlFixture.writeTorus(modelFile, majorSegments = 400, minorSegments = 250)
             val nativeDurations = ArrayList<Long>()
             val decodeDurations = ArrayList<Long>()
             var decoded: ModelInfo? = null
@@ -76,60 +70,4 @@ class ModelImportPerformanceInstrumentedTest {
         return sortedDurations[18]
     }
 
-    private fun writeTorus(file: File, majorSegments: Int, minorSegments: Int) {
-        val triangleCount = majorSegments * minorSegments * 2
-        BufferedOutputStream(file.outputStream(), 1024 * 1024).use { output ->
-            output.write(ByteArray(80))
-            output.write(littleEndianInt(triangleCount))
-            val triangle = ByteBuffer.allocate(50).order(ByteOrder.LITTLE_ENDIAN)
-            repeat(majorSegments) { major ->
-                repeat(minorSegments) { minor ->
-                    val a = torusVertex(major, minor, majorSegments, minorSegments)
-                    val b = torusVertex(major + 1, minor, majorSegments, minorSegments)
-                    val c = torusVertex(major + 1, minor + 1, majorSegments, minorSegments)
-                    val d = torusVertex(major, minor + 1, majorSegments, minorSegments)
-                    writeTriangle(output, triangle, a, b, c)
-                    writeTriangle(output, triangle, a, c, d)
-                }
-            }
-        }
-    }
-
-    private fun torusVertex(
-        majorIndex: Int,
-        minorIndex: Int,
-        majorSegments: Int,
-        minorSegments: Int,
-    ): FloatArray {
-        val major = majorIndex.toDouble() / majorSegments * PI * 2.0
-        val minor = minorIndex.toDouble() / minorSegments * PI * 2.0
-        val radius = 35.0 + 12.0 * cos(minor)
-        return floatArrayOf(
-            (radius * cos(major) + 50.0).toFloat(),
-            (radius * sin(major) + 50.0).toFloat(),
-            (12.0 * sin(minor) + 15.0).toFloat(),
-        )
-    }
-
-    private fun writeTriangle(
-        output: BufferedOutputStream,
-        buffer: ByteBuffer,
-        a: FloatArray,
-        b: FloatArray,
-        c: FloatArray,
-    ) {
-        buffer.clear()
-        repeat(3) { buffer.putFloat(0f) }
-        arrayOf(a, b, c).forEach { vertex ->
-            vertex.forEach(buffer::putFloat)
-        }
-        buffer.putShort(0)
-        output.write(buffer.array())
-    }
-
-    private fun littleEndianInt(value: Int): ByteArray = ByteBuffer
-        .allocate(Int.SIZE_BYTES)
-        .order(ByteOrder.LITTLE_ENDIAN)
-        .putInt(value)
-        .array()
 }

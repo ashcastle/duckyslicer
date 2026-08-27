@@ -8,9 +8,9 @@ import java.io.File
 import java.io.FileInputStream
 import java.security.MessageDigest
 import org.json.JSONObject
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -59,20 +59,31 @@ class VulkanAccelerationInstrumentedTest {
     fun largeModelSlicesThroughTheMeasuredFallbackPath() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val requestedPath = InstrumentationRegistry.getArguments().getString(LARGE_MODEL_ARGUMENT)
-        assumeTrue("Pass -e $LARGE_MODEL_ARGUMENT with a staged STL path", !requestedPath.isNullOrBlank())
-        val model = File(requireNotNull(requestedPath))
-        assumeTrue("The staged large model must exist", model.isFile)
-
-        val inspectStarted = SystemClock.elapsedRealtime()
-        val info = inspectModel(model.absolutePath)
-        val inspectMillis = SystemClock.elapsedRealtime() - inspectStarted
-        val longestDimension = info.dimensions.maxOrNull()?.toFloat() ?: 0f
-        assertTrue("The large model must have printable dimensions", longestDimension > 0f)
-        val scale = TARGET_LONGEST_DIMENSION_MM / longestDimension
-        val capabilities = JSONObject(NativeEngine.vulkanCapabilities())
+        val generatedFixture = requestedPath.isNullOrBlank()
+        val model = if (generatedFixture) {
+            File(instrumentation.targetContext.cacheDir, GENERATED_MODEL_NAME)
+        } else {
+            File(requireNotNull(requestedPath))
+        }
 
         var outcome: SliceOutcome? = null
         try {
+            if (generatedFixture) {
+                DenseBinaryStlFixture.writeTorus(
+                    model,
+                    majorSegments = GENERATED_MAJOR_SEGMENTS,
+                    minorSegments = GENERATED_MINOR_SEGMENTS,
+                )
+            }
+            assertTrue("The staged large model must exist", model.isFile)
+            val inspectStarted = SystemClock.elapsedRealtime()
+            val info = inspectModel(model.absolutePath)
+            val inspectMillis = SystemClock.elapsedRealtime() - inspectStarted
+            val longestDimension = info.dimensions.maxOrNull()?.toFloat() ?: 0f
+            assertTrue("The large model must have printable dimensions", longestDimension > 0f)
+            val scale = TARGET_LONGEST_DIMENSION_MM / longestDimension
+            val capabilities = JSONObject(NativeEngine.vulkanCapabilities())
+
             val sliceStarted = SystemClock.elapsedRealtime()
             outcome = OnDeviceSlicer.slice(
                 model = model,
@@ -87,6 +98,7 @@ class VulkanAccelerationInstrumentedTest {
                 .put("serial", android.os.Build.MODEL)
                 .put("sourceBytes", model.length())
                 .put("triangles", info.triangles)
+                .put("generatedFixture", generatedFixture)
                 .put("sourceDimensionsMm", info.dimensions)
                 .put("scale", scale)
                 .put("inspectMillis", inspectMillis)
@@ -101,12 +113,21 @@ class VulkanAccelerationInstrumentedTest {
                 .put("fallback", !capabilities.optBoolean("autoEnabled"))
             Log.i(TAG, "LARGE_MODEL_RESULT=$result")
 
-            assertTrue("The benchmark input must remain large", info.triangles >= 1_000_000)
+            if (generatedFixture) {
+                assertEquals(GENERATED_TRIANGLES, info.triangles)
+                assertEquals(GENERATED_MODEL_BYTES, model.length())
+            } else {
+                assertTrue(
+                    "The benchmark input must remain large",
+                    info.triangles >= GENERATED_TRIANGLES,
+                )
+            }
             assertTrue("The large model must produce layers", outcome.layers > 0)
             assertTrue("The large model must produce non-empty G-code", outcome.output.length() > 1_000L)
         } finally {
             outcome?.output?.delete()
             File(model.parentFile, SliceArtifactStore.NATIVE_OUTPUT_NAME).delete()
+            if (generatedFixture) model.delete()
             instrumentation.waitForIdleSync()
         }
     }
@@ -147,6 +168,11 @@ class VulkanAccelerationInstrumentedTest {
         const val TAG = "DuckyVulkanTest"
         const val LARGE_MODEL_ARGUMENT = "largeModelPath"
         const val TARGET_LONGEST_DIMENSION_MM = 160f
+        const val GENERATED_MODEL_NAME = "million-triangle-slice-benchmark.stl"
+        const val GENERATED_MAJOR_SEGMENTS = 1_000
+        const val GENERATED_MINOR_SEGMENTS = 500
+        const val GENERATED_TRIANGLES = GENERATED_MAJOR_SEGMENTS * GENERATED_MINOR_SEGMENTS * 2
+        const val GENERATED_MODEL_BYTES = 84L + GENERATED_TRIANGLES * 50L
         val TOOL_COMMAND = Regex("T\\d+")
     }
 }

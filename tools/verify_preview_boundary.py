@@ -52,7 +52,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "ModelInfoTest.kt",
         "TransformGizmoTest.kt",
         "LayOnFaceCandidatesTest.kt",
+        "DenseBinaryStlFixture.kt",
         "ModelImportPerformanceInstrumentedTest.kt",
+        "VulkanAccelerationInstrumentedTest.kt",
         "ToolpathRendererPerformanceInstrumentedTest.kt",
         "ToolpathSurfaceInstrumentedTest.kt",
         "ToolpathNativePackingInstrumentedTest.kt",
@@ -641,6 +643,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     model_performance = sources["ModelImportPerformanceInstrumentedTest.kt"]
     for marker in (
         "denseBinaryStlUsesBoundedPrimitiveImportWithinBudget",
+        "DenseBinaryStlFixture.writeTorus",
         "sourceTriangles=${info.triangles}",
         "repeat(21)",
         "require(sortedDurations.size == 20)",
@@ -650,6 +653,30 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in model_performance:
             raise VerificationError(f"model import performance regression is missing: {marker}")
+
+    dense_fixture = sources["DenseBinaryStlFixture.kt"]
+    for marker in (
+        "internal object DenseBinaryStlFixture",
+        "Math.multiplyExact",
+        "BufferedOutputStream(file.outputStream(), 1024 * 1024)",
+        "BINARY_STL_TRIANGLE_BYTES = 50",
+    ):
+        if marker not in dense_fixture:
+            raise VerificationError(f"dense model fixture is missing: {marker}")
+
+    large_model = sources["VulkanAccelerationInstrumentedTest.kt"]
+    for marker in (
+        "largeModelSlicesThroughTheMeasuredFallbackPath",
+        "generatedFixture = requestedPath.isNullOrBlank()",
+        "DenseBinaryStlFixture.writeTorus",
+        "GENERATED_TRIANGLES = GENERATED_MAJOR_SEGMENTS * GENERATED_MINOR_SEGMENTS * 2",
+        "assertEquals(GENERATED_TRIANGLES, info.triangles)",
+        "if (generatedFixture) model.delete()",
+    ):
+        if marker not in large_model:
+            raise VerificationError(f"large model slicing regression is missing: {marker}")
+    if "assumeTrue(" in large_model or "org.junit.Assume" in large_model:
+        raise VerificationError("large model slicing regression must not be skipped")
 
     toolpath_performance = sources["ToolpathRendererPerformanceInstrumentedTest.kt"]
     for marker in (
@@ -1364,8 +1391,14 @@ def read_sources() -> dict[str, str]:
         "LayOnFaceCandidatesTest.kt": (tests / "LayOnFaceCandidatesTest.kt").read_text(
             encoding="utf-8"
         ),
+        "DenseBinaryStlFixture.kt": (
+            device / "DenseBinaryStlFixture.kt"
+        ).read_text(encoding="utf-8"),
         "ModelImportPerformanceInstrumentedTest.kt": (
             device / "ModelImportPerformanceInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "VulkanAccelerationInstrumentedTest.kt": (
+            device / "VulkanAccelerationInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "ToolpathRendererPerformanceInstrumentedTest.kt": (
             device / "ToolpathRendererPerformanceInstrumentedTest.kt"

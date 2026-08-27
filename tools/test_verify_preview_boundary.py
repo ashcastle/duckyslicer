@@ -532,13 +532,27 @@ def valid_sources() -> dict[str, str]:
         "LayOnFaceCandidatesTest.kt": (
             "recessedPlaneThatCannotSupportTheMeshIsNotSuggested"
         ),
+        "DenseBinaryStlFixture.kt": (
+            "internal object DenseBinaryStlFixture Math.multiplyExact "
+            "BufferedOutputStream(file.outputStream(), 1024 * 1024) "
+            "BINARY_STL_TRIANGLE_BYTES = 50"
+        ),
         "ModelImportPerformanceInstrumentedTest.kt": (
             "denseBinaryStlUsesBoundedPrimitiveImportWithinBudget "
+            "DenseBinaryStlFixture.writeTorus "
             "sourceTriangles=${info.triangles} "
             "repeat(21) require(sortedDurations.size == 20) "
             "nativeP95 / 1_000_000.0 <= 250.0 "
             "decodeP95 / 1_000_000.0 <= 100.0 "
             "(nativeP95 + decodeP95) / 1_000_000.0 <= 300.0"
+        ),
+        "VulkanAccelerationInstrumentedTest.kt": (
+            "largeModelSlicesThroughTheMeasuredFallbackPath "
+            "generatedFixture = requestedPath.isNullOrBlank() "
+            "DenseBinaryStlFixture.writeTorus "
+            "GENERATED_TRIANGLES = GENERATED_MAJOR_SEGMENTS * GENERATED_MINOR_SEGMENTS * 2 "
+            "assertEquals(GENERATED_TRIANGLES, info.triangles) "
+            "if (generatedFixture) model.delete()"
         ),
         "ToolpathRendererPerformanceInstrumentedTest.kt": (
             "maximumLayerRangeBuildsResponsiveInteractionGeometry "
@@ -805,6 +819,12 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "ModelImportPerformanceInstrumentedTest.kt"
         ].replace("decodeP95 / 1_000_000.0 <= 100.0", "decode.isNotEmpty()")
         with self.assertRaisesRegex(VerificationError, "model import performance"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_skipped_large_model_slicing(self) -> None:
+        sources = valid_sources()
+        sources["VulkanAccelerationInstrumentedTest.kt"] += " assumeTrue(false)"
+        with self.assertRaisesRegex(VerificationError, "must not be skipped"):
             verify_preview_boundary(sources)
 
     def test_rejects_rust_json_serialization(self) -> None:
