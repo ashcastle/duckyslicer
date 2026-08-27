@@ -31,6 +31,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/gcode_share_paths" />
         </provider>
+        <provider
+            android:name=".ProfileBundleShareProvider"
+            android:authorities="${applicationId}.profile-share"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/profile_bundle_share_paths" />
+        </provider>
         <activity
             android:name=".MainActivity"
             android:exported="true"

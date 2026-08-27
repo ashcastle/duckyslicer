@@ -77,6 +77,8 @@
     <string name="import_model">Import model</string>
     <string name="import_profiles">Import profiles</string>
     <string name="export_profiles">Export profiles</string>
+    <string name="share_profiles">Share profiles</string>
+    <string name="profile_share_error">Couldn’t share profiles.</string>
     <string name="cancel_profile_import">Stop importing profiles</string>
     <string name="cancel_profile_export">Stop exporting profiles</string>
     <string name="canceling_profile_transfer">Stopping profile transfer…</string>

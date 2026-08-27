@@ -359,6 +359,7 @@ def _expected_components(variant: str) -> set[tuple[str, str, bool, str | None]]
         ("activity", f"{PACKAGE_NAME}.MainActivity", True, None),
         ("service", f"{PACKAGE_NAME}.SlicerProcessService", False, None),
         ("provider", f"{PACKAGE_NAME}.GcodeShareProvider", False, None),
+        ("provider", f"{PACKAGE_NAME}.ProfileBundleShareProvider", False, None),
         ("provider", "androidx.startup.InitializationProvider", False, None),
         (
             "receiver",
@@ -448,24 +449,27 @@ def verify_manifest(root: ManifestNode, variant: str) -> None:
             f"expected={sorted(map(repr, expected_components))}, "
             f"found={sorted(map(repr, components))}"
         )
-    share_providers = [
-        node
-        for node in application.direct("provider")
-        if node.attributes.get("name") == f"{PACKAGE_NAME}.GcodeShareProvider"
-    ]
-    share_provider = share_providers[0]
-    if (
-        share_provider.attributes.get("authorities") != f"{PACKAGE_NAME}.slice-share"
-        or not _boolean(share_provider, "grantUriPermissions")
+    for provider_name, authority, label in (
+        ("GcodeShareProvider", "slice-share", "G-code"),
+        ("ProfileBundleShareProvider", "profile-share", "profile bundle"),
     ):
-        raise VerificationError("G-code share provider authority or grants changed")
-    share_metadata = share_provider.direct("meta-data")
-    if (
-        len(share_metadata) != 1
-        or share_metadata[0].attributes.get("name") != "android.support.FILE_PROVIDER_PATHS"
-        or not share_metadata[0].attributes.get("resource")
-    ):
-        raise VerificationError("G-code share provider path metadata changed")
+        share_provider = next(
+            node
+            for node in application.direct("provider")
+            if node.attributes.get("name") == f"{PACKAGE_NAME}.{provider_name}"
+        )
+        if (
+            share_provider.attributes.get("authorities") != f"{PACKAGE_NAME}.{authority}"
+            or not _boolean(share_provider, "grantUriPermissions")
+        ):
+            raise VerificationError(f"{label} share provider authority or grants changed")
+        share_metadata = share_provider.direct("meta-data")
+        if (
+            len(share_metadata) != 1
+            or share_metadata[0].attributes.get("name") != "android.support.FILE_PROVIDER_PATHS"
+            or not share_metadata[0].attributes.get("resource")
+        ):
+            raise VerificationError(f"{label} share provider path metadata changed")
     services = [
         node
         for node in application.direct("service")

@@ -77,6 +77,8 @@
     <string name="import_model">모델 임포트</string>
     <string name="import_profiles">프로필 가져오기</string>
     <string name="export_profiles">프로필 내보내기</string>
+    <string name="share_profiles">프로필 공유</string>
+    <string name="profile_share_error">프로필을 공유하지 못했습니다.</string>
     <string name="cancel_profile_import">프로필 가져오기 중지</string>
     <string name="cancel_profile_export">프로필 내보내기 중지</string>
     <string name="canceling_profile_transfer">프로필 전송 중지 중…</string>

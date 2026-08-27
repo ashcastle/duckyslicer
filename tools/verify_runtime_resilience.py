@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from xml.etree import ElementTree
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,6 +26,12 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "SlicerProcessService.kt",
         "ProfileStore.kt",
         "ProfileBundle.kt",
+        "ProfileBundleShare.kt",
+        "ProfileBundleShareActions.kt",
+        "ProfileBundleShareProvider.kt",
+        "ProfileBundleShareInstrumentedTest.kt",
+        "profile_bundle_share_paths.xml",
+        "AndroidManifest.xml",
         "ProfileOpenRequest.kt",
         "ProfileLibraryViewModel.kt",
         "AppSettings.kt",
@@ -476,6 +483,113 @@ def verify_resilience(sources: dict[str, str]) -> None:
     ):
         if marker not in workspace:
             raise VerificationError(f"profile transfer UI is missing: {marker}")
+
+    profile_share = sources["ProfileBundleShare.kt"]
+    for marker in (
+        "PROFILE_BUNDLE_SHARE_RETAINED_FILES = 3",
+        "context.filesDir.canonicalFile",
+        "Files.createDirectories(shareRoot.toPath())",
+        "Files.createTempFile(",
+        '"${context.packageName}.profile-share"',
+        "PROFILE_BUNDLE_MIME_TYPE",
+        "Intent(Intent.ACTION_SEND)",
+        "Intent.EXTRA_STREAM",
+        "Intent.EXTRA_TITLE",
+        "ClipData.newUri(",
+        "Intent.FLAG_GRANT_READ_URI_PERMISSION",
+        "discardProfileBundleShare(context: Context, path: String?)",
+    ):
+        if marker not in profile_share:
+            raise VerificationError(f"profile share containment is missing: {marker}")
+    if "FLAG_GRANT_WRITE_URI_PERMISSION" in profile_share:
+        raise VerificationError("profile shares must grant read-only access")
+
+    profile_share_actions = sources["ProfileBundleShareActions.kt"]
+    for marker in (
+        "rememberSaveable { mutableStateOf<Long?>(null) }",
+        "rememberSaveable { mutableStateOf<String?>(null) }",
+        "completed.id != pendingOperationId",
+        "completed.outcome == ProfileTransferOutcome.SUCCEEDED",
+        "Intent.createChooser(shareIntent, shareTitle)",
+        "discardProfileBundleShare(context, pendingPath)",
+        "model.exportBundle(target.uri)",
+        "pendingOperationId = model.state.value.activeOperationId",
+    ):
+        if marker not in profile_share_actions:
+            raise VerificationError(f"profile share lifecycle is missing: {marker}")
+
+    for marker in (
+        "rememberProfileBundleShareActions(",
+        "profileShareOperationId = profileShareActions.pendingOperationId",
+        "onShareProfiles = profileShareActions.start",
+    ):
+        if marker not in main:
+            raise VerificationError(f"profile share Activity contract is missing: {marker}")
+    for marker in ("onShareProfiles: () -> Unit", "R.string.share_profiles", "onShareProfiles()"):
+        if marker not in workspace:
+            raise VerificationError(f"profile share UI is missing: {marker}")
+
+    provider = sources["ProfileBundleShareProvider.kt"]
+    if "FileProvider(R.xml.profile_bundle_share_paths)" not in provider:
+        raise VerificationError("profile share provider must bind the dedicated path resource")
+    try:
+        manifest = ElementTree.fromstring(sources["AndroidManifest.xml"])
+        path_root = ElementTree.fromstring(sources["profile_bundle_share_paths.xml"])
+    except ElementTree.ParseError as error:
+        raise VerificationError(f"profile share XML is invalid: {error}") from error
+    android = "{http://schemas.android.com/apk/res/android}"
+    providers = [
+        item
+        for item in manifest.findall("./application/provider")
+        if item.attrib.get(f"{android}name") == ".ProfileBundleShareProvider"
+    ]
+    if len(providers) != 1:
+        raise VerificationError("profile share provider declaration is missing or duplicated")
+    declared = providers[0]
+    metadata = declared.findall("meta-data")
+    if (
+        declared.attrib.get(f"{android}authorities") != "${applicationId}.profile-share"
+        or declared.attrib.get(f"{android}exported") != "false"
+        or declared.attrib.get(f"{android}grantUriPermissions") != "true"
+        or len(metadata) != 1
+        or metadata[0].attrib.get(f"{android}name") != "android.support.FILE_PROVIDER_PATHS"
+        or metadata[0].attrib.get(f"{android}resource") != "@xml/profile_bundle_share_paths"
+    ):
+        raise VerificationError("profile share provider is not private and narrowly granted")
+    path_nodes = list(path_root)
+    if (
+        path_root.tag != "paths"
+        or len(path_nodes) != 1
+        or path_nodes[0].tag != "files-path"
+        or path_nodes[0].attrib != {"name": "profile-bundles", "path": "profile-shares/"}
+    ):
+        raise VerificationError("profile share provider path must expose only profile-shares/")
+
+    profile_share_test = sources["ProfileBundleShareInstrumentedTest.kt"]
+    for marker in (
+        "preparedProfileBundleSharesExactReadOnlyDocumentAndRejectsOtherUris",
+        "preparedProfileBundleStorageRetainsOnlyThreePrivateOutputs",
+        "Intent.FLAG_GRANT_READ_URI_PERMISSION",
+        "Intent.FLAG_GRANT_WRITE_URI_PERMISSION",
+        "FileProvider.getUriForFile(",
+        "assertEquals(3, retained.size)",
+        "assertArrayEquals(",
+    ):
+        if marker not in profile_share_test:
+            raise VerificationError(f"profile share regression is missing: {marker}")
+    for marker in (
+        "profileBundleShareIsExplicitInWorkspaceMenu",
+        "TEST_PROFILE_SHARE_REQUESTED_LABEL",
+        "R.string.share_profiles",
+    ):
+        if marker not in sources["AccessibilityInstrumentedTest.kt"]:
+            raise VerificationError(f"profile share accessibility regression is missing: {marker}")
+    for marker in (
+        "onShareProfiles = { harnessNotice = TEST_PROFILE_SHARE_REQUESTED_LABEL }",
+        "Accessibility profile share requested",
+    ):
+        if marker not in sources["AccessibilityHarnessActivity.kt"]:
+            raise VerificationError(f"profile share accessibility harness is missing: {marker}")
 
     profile_open = sources["ProfileOpenRequest.kt"]
     for marker in (
@@ -959,6 +1073,13 @@ def read_sources() -> dict[str, str]:
         ),
         "ProfileStore.kt": (main / "ProfileStore.kt").read_text(encoding="utf-8"),
         "ProfileBundle.kt": (main / "ProfileBundle.kt").read_text(encoding="utf-8"),
+        "ProfileBundleShare.kt": (main / "ProfileBundleShare.kt").read_text(encoding="utf-8"),
+        "ProfileBundleShareActions.kt": (main / "ProfileBundleShareActions.kt").read_text(
+            encoding="utf-8"
+        ),
+        "ProfileBundleShareProvider.kt": (main / "ProfileBundleShareProvider.kt").read_text(
+            encoding="utf-8"
+        ),
         "ProfileOpenRequest.kt": (main / "ProfileOpenRequest.kt").read_text(encoding="utf-8"),
         "ProfileLibraryViewModel.kt": (main / "ProfileLibraryViewModel.kt").read_text(
             encoding="utf-8"
@@ -1023,6 +1144,15 @@ def read_sources() -> dict[str, str]:
         "ProfileBundleIntentInstrumentedTest.kt": (
             device_tests / "ProfileBundleIntentInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
+        "ProfileBundleShareInstrumentedTest.kt": (
+            device_tests / "ProfileBundleShareInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "profile_bundle_share_paths.xml": (
+            ROOT / "android/app/src/main/res/xml/profile_bundle_share_paths.xml"
+        ).read_text(encoding="utf-8"),
+        "AndroidManifest.xml": (ROOT / "android/app/src/main/AndroidManifest.xml").read_text(
+            encoding="utf-8"
+        ),
         "AppSettingsLifecycleInstrumentedTest.kt": (
             device_tests / "AppSettingsLifecycleInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),

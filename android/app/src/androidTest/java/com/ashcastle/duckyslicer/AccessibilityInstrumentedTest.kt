@@ -1103,6 +1103,28 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun profileBundleShareIsExplicitInWorkspaceMenu() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val menuLabel = context.getString(R.string.menu)
+        val shareProfiles = context.getString(R.string.share_profiles)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE).use {
+            val menu = waitForNode(menuLabel) {
+                it.isClickable && it.isEnabled && it.effectiveLabel().contains(menuLabel)
+            }
+            assertTrue(menu.isFocusable)
+            assertTrue(menu.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val share = scrollUntilNode(shareProfiles) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == shareProfiles
+            }
+            assertTrue(share.isFocusable)
+            assertTrue(share.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNode(TEST_PROFILE_SHARE_REQUESTED_LABEL) {
+                it.effectiveLabel() == TEST_PROFILE_SHARE_REQUESTED_LABEL
+            }
+        }
+    }
+
+    @Test
     fun collapsedWorkspaceProfilesHideAllCurrentProfileSummaries() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val profiles = context.getString(R.string.profiles)

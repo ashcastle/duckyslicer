@@ -535,6 +535,7 @@ internal fun WorkspaceScreen(
     onChoose: () -> Unit,
     onImportProfiles: () -> Unit,
     onExportProfiles: () -> Unit,
+    onShareProfiles: () -> Unit,
     onCancelProfileTransfer: () -> Unit,
     onCreatePrimitive: (OrcaPrimitive, Float) -> Unit,
     onCreateAuxiliaryPrimitive: (OrcaAuxiliaryPrimitiveDraft) -> Unit,
@@ -911,6 +912,7 @@ internal fun WorkspaceScreen(
                 onCloseGcode = gcodePreviewImportModel::clearDocument,
                 onImportProfiles = onImportProfiles,
                 onExportProfiles = onExportProfiles,
+                onShareProfiles = onShareProfiles,
                 onCancelProfileTransfer = onCancelProfileTransfer,
                 onAddShape = { showPrimitivePicker = true },
                 onExportModel = onExportModel,
@@ -3558,6 +3560,7 @@ private fun WorkspaceMenu(
     onCloseGcode: () -> Unit,
     onImportProfiles: () -> Unit,
     onExportProfiles: () -> Unit,
+    onShareProfiles: () -> Unit,
     onCancelProfileTransfer: () -> Unit,
     onAddShape: () -> Unit,
     onExportModel: () -> Unit,
@@ -3764,6 +3767,15 @@ private fun WorkspaceMenu(
                 onClick = {
                     expanded = false
                     onExportProfiles()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.share_profiles)) },
+                leadingIcon = { Icon(Icons.Default.Share, null) },
+                enabled = !profileBusy && !importing && !editingBusy && !slicing && !previewLoading,
+                onClick = {
+                    expanded = false
+                    onShareProfiles()
                 },
             )
             DropdownMenuItem(

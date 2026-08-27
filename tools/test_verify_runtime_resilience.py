@@ -74,6 +74,39 @@ def valid_sources() -> dict[str, str]:
             "ProfileValidation.filament(parsed) ProfileValidation.slicing(parsed) "
             "cancellation.throwIfRequested() copy(builtIn = false)"
         ),
+        "ProfileBundleShare.kt": (
+            "PROFILE_BUNDLE_SHARE_RETAINED_FILES = 3 context.filesDir.canonicalFile "
+            "Files.createDirectories(shareRoot.toPath()) Files.createTempFile( "
+            '"${context.packageName}.profile-share" PROFILE_BUNDLE_MIME_TYPE '
+            "Intent(Intent.ACTION_SEND) Intent.EXTRA_STREAM Intent.EXTRA_TITLE "
+            "ClipData.newUri( Intent.FLAG_GRANT_READ_URI_PERMISSION "
+            "discardProfileBundleShare(context: Context, path: String?)"
+        ),
+        "ProfileBundleShareActions.kt": (
+            "rememberSaveable { mutableStateOf<Long?>(null) } "
+            "rememberSaveable { mutableStateOf<String?>(null) } "
+            "completed.id != pendingOperationId "
+            "completed.outcome == ProfileTransferOutcome.SUCCEEDED "
+            "Intent.createChooser(shareIntent, shareTitle) "
+            "discardProfileBundleShare(context, pendingPath) "
+            "model.exportBundle(target.uri) "
+            "pendingOperationId = model.state.value.activeOperationId"
+        ),
+        "ProfileBundleShareProvider.kt": (
+            "FileProvider(R.xml.profile_bundle_share_paths)"
+        ),
+        "profile_bundle_share_paths.xml": (
+            '<paths><files-path name="profile-bundles" path="profile-shares/" /></paths>'
+        ),
+        "AndroidManifest.xml": (
+            '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
+            '<application><provider android:name=".ProfileBundleShareProvider" '
+            'android:authorities="${applicationId}.profile-share" android:exported="false" '
+            'android:grantUriPermissions="true"><meta-data '
+            'android:name="android.support.FILE_PROVIDER_PATHS" '
+            'android:resource="@xml/profile_bundle_share_paths" />'
+            '</provider></application></manifest>'
+        ),
         "ProfileOpenRequest.kt": (
             "Intent.ACTION_VIEW Intent.ACTION_SEND sharedDocumentUriOrNull(intent) "
             "ContentResolver.SCHEME_CONTENT "
@@ -170,6 +203,9 @@ def valid_sources() -> dict[str, str]:
             "if (request.startedOperationId != null) return@LaunchedEffect "
             "profileLibraryModel.state.value.activeOperationId "
             "onExternalProfileRequestStarted(request.id, operationId) "
+            "rememberProfileBundleShareActions( "
+            "profileShareOperationId = profileShareActions.pendingOperationId "
+            "onShareProfiles = profileShareActions.start "
             "ViewModelProvider(this)[AppSettingsViewModel::class.java] "
             "appSettingsModel.state.collectAsStateWithLifecycle() "
             "appSettingsModel.updateSettings(next) "
@@ -205,6 +241,7 @@ def valid_sources() -> dict[str, str]:
             "profileTransferDirection: ProfileTransferDirection? "
             "profileTransferCancellationRequested: Boolean "
             "onImportProfiles: () -> Unit onExportProfiles: () -> Unit "
+            "onShareProfiles: () -> Unit R.string.share_profiles onShareProfiles() "
             "onCancelProfileTransfer: () -> Unit R.string.cancel_profile_import "
             "R.string.cancel_profile_export R.string.slice_all_plates "
             "R.string.slicing_all_plates_progress "
@@ -279,11 +316,15 @@ def valid_sources() -> dict[str, str]:
             "cleartextHostnameRequestUsesOneValidatedPinnedAddress"
         ),
         "AccessibilityInstrumentedTest.kt": (
-            "activeRemoteRequestExposesOneNamedStopAction SCREEN_REMOTE_REQUEST"
+            "activeRemoteRequestExposesOneNamedStopAction SCREEN_REMOTE_REQUEST "
+            "profileBundleShareIsExplicitInWorkspaceMenu "
+            "TEST_PROFILE_SHARE_REQUESTED_LABEL R.string.share_profiles"
         ),
         "AccessibilityHarnessActivity.kt": (
             "SCREEN_REMOTE_REQUEST DeviceAccessibilityHarness(requestActive = true) "
-            "SCREEN_SLICE_ALL SCREEN_SLICE_ALL_PROGRESS TEST_SLICE_ALL_REQUESTED_LABEL"
+            "SCREEN_SLICE_ALL SCREEN_SLICE_ALL_PROGRESS TEST_SLICE_ALL_REQUESTED_LABEL "
+            "onShareProfiles = { harnessNotice = TEST_PROFILE_SHARE_REQUESTED_LABEL } "
+            "Accessibility profile share requested"
         ),
         "PlateSliceBatchViewModelTest.kt": (
             "queueRunsInStableOrderAndReportsCompletion "
@@ -311,6 +352,13 @@ def valid_sources() -> dict[str, str]:
             "Intent.ACTION_SEND Intent.EXTRA_STREAM ClipData.newRawUri "
             "BlockingImportProvider.PROFILE_URI assertSame( scenario.recreate() "
             "retainedRequest.request.value == null"
+        ),
+        "ProfileBundleShareInstrumentedTest.kt": (
+            "preparedProfileBundleSharesExactReadOnlyDocumentAndRejectsOtherUris "
+            "preparedProfileBundleStorageRetainsOnlyThreePrivateOutputs "
+            "Intent.FLAG_GRANT_READ_URI_PERMISSION "
+            "Intent.FLAG_GRANT_WRITE_URI_PERMISSION FileProvider.getUriForFile( "
+            "assertEquals(3, retained.size) assertArrayEquals("
         ),
         "AppSettingsLifecycleInstrumentedTest.kt": (
             "latestUnsavedSettingsSurviveImmediateActivityRecreationAndPersist "
@@ -686,6 +734,28 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
             "onExternalConsumed = { _, _ -> true }",
         )
         with self.assertRaisesRegex(VerificationError, "external profile Activity contract"):
+            verify_resilience(sources)
+
+    def test_rejects_profile_share_write_grants(self) -> None:
+        sources = valid_sources()
+        sources["ProfileBundleShare.kt"] += " FLAG_GRANT_WRITE_URI_PERMISSION"
+        with self.assertRaisesRegex(VerificationError, "read-only access"):
+            verify_resilience(sources)
+
+    def test_rejects_broad_profile_share_path(self) -> None:
+        sources = valid_sources()
+        sources["profile_bundle_share_paths.xml"] = (
+            '<paths><files-path name="all-files" path="." /></paths>'
+        )
+        with self.assertRaisesRegex(VerificationError, "expose only profile-shares"):
+            verify_resilience(sources)
+
+    def test_rejects_profile_share_without_exact_operation_binding(self) -> None:
+        sources = valid_sources()
+        sources["ProfileBundleShareActions.kt"] = sources[
+            "ProfileBundleShareActions.kt"
+        ].replace("completed.id != pendingOperationId", "completed.id != 0")
+        with self.assertRaisesRegex(VerificationError, "profile share lifecycle"):
             verify_resilience(sources)
 
     def test_rejects_profile_format_without_private_data_boundary(self) -> None:

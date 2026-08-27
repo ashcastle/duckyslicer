@@ -633,6 +633,7 @@ private fun WorkspaceAccessibilityHarness(
         onChoose = {},
         onImportProfiles = {},
         onExportProfiles = {},
+        onShareProfiles = { harnessNotice = TEST_PROFILE_SHARE_REQUESTED_LABEL },
         onCancelProfileTransfer = {},
         onCreatePrimitive = { _, _ -> },
         onCreateAuxiliaryPrimitive = {},
@@ -931,3 +932,4 @@ internal const val TEST_SUPPORT_PAINTED_LABEL = "Accessibility support painted"
 internal const val TEST_SLICE_ALL_REQUESTED_LABEL = "Accessibility all plates requested"
 internal const val TEST_EXPORT_ALL_REQUESTED_LABEL = "Accessibility all G-code requested"
 internal const val TEST_GCODE_SHARE_REQUESTED_LABEL = "Accessibility G-code share requested"
+internal const val TEST_PROFILE_SHARE_REQUESTED_LABEL = "Accessibility profile share requested"

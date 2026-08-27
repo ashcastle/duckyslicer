@@ -1060,9 +1060,22 @@ private fun DuckySlicerScreen(
         profileLibraryModel.consumeDeletionCompletion(completion.id)
     }
 
+    val profileShareActions = rememberProfileBundleShareActions(
+        model = profileLibraryModel,
+        completion = profileLibraryState.transferCompletion,
+        busy = profileBusy,
+        enabled = !profileBusy && projectRestored && !projectTransferBusy && !importing &&
+            !autoLaying && !arranging && !splitting && !cutting && !slicing && !previewLoading,
+        onPresentation = { nextNotice, nextError ->
+            notice = nextNotice
+            error = nextError
+        },
+    )
+
     ProfileTransferCompletionEffect(
         completion = profileLibraryState.transferCompletion,
         externalRequest = externalProfileRequest,
+        profileShareOperationId = profileShareActions.pendingOperationId,
         onExternalConsumed = onExternalProfileRequestConsumed,
         onConsumeCompletion = profileLibraryModel::consumeTransferCompletion,
         onPresentation = { nextNotice, nextError ->
@@ -1621,6 +1634,7 @@ private fun DuckySlicerScreen(
             )
         },
         onExportProfiles = { profileExportPicker.launch(DEFAULT_PROFILE_BUNDLE_NAME) },
+        onShareProfiles = profileShareActions.start,
         onCancelProfileTransfer = profileLibraryModel::cancelTransfer,
         onCreatePrimitive = ::addPrimitive,
         onCreateAuxiliaryPrimitive = ::addAuxiliaryPrimitive,
@@ -2272,6 +2286,7 @@ private fun ProjectTransferCompletionEffect(
 private fun ProfileTransferCompletionEffect(
     completion: ProfileTransferCompletion?,
     externalRequest: ExternalProfileRequest?,
+    profileShareOperationId: Long?,
     onExternalConsumed: (Long, Long) -> Boolean,
     onConsumeCompletion: (Long) -> Unit,
     onPresentation: (String?, String?) -> Unit,
@@ -2285,31 +2300,37 @@ private fun ProfileTransferCompletionEffect(
     val profileExportError = stringResource(R.string.profile_export_error)
     LaunchedEffect(completion?.id) {
         val completed = completion ?: return@LaunchedEffect
-        val presentation = when (completed.outcome) {
-            ProfileTransferOutcome.SUCCEEDED -> profileTransferSuccessNotice(
-                resources,
-                completed,
-                profilesUnchangedNotice,
-                profilesExportedNotice,
-            ) to null
-            ProfileTransferOutcome.CANCELED -> {
-                val notice = if (completed.direction == ProfileTransferDirection.IMPORT) {
-                    profileImportCanceledNotice
-                } else {
-                    profileExportCanceledNotice
+        val sharing = completed.id == profileShareOperationId
+        val presentation = when {
+            sharing && completed.outcome == ProfileTransferOutcome.SUCCEEDED -> null to null
+            else -> when (completed.outcome) {
+                ProfileTransferOutcome.SUCCEEDED -> profileTransferSuccessNotice(
+                    resources,
+                    completed,
+                    profilesUnchangedNotice,
+                    profilesExportedNotice,
+                ) to null
+                ProfileTransferOutcome.CANCELED -> {
+                    val notice = if (completed.direction == ProfileTransferDirection.IMPORT) {
+                        profileImportCanceledNotice
+                    } else {
+                        profileExportCanceledNotice
+                    }
+                    notice to null
                 }
-                notice to null
-            }
-            ProfileTransferOutcome.FAILED -> {
-                val error = if (completed.direction == ProfileTransferDirection.IMPORT) {
-                    profileImportError
-                } else {
-                    profileExportError
+                ProfileTransferOutcome.FAILED -> {
+                    val error = if (completed.direction == ProfileTransferDirection.IMPORT) {
+                        profileImportError
+                    } else {
+                        profileExportError
+                    }
+                    null to error
                 }
-                null to error
             }
         }
-        onPresentation(presentation.first, presentation.second)
+        if (!sharing || completed.outcome != ProfileTransferOutcome.SUCCEEDED) {
+            onPresentation(presentation.first, presentation.second)
+        }
         externalRequest
             ?.takeIf { request -> request.startedOperationId == completed.id }
             ?.let { request -> onExternalConsumed(request.id, completed.id) }
