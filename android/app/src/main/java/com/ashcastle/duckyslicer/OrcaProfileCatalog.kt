@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 102) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 103) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)

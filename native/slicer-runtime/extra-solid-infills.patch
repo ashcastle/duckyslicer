@@ -1,0 +1,97 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+index b293517..15f782b 100644
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -48,6 +48,7 @@ struct SliceConfig {
+     bool symmetric_infill_y_axis = false;
+     std::string sparse_infill_rotation_template;
+     std::string solid_infill_rotation_template;
++    std::string extra_solid_infills;
+     bool small_area_flow_compensation = false;
+     std::string small_area_flow_compensation_model =
+         "0,0\n0.2,0.4444\n0.4,0.6145\n0.6,0.7059\n0.8,0.7619\n"
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+index 2dfc792..b32e486 100644
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -100,6 +100,7 @@ SliceConfig readSliceConfig(JNIEnv* env, jobject configObj) {
+     config.symmetric_infill_y_axis = getBool("symmetricInfillYAxis");
+     config.sparse_infill_rotation_template = getString("sparseInfillRotationTemplate");
+     config.solid_infill_rotation_template = getString("solidInfillRotationTemplate");
++    config.extra_solid_infills = getString("extraSolidInfills");
+     config.small_area_flow_compensation = getBool("smallAreaFlowCompensation");
+     config.small_area_flow_compensation_model = getString("smallAreaFlowCompensationModel");
+     config.fill_multiline = getInt("fillMultiline");
+@@ -727,6 +728,7 @@ void writeSliceConfig(JNIEnv* env, jobject configObj, const SliceConfig& config)
+     setBool("symmetricInfillYAxis", config.symmetric_infill_y_axis);
+     setString("sparseInfillRotationTemplate", config.sparse_infill_rotation_template);
+     setString("solidInfillRotationTemplate", config.solid_infill_rotation_template);
++    setString("extraSolidInfills", config.extra_solid_infills);
+     setBool("smallAreaFlowCompensation", config.small_area_flow_compensation);
+     setString("smallAreaFlowCompensationModel", config.small_area_flow_compensation_model);
+     setInt("fillMultiline", config.fill_multiline);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+index 37ee517..a8db5df 100644
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -66,6 +66,49 @@ static bool validRotationTemplate(const std::string& value) {
+     return count > 0 && value.back() != ',';
+ }
+ 
++static bool validExtraSolidInfills(const std::string& value) {
++    std::string candidate;
++    candidate.reserve(value.size());
++    for (const char character : value) {
++        if (character != ' ' && character != '\t' && character != '\n' && character != '\r') {
++            candidate.push_back(character);
++        }
++    }
++    if (candidate.empty()) return true;
++    if (candidate.size() > 256 || candidate.front() == ',' || candidate.back() == ',') return false;
++
++    std::vector<std::string> tokens;
++    std::stringstream stream(candidate);
++    std::string token;
++    while (std::getline(stream, token, ',')) {
++        if (token.empty() || tokens.size() >= 64) return false;
++        tokens.push_back(token);
++    }
++    const bool multiple = tokens.size() > 1;
++    for (const std::string& entry : tokens) {
++        const auto separator = entry.find('#');
++        if (separator != std::string::npos && entry.find('#', separator + 1) != std::string::npos) return false;
++        const std::string base_text = entry.substr(0, separator);
++        const std::string count_text = separator == std::string::npos ? "" : entry.substr(separator + 1);
++        const auto digits = [](const std::string& text) {
++            return !text.empty() && std::all_of(text.begin(), text.end(), [](const unsigned char character) {
++                return character >= '0' && character <= '9';
++            });
++        };
++        if (!digits(base_text) || (!count_text.empty() && !digits(count_text))) return false;
++        try {
++            const unsigned long long base = std::stoull(base_text);
++            const unsigned long long count = count_text.empty() ? 1 : std::stoull(count_text);
++            if (base < 1 || base > 1000000 || count < 1 || count > 10000 || (!multiple && count > base)) {
++                return false;
++            }
++        } catch (const std::exception&) {
++            return false;
++        }
++    }
++    return !tokens.empty();
++}
++
+ static std::vector<std::string> parseSmallAreaFlowCompensationModel(const std::string& value) {
+     if (value.empty() || value.size() > 16384) {
+         throw std::invalid_argument("Invalid small-area flow-compensation model size");
+@@ -346,6 +389,10 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfig
+     }
+     dpc.set_key_value("sparse_infill_rotate_template", new Slic3r::ConfigOptionString(config.sparse_infill_rotation_template));
+     dpc.set_key_value("solid_infill_rotate_template", new Slic3r::ConfigOptionString(config.solid_infill_rotation_template));
++    if (!validExtraSolidInfills(config.extra_solid_infills)) {
++        throw std::invalid_argument("Invalid extra solid infill pattern");
++    }
++    dpc.set_key_value("extra_solid_infills", new Slic3r::ConfigOptionString(config.extra_solid_infills));
+     dpc.set_key_value(
+         "small_area_infill_flow_compensation",
+         new Slic3r::ConfigOptionBool(config.small_area_flow_compensation));

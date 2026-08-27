@@ -658,7 +658,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "`.duckyprofiles`",
         "application/vnd.duckyslicer.profiles+json",
         '"bundleVersion": 1',
-        '"profileSchemaVersion": 102',
+        '"profileSchemaVersion": 103',
         "exact profile duplicates are skipped",
         "profile names are trimmed and compared case-insensitively",
         "`Name (2)`",

@@ -807,8 +807,10 @@ class SliceOptionsPersistenceTest {
         assertEquals(123f, restored.solidInfillDirection)
         assertEquals("0,60,120", restored.quality.sparseInfillRotationTemplate)
         assertEquals("0,90", restored.quality.solidInfillRotationTemplate)
+        assertEquals("5#2", restored.quality.extraSolidInfills)
         assertEquals("0,60,120", restored.toNativeConfig().sparseInfillRotationTemplate)
         assertEquals("0,90", restored.toNativeConfig().solidInfillRotationTemplate)
+        assertEquals("5#2", restored.toNativeConfig().extraSolidInfills)
         assertEquals(true, restored.quality.smallAreaFlowCompensation)
         assertEquals(
             "0,0\n0.5,0.6\n10,1",
@@ -1542,6 +1544,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             symmetricInfillYAxis = true,
             sparseInfillRotationTemplate = "0,60,120",
             solidInfillRotationTemplate = "0,90",
+            extraSolidInfills = "5#2",
             smallAreaFlowCompensation = true,
             smallAreaFlowCompensationModel = "0,0\n0.5,0.6\n10,1",
             travelSpeedZ = 17f,

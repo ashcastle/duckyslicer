@@ -7124,6 +7124,47 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun extraSolidInfillsCreateRealInternalSolidExtrusion() {
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                fillPattern = "rectilinear",
+                fillDensity = 0.10f,
+                topSolidLayers = 2,
+                bottomSolidLayers = 2,
+                skirtLoops = 0,
+                brimWidth = 0f,
+            )
+        val baseline = OnDeviceSlicer.slice(fixtureModel(), base)
+        val inserted = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.copy(quality = base.quality.copy(extraSolidInfills = "4#2")),
+        )
+        try {
+            fun internalSolidMotion(gcode: String): List<String> {
+                var selected = false
+                return gcode.lineSequence().mapNotNull { line ->
+                    if (line.startsWith(";TYPE:")) selected = line == ";TYPE:Internal solid infill"
+                    line.takeIf { selected && it.startsWith("G1 ") && it.contains(" E") }
+                }.toList()
+            }
+
+            val baselineGcode = baseline.output.readText()
+            val insertedGcode = inserted.output.readText()
+            assertTrue(insertedGcode.contains("; extra_solid_infills = 4#2"))
+            assertTrue(
+                "Inserted solid layers must add physical internal-solid extrusion",
+                internalSolidMotion(insertedGcode).size > internalSolidMotion(baselineGcode).size,
+            )
+        } finally {
+            baseline.output.delete()
+            inserted.output.delete()
+        }
+    }
+
+    @Test
     fun multipleObjectsReachTheOrcaProjectAndSliceTogether() {
         val modelFile = fixtureModel()
         val model = inspectModel(modelFile.absolutePath)

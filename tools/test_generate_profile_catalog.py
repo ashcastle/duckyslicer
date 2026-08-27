@@ -10,6 +10,7 @@ from tools.generate_profile_catalog import (
     build_printer,
     build_process,
     coordinate_pair,
+    extra_solid_infills,
     nozzle_material,
     printable_geometry,
     small_area_flow_compensation_model,
@@ -20,6 +21,13 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_normalizes_extra_solid_infill_patterns(self) -> None:
+        self.assertEqual("", extra_solid_infills(None))
+        self.assertEqual("5#2", extra_solid_infills(" 5 # 2 "))
+        self.assertEqual("1,7,9", extra_solid_infills("1, 7, 9"))
+        self.assertEqual("", extra_solid_infills("5#6"))
+        self.assertEqual("", extra_solid_infills("1,,2"))
+
     def test_normalizes_and_bounds_gcode_thumbnail_definitions(self) -> None:
         self.assertEqual("", thumbnail_definitions(None))
         self.assertEqual(
@@ -614,6 +622,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "skeleton_infill_line_width": "0.62",
                 "sparse_infill_rotate_template": "0,60,120",
                 "rotate_solid_infill_direction": "1",
+                "extra_solid_infills": "5#2",
             },
             {},
         )
@@ -633,6 +642,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertFalse(profile["skeletonInfillLineWidthPercent"])
         self.assertEqual("0,60,120", profile["sparseInfillRotationTemplate"])
         self.assertEqual("0,90", profile["solidInfillRotationTemplate"])
+        self.assertEqual("5#2", profile["extraSolidInfills"])
 
     def test_preserves_fill_multiline(self) -> None:
         profile = build_process(

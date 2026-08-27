@@ -68,6 +68,7 @@ BUILD_INPUTS = (
     "native/slicer-runtime/engine-nozzle-volume.patch",
     "native/slicer-runtime/engine-branding.patch",
     "native/slicer-runtime/engine-support-flow-ratios.patch",
+    "native/slicer-runtime/extra-solid-infills.patch",
     "native/slicer-runtime/filament-colors.patch",
     "native/slicer-runtime/layer-pauses.patch",
     "native/slicer-runtime/gcode-thumbnail.patch",

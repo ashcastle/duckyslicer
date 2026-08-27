@@ -1200,6 +1200,10 @@
     <string name="fuzzy_skin_persistence">디테일 강도</string>
     <string name="sparse_infill_rotation_template">희소 인필 레이어별 방향</string>
     <string name="solid_infill_rotation_template">솔리드 인필 레이어별 방향</string>
+    <string name="extra_solid_infills">솔리드 레이어 추가</string>
+    <string name="extra_solid_infills_example">5#2</string>
+    <string name="extra_solid_infills_hint">5는 5개 레이어마다, 5#2는 5개마다 2개 레이어, 1,7,9는 지정한 레이어에 적용합니다.</string>
+    <string name="extra_solid_infills_invalid">양의 레이어 번호를 쉼표로 구분하거나 N#K 형식으로 입력하세요.</string>
     <string name="infill_rotation_template_example">0,90</string>
     <string name="infill_rotation_template_hint">입력한 각도를 레이어마다 반복합니다. 비우면 고정 방향을 사용합니다.</string>
     <string name="infill_rotation_template_invalid">−360°~360° 각도를 쉼표로 구분해 32개까지 입력하세요.</string>

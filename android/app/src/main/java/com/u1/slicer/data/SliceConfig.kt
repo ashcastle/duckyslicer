@@ -373,6 +373,7 @@ data class SliceConfig(
     @JvmField var symmetricInfillYAxis: Boolean = false
     @JvmField var sparseInfillRotationTemplate: String = ""
     @JvmField var solidInfillRotationTemplate: String = ""
+    @JvmField var extraSolidInfills: String = ""
     @JvmField var smallAreaFlowCompensation: Boolean = false
     @JvmField var smallAreaFlowCompensationModel: String =
         DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL

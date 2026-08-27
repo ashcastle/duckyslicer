@@ -1082,6 +1082,7 @@ data class QualityProfile(
     val solidInfillDirection: Float = 45f,
     val sparseInfillRotationTemplate: String = "",
     val solidInfillRotationTemplate: String = "",
+    val extraSolidInfills: String = "",
     val smallAreaFlowCompensation: Boolean = false,
     val smallAreaFlowCompensationModel: String = DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL,
     val alignInfillDirectionToModel: Boolean = false,
@@ -2575,6 +2576,7 @@ data class SliceOptions(
             native.symmetricInfillYAxis = quality.symmetricInfillYAxis
             native.sparseInfillRotationTemplate = quality.sparseInfillRotationTemplate
             native.solidInfillRotationTemplate = quality.solidInfillRotationTemplate
+            native.extraSolidInfills = quality.extraSolidInfills
             native.smallAreaFlowCompensation = quality.smallAreaFlowCompensation
             native.smallAreaFlowCompensationModel = quality.smallAreaFlowCompensationModel
             native.skinInfillLineWidth = quality.skinInfillLineWidth

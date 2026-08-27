@@ -1200,6 +1200,10 @@
     <string name="fuzzy_skin_persistence">Detail strength</string>
     <string name="sparse_infill_rotation_template">Sparse infill rotation template</string>
     <string name="solid_infill_rotation_template">Solid infill rotation template</string>
+    <string name="extra_solid_infills">Insert solid layers</string>
+    <string name="extra_solid_infills_example">5#2</string>
+    <string name="extra_solid_infills_hint">Use 5 for every fifth layer, 5#2 for two layers every five, or 1,7,9 for selected layers.</string>
+    <string name="extra_solid_infills_invalid">Use positive layer numbers separated by commas, or N#K.</string>
     <string name="infill_rotation_template_example">0,90</string>
     <string name="infill_rotation_template_hint">Angles repeat for each layer. Leave empty to use the fixed direction.</string>
     <string name="infill_rotation_template_invalid">Enter up to 32 comma-separated angles from −360° to 360°.</string>

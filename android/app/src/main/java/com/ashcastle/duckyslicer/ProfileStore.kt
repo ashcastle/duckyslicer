@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 102
+internal const val USER_PROFILE_SCHEMA_VERSION = 103
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -492,6 +492,7 @@ class ProfileStore private constructor(
             symmetricInfillYAxis = options.quality.symmetricInfillYAxis,
             sparseInfillRotationTemplate = options.quality.sparseInfillRotationTemplate,
             solidInfillRotationTemplate = options.quality.solidInfillRotationTemplate,
+            extraSolidInfills = options.quality.extraSolidInfills,
             smallAreaFlowCompensation = options.quality.smallAreaFlowCompensation,
             smallAreaFlowCompensationModel = options.quality.smallAreaFlowCompensationModel,
             skinInfillLineWidth = options.quality.skinInfillLineWidth,
@@ -1089,6 +1090,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("symmetricInfillYAxis", symmetricInfillYAxis)
     .put("sparseInfillRotationTemplate", sparseInfillRotationTemplate)
     .put("solidInfillRotationTemplate", solidInfillRotationTemplate)
+    .put("extraSolidInfills", extraSolidInfills)
     .put("smallAreaFlowCompensation", smallAreaFlowCompensation)
     .put("smallAreaFlowCompensationModel", smallAreaFlowCompensationModel)
     .put("skinInfillLineWidth", skinInfillLineWidth)
@@ -1685,6 +1687,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         symmetricInfillYAxis = optBoolean("symmetricInfillYAxis"),
         sparseInfillRotationTemplate = optString("sparseInfillRotationTemplate", ""),
         solidInfillRotationTemplate = optString("solidInfillRotationTemplate", ""),
+        extraSolidInfills = optString("extraSolidInfills", ""),
         smallAreaFlowCompensation = optBoolean("smallAreaFlowCompensation"),
         smallAreaFlowCompensationModel = optString(
             "smallAreaFlowCompensationModel",

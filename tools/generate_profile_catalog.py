@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 102
+SCHEMA_VERSION = 103
 MAX_FILAMENT_SLOTS = 16
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
@@ -825,6 +825,33 @@ def rotation_template(value: Any, default: str = "") -> str:
     return ",".join(f"{angle:g}" for angle in angles)
 
 
+def extra_solid_infills(value: Any, default: str = "") -> str:
+    candidate = "".join(str(scalar(value, default)).split())
+    if not candidate:
+        return ""
+    if len(candidate) > 256:
+        return default
+    tokens = candidate.split(",")
+    if not (1 <= len(tokens) <= 64):
+        return default
+    multiple = len(tokens) > 1
+    normalized: list[str] = []
+    for token in tokens:
+        if not token or token.count("#") > 1:
+            return default
+        base_text, separator, count_text = token.partition("#")
+        if not base_text.isdigit() or (separator and count_text and not count_text.isdigit()):
+            return default
+        base = int(base_text)
+        count = int(count_text) if count_text else 1
+        if not (1 <= base <= 1_000_000 and 1 <= count <= 10_000):
+            return default
+        if not multiple and count > base:
+            return default
+        normalized.append(str(base) if count == 1 else f"{base}#{count}")
+    return ",".join(normalized)
+
+
 def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     name = str(raw["name"])
     filament_type = str(scalar(raw.get("filament_type"), "")).strip()
@@ -1320,6 +1347,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
             raw.get("solid_infill_rotate_template"),
             "0,90" if boolean(raw.get("rotate_solid_infill_direction")) else "",
         ),
+        "extraSolidInfills": extra_solid_infills(raw.get("extra_solid_infills")),
         "smallAreaFlowCompensation": boolean(raw.get("small_area_infill_flow_compensation")),
         "smallAreaFlowCompensationModel": small_area_flow_compensation_model(
             raw.get("small_area_infill_flow_compensation_model")

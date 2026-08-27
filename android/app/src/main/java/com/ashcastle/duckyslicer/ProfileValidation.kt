@@ -339,6 +339,7 @@ internal object ProfileValidation {
             profile.solidInfillDirection in 0f..360f &&
             rotationTemplateIsValid(profile.sparseInfillRotationTemplate) &&
             rotationTemplateIsValid(profile.solidInfillRotationTemplate) &&
+            extraSolidInfillsIsValid(profile.extraSolidInfills) &&
             smallAreaFlowCompensationModelIsValid(profile.smallAreaFlowCompensationModel) &&
             profile.minimumSparseInfillArea in 0f..1_000_000f &&
             profile.infillAnchor in 0f..1_000f &&
@@ -590,6 +591,32 @@ internal fun rotationTemplateIsValid(value: String): Boolean {
     }
 }
 
+internal fun extraSolidInfillsIsValid(value: String): Boolean {
+    val candidate = value.filterNot(Char::isWhitespace)
+    if (candidate.isEmpty()) return true
+    if (candidate.length > MAX_EXTRA_SOLID_INFILL_PATTERN_LENGTH) return false
+    val tokens = candidate.split(',')
+    if (tokens.size !in 1..MAX_EXTRA_SOLID_INFILL_TOKENS) return false
+    val multiple = tokens.size > 1
+    return tokens.all { token ->
+        if (token.isEmpty() || token.count { it == '#' } > 1) return@all false
+        val baseText = token.substringBefore('#')
+        val hasCount = '#' in token
+        val countText = token.substringAfter('#', "")
+        if (
+            baseText.isEmpty() || baseText.any { !it.isDigit() } ||
+            (hasCount && countText.isNotEmpty() && countText.any { !it.isDigit() })
+        ) {
+            return@all false
+        }
+        val base = baseText.toIntOrNull() ?: return@all false
+        val count = countText.takeIf(String::isNotEmpty)?.toIntOrNull() ?: 1
+        base in 1..MAX_EXTRA_SOLID_INFILL_LAYER &&
+            count in 1..MAX_EXTRA_SOLID_INFILL_COUNT &&
+            (multiple || count <= base)
+    }
+}
+
 internal fun smallAreaFlowCompensationModelIsValid(value: String): Boolean {
     if (value.toByteArray(Charsets.UTF_8).size > MAX_SMALL_AREA_FLOW_MODEL_BYTES) return false
     val points = value.split('\n')
@@ -675,8 +702,12 @@ internal fun gcodeThumbnailDefinitionsAreValid(value: String): Boolean =
 
 internal const val MAX_GCODE_FILENAME_FORMAT_BYTES = 1_024
 internal const val MAX_GCODE_THUMBNAIL_BYTES = 256
+internal const val MAX_EXTRA_SOLID_INFILL_PATTERN_LENGTH = 256
 internal const val MAX_SMALL_AREA_FLOW_MODEL_BYTES = 16_384
 internal const val MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES = 16_384
+private const val MAX_EXTRA_SOLID_INFILL_TOKENS = 64
+private const val MAX_EXTRA_SOLID_INFILL_LAYER = 1_000_000
+private const val MAX_EXTRA_SOLID_INFILL_COUNT = 10_000
 private const val MAX_SMALL_AREA_FLOW_MODEL_POINTS = 256
 private const val MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_POINTS = 256
 private const val MAX_GCODE_THUMBNAILS = 8

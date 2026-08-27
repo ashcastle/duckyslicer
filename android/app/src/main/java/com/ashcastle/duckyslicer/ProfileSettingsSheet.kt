@@ -4421,6 +4421,14 @@ private fun SlicingSettingsSheet(
                         )
                     },
                 )
+                ExtraSolidInfillsSetting(
+                    value = options.quality.extraSolidInfills,
+                    onValueChange = {
+                        onOptionsChanged(
+                            options.copy(quality = options.quality.copy(extraSolidInfills = it)),
+                        )
+                    },
+                )
                 if (options.quality.solidInfillRotationTemplate.isBlank() || settingsQuery.isNotBlank()) {
                     SettingSlider(
                         label = stringResource(R.string.solid_infill_direction),
@@ -7237,6 +7245,40 @@ private fun RotationTemplateSetting(
             )
         },
         isError = !rotationTemplateIsValid(value),
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun ExtraSolidInfillsSetting(
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    val label = stringResource(R.string.extra_solid_infills)
+    if (!settingMatchesQuery(label)) return
+    val valid = extraSolidInfillsIsValid(value)
+    OutlinedTextField(
+        value = value,
+        onValueChange = { candidate ->
+            if (
+                candidate.length <= MAX_EXTRA_SOLID_INFILL_PATTERN_LENGTH &&
+                candidate.all { it.isDigit() || it == '#' || it == ',' || it.isWhitespace() }
+            ) {
+                onValueChange(candidate)
+            }
+        },
+        label = { Text(label) },
+        placeholder = { Text(stringResource(R.string.extra_solid_infills_example)) },
+        supportingText = {
+            Text(
+                stringResource(
+                    if (valid) R.string.extra_solid_infills_hint
+                    else R.string.extra_solid_infills_invalid,
+                ),
+            )
+        },
+        isError = !valid,
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )

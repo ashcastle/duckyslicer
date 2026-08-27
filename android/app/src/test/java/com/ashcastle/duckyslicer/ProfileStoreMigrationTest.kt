@@ -446,6 +446,7 @@ class ProfileStoreMigrationTest {
                     symmetricInfillYAxis = true,
                     sparseInfillRotationTemplate = "0,60,120",
                     solidInfillRotationTemplate = "0,90",
+                    extraSolidInfills = "5#2",
                     smallAreaFlowCompensation = true,
                     smallAreaFlowCompensationModel = "0,0\n0.5,0.6\n10,1",
                     skinInfillLineWidth = 135f,
@@ -485,6 +486,7 @@ class ProfileStoreMigrationTest {
             assertEquals(true, restored.symmetricInfillYAxis)
             assertEquals("0,60,120", restored.sparseInfillRotationTemplate)
             assertEquals("0,90", restored.solidInfillRotationTemplate)
+            assertEquals("5#2", restored.extraSolidInfills)
             assertTrue(restored.smallAreaFlowCompensation)
             assertEquals("0,0\n0.5,0.6\n10,1", restored.smallAreaFlowCompensationModel)
         } finally {

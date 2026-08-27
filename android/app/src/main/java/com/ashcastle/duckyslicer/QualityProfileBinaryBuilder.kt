@@ -114,6 +114,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var solidInfillDirection: Float = base.solidInfillDirection
     private var sparseInfillRotationTemplate: String = base.sparseInfillRotationTemplate
     private var solidInfillRotationTemplate: String = base.solidInfillRotationTemplate
+    private var extraSolidInfills: String = base.extraSolidInfills
     private var smallAreaFlowCompensation: Boolean = base.smallAreaFlowCompensation
     private var smallAreaFlowCompensationModel: String = base.smallAreaFlowCompensationModel
     private var alignInfillDirectionToModel: Boolean = base.alignInfillDirectionToModel
@@ -470,6 +471,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         solidInfillDirection = input.readFloat()
         sparseInfillRotationTemplate = input.readCatalogString()
         solidInfillRotationTemplate = input.readCatalogString()
+        extraSolidInfills = input.readCatalogString()
         smallAreaFlowCompensation = input.readCatalogBoolean()
         smallAreaFlowCompensationModel = input.readCatalogString()
         alignInfillDirectionToModel = input.readCatalogBoolean()
@@ -867,6 +869,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         solidInfillDirection = solidInfillDirection,
         sparseInfillRotationTemplate = sparseInfillRotationTemplate,
         solidInfillRotationTemplate = solidInfillRotationTemplate,
+        extraSolidInfills = extraSolidInfills,
         smallAreaFlowCompensation = smallAreaFlowCompensation,
         smallAreaFlowCompensationModel = smallAreaFlowCompensationModel,
         alignInfillDirectionToModel = alignInfillDirectionToModel,
@@ -1227,6 +1230,7 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("solidInfillDirection", BINARY_FLOAT),
     BinaryField("sparseInfillRotationTemplate", BINARY_STRING),
     BinaryField("solidInfillRotationTemplate", BINARY_STRING),
+    BinaryField("extraSolidInfills", BINARY_STRING),
     BinaryField("smallAreaFlowCompensation", BINARY_BOOL),
     BinaryField("smallAreaFlowCompensationModel", BINARY_STRING),
     BinaryField("alignInfillDirectionToModel", BINARY_BOOL),
