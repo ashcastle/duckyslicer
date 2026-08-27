@@ -290,6 +290,7 @@ data class SliceConfig(
     @JvmField var beforeLayerChangeGcode: String = ""
     @JvmField var layerChangeGcode: String = ""
     @JvmField var machinePauseGcode: String = ""
+    @JvmField var templateCustomGcode: String = ""
     @JvmField var timeLapseGcode: String = ""
     @JvmField var changeFilamentGcode: String = ""
     @JvmField var printingByObjectGcode: String = ""

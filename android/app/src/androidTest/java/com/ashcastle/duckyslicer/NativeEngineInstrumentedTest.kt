@@ -196,6 +196,33 @@ class NativeEngineInstrumentedTest {
             } finally {
                 changed.output.delete()
             }
+
+            val templateCode = ";DUCKY_PRINTER_LAYER_TEMPLATE\nM117 DUCKY_TEMPLATE_LAYER"
+            val templateOptions = options.copy(
+                printerProfile = options.printerProfile.copy(
+                    templateCustomGcode = templateCode,
+                ),
+            )
+            val templated = OnDeviceSlicer.slice(
+                listOf(projectObject),
+                templateOptions,
+                layerCustomGCodeEvents = LayerCustomGCodeEvents(
+                    listOf(
+                        LayerCustomGCodeEvent(
+                            selectedPrintZ,
+                            "",
+                            LayerCustomGCodeKind.PRINTER_TEMPLATE,
+                        ),
+                    ),
+                ),
+            )
+            try {
+                val lines = templated.output.readLines().map(String::trim)
+                assertEquals(1, lines.count { it == ";DUCKY_PRINTER_LAYER_TEMPLATE" })
+                assertEquals(1, lines.count { it == "M117 DUCKY_TEMPLATE_LAYER" })
+            } finally {
+                templated.output.delete()
+            }
         } finally {
             baseline.output.delete()
             model.delete()
@@ -2796,10 +2823,15 @@ class NativeEngineInstrumentedTest {
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
         assertFalse(loadResult.bundledCatalogUnavailable)
-        assertEquals(112, catalog.schemaVersion)
+        assertEquals(113, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertEquals(789, catalog.printers.count { it.id.startsWith("orca-printer-") })
+        assertEquals(
+            ";FILAMENT_CHANGE\nM600",
+            catalog.printers.single { it.name == "FLSun Super Racer 0.4 nozzle" }
+                .templateCustomGcode,
+        )
         assertTrue(
             catalog.printers.single { it.name == "Ginger G1 1.2 nozzle" }.pelletModded,
         )

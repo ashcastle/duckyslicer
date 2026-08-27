@@ -734,6 +734,38 @@ private fun ExternalProjectImportEffect(
     }
 }
 
+private class LayerEventActions(
+    private val projectTransferModel: ProjectTransferViewModel,
+) {
+    fun addPause(printZMm: Float): Boolean = update {
+        it.putLayerPause(LayerPauseEvent(printZMm))
+    }
+
+    fun removePause(printZMm: Float): Boolean = update { it.removeLayerPause(printZMm) }
+
+    fun putFilamentChange(printZMm: Float, filamentSlot: Int): Boolean = update {
+        it.putLayerFilamentChange(LayerFilamentChange(printZMm, filamentSlot))
+    }
+
+    fun removeFilamentChange(printZMm: Float): Boolean = update {
+        it.removeLayerFilamentChange(printZMm)
+    }
+
+    fun putCustomGCode(event: LayerCustomGCodeEvent): Boolean = update {
+        it.putLayerCustomGCode(event)
+    }
+
+    fun removeCustomGCode(printZMm: Float): Boolean = update {
+        it.removeLayerCustomGCode(printZMm)
+    }
+
+    private fun update(transform: (ProjectHistoryState) -> ProjectHistoryState): Boolean {
+        val current = projectTransferModel.state.value.history
+        val next = transform(current)
+        return next != current && projectTransferModel.updateHistory(current, next)
+    }
+}
+
 @Composable
 private fun DuckySlicerScreen(
     sliceOperationModel: SliceOperationViewModel,
@@ -790,10 +822,17 @@ private fun DuckySlicerScreen(
             notice = null
         }
     }
+    val acceptProfileDelete: (Boolean) -> Unit = { deleted ->
+        if (!deleted) {
+            error = profileDeleteError
+            notice = null
+        }
+    }
     val profileActions = ProfileLibraryActions(
         model = profileLibraryModel,
         sessionRevision = { projectTransferModel.state.value.sessionRevision },
         accept = acceptProfileSave,
+        acceptDelete = acceptProfileDelete,
     )
     var externalProjectConfirmation by remember { mutableStateOf<ExternalProjectRequest?>(null) }
     var plateSliceResults by rememberSaveable { mutableStateOf(PlateSliceResults()) }
@@ -947,6 +986,16 @@ private fun DuckySlicerScreen(
         sliceOperationModel.clearCompleted()
         plateSliceResults = plateSliceResults.clear(selectedPlateId)
         remoteOperationModel.invalidateUpload()
+    }
+    val layerEventActions = remember(projectTransferModel) {
+        LayerEventActions(projectTransferModel)
+    }
+    fun finishLayerEventUpdate(changed: Boolean) {
+        if (changed) {
+            invalidateSliceAfterPreviewEdit()
+            notice = null
+            error = null
+        }
     }
 
     val projectShareActions = rememberProjectArchiveShareActions(
@@ -1992,89 +2041,29 @@ private fun DuckySlicerScreen(
         onRenamePrinterProfile = profileActions::renamePrinter,
         onRenameFilamentProfile = profileActions::renameFilament,
         onRenameSlicingProfile = profileActions::renameSlicing,
-        onDeletePrinterProfile = { profileId ->
-            if (!profileLibraryModel.deletePrinter(profileId)) {
-                error = profileDeleteError
-                notice = null
-            }
-        },
-        onDeleteFilamentProfile = { profileId ->
-            if (!profileLibraryModel.deleteFilament(profileId)) {
-                error = profileDeleteError
-                notice = null
-            }
-        },
-        onDeleteSlicingProfile = { profileId ->
-            if (!profileLibraryModel.deleteSlicing(profileId)) {
-                error = profileDeleteError
-                notice = null
-            }
-        },
+        onDeletePrinterProfile = profileActions::deletePrinter,
+        onDeleteFilamentProfile = profileActions::deleteFilament,
+        onDeleteSlicingProfile = profileActions::deleteSlicing,
         onLayerRangeSelected = loadPreviewRange,
         onAddLayerPause = { _, printZMm ->
-            val current = projectTransferModel.state.value.history
-            val next = current.putLayerPause(
-                LayerPauseEvent(
-                    printZMm = printZMm,
-                ),
-            )
-            if (next != current && projectTransferModel.updateHistory(current, next)) {
-                invalidateSliceAfterPreviewEdit()
-                notice = null
-                error = null
-            }
+            finishLayerEventUpdate(layerEventActions.addPause(printZMm))
         },
         onRemoveLayerPause = { printZMm ->
-            val current = projectTransferModel.state.value.history
-            val next = current.removeLayerPause(printZMm)
-            if (next != current && projectTransferModel.updateHistory(current, next)) {
-                invalidateSliceAfterPreviewEdit()
-                notice = null
-                error = null
-            }
+            finishLayerEventUpdate(layerEventActions.removePause(printZMm))
         },
         onPutLayerFilamentChange = { _, printZMm, filamentSlot ->
-            val current = projectTransferModel.state.value.history
-            val next = current.putLayerFilamentChange(
-                LayerFilamentChange(
-                    printZMm = printZMm,
-                    filamentSlot = filamentSlot,
-                ),
+            finishLayerEventUpdate(
+                layerEventActions.putFilamentChange(printZMm, filamentSlot),
             )
-            if (next != current && projectTransferModel.updateHistory(current, next)) {
-                invalidateSliceAfterPreviewEdit()
-                notice = null
-                error = null
-            }
         },
         onRemoveLayerFilamentChange = { printZMm ->
-            val current = projectTransferModel.state.value.history
-            val next = current.removeLayerFilamentChange(printZMm)
-            if (next != current && projectTransferModel.updateHistory(current, next)) {
-                invalidateSliceAfterPreviewEdit()
-                notice = null
-                error = null
-            }
+            finishLayerEventUpdate(layerEventActions.removeFilamentChange(printZMm))
         },
-        onPutLayerCustomGCode = { _, printZMm, gcode ->
-            val current = projectTransferModel.state.value.history
-            val next = current.putLayerCustomGCode(
-                LayerCustomGCodeEvent(printZMm = printZMm, gcode = gcode),
-            )
-            if (next != current && projectTransferModel.updateHistory(current, next)) {
-                invalidateSliceAfterPreviewEdit()
-                notice = null
-                error = null
-            }
+        onPutLayerCustomGCode = { event ->
+            finishLayerEventUpdate(layerEventActions.putCustomGCode(event))
         },
         onRemoveLayerCustomGCode = { printZMm ->
-            val current = projectTransferModel.state.value.history
-            val next = current.removeLayerCustomGCode(printZMm)
-            if (next != current && projectTransferModel.updateHistory(current, next)) {
-                invalidateSliceAfterPreviewEdit()
-                notice = null
-                error = null
-            }
+            finishLayerEventUpdate(layerEventActions.removeCustomGCode(printZMm))
         },
         onAppSettingsChanged = { next ->
             appSettingsModel.updateSettings(next)
@@ -2177,6 +2166,7 @@ private class ProfileLibraryActions(
     private val model: ProfileLibraryViewModel,
     private val sessionRevision: () -> Long,
     private val accept: (Boolean) -> Unit,
+    private val acceptDelete: (Boolean) -> Unit,
 ) {
     fun savePrinter(name: String, options: SliceOptions) =
         accept(model.savePrinter(name, options, sessionRevision()))
@@ -2204,6 +2194,12 @@ private class ProfileLibraryActions(
 
     fun renameSlicing(profileId: String, name: String, options: SliceOptions) =
         accept(model.renameSlicing(profileId, name, options, sessionRevision()))
+
+    fun deletePrinter(profileId: String) = acceptDelete(model.deletePrinter(profileId))
+
+    fun deleteFilament(profileId: String) = acceptDelete(model.deleteFilament(profileId))
+
+    fun deleteSlicing(profileId: String) = acceptDelete(model.deleteSlicing(profileId))
 }
 
 internal fun profileTransferSuccessNotice(

@@ -231,7 +231,13 @@ class ProjectStoreTest {
                             listOf(LayerFilamentChange(7.4f, 1)),
                         ),
                         layerCustomGCodeEvents = LayerCustomGCodeEvents(
-                            listOf(LayerCustomGCodeEvent(9.6f, "M117 Inspect")),
+                            listOf(
+                                LayerCustomGCodeEvent(
+                                    9.6f,
+                                    "",
+                                    LayerCustomGCodeKind.PRINTER_TEMPLATE,
+                                ),
+                            ),
                         ),
                     )
                 },
@@ -242,7 +248,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(81, persisted.getInt("schemaVersion"))
+        assertEquals(82, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf(
                 "schemaVersion", "selectedPlateId", "linkedDocument",
@@ -369,6 +375,10 @@ class ProjectStoreTest {
         assertEquals(
             listOf(0f, -2.5f),
             restored.sliceOptions?.printerProfile?.extruderOffsetsY,
+        )
+        assertEquals(
+            "; FIXTURE_LAYER_TEMPLATE",
+            restored.sliceOptions?.printerProfile?.templateCustomGcode,
         )
         assertEquals(
             "; FIXTURE_TIMELAPSE",

@@ -53,7 +53,7 @@ class OrcaProfileCatalog internal constructor(
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 112) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 113) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -125,6 +125,7 @@ class OrcaProfileCatalog internal constructor(
         machineStartGcode = input.readCatalogString(),
         machineEndGcode = input.readCatalogString(),
         machinePauseGcode = input.readCatalogString(),
+        templateCustomGcode = input.readCatalogString(),
         timeLapseGcode = input.readCatalogString(),
         beforeLayerChangeGcode = input.readCatalogString(),
         layerChangeGcode = input.readCatalogString(),
@@ -420,6 +421,7 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("machineStartGcode", BINARY_STRING),
     BinaryField("machineEndGcode", BINARY_STRING),
     BinaryField("machinePauseGcode", BINARY_STRING),
+    BinaryField("templateCustomGcode", BINARY_STRING),
     BinaryField("timeLapseGcode", BINARY_STRING),
     BinaryField("beforeLayerChangeGcode", BINARY_STRING),
     BinaryField("layerChangeGcode", BINARY_STRING),

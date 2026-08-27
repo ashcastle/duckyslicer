@@ -610,7 +610,7 @@ internal fun WorkspaceScreen(
     onRemoveLayerPause: (Float) -> Unit,
     onPutLayerFilamentChange: (Int, Float, Int) -> Unit,
     onRemoveLayerFilamentChange: (Float) -> Unit,
-    onPutLayerCustomGCode: (Int, Float, String) -> Unit,
+    onPutLayerCustomGCode: (LayerCustomGCodeEvent) -> Unit,
     onRemoveLayerCustomGCode: (Float) -> Unit,
     onAppSettingsChanged: (AppSettings) -> Unit,
     onSupportReportExport: (Uri) -> Unit,
@@ -1216,6 +1216,7 @@ internal fun WorkspaceScreen(
                     layerFilamentChanges = layerFilamentChanges,
                     layerCustomGCodeEvents = layerCustomGCodeEvents,
                     layerFilamentChangesAvailable = layerFilamentChangesAvailable,
+                    printerTemplateGcode = sliceOptions.printerProfile.templateCustomGcode,
                     onPreviewColorModeChanged = { mode -> previewColorModeName = mode.name },
                     onToolpathRoleVisibilityChanged = { role, visible ->
                         visibleToolpathRoles = if (visible) {
@@ -7065,6 +7066,7 @@ private fun PreviewSheet(
     layerFilamentChanges: LayerFilamentChanges,
     layerCustomGCodeEvents: LayerCustomGCodeEvents,
     layerFilamentChangesAvailable: Boolean,
+    printerTemplateGcode: String,
     onPreviewColorModeChanged: (PreviewColorMode) -> Unit,
     onToolpathRoleVisibilityChanged: (Int, Boolean) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
@@ -7072,7 +7074,7 @@ private fun PreviewSheet(
     onRemoveLayerPause: (Float) -> Unit,
     onPutLayerFilamentChange: (Int, Float, Int) -> Unit,
     onRemoveLayerFilamentChange: (Float) -> Unit,
-    onPutLayerCustomGCode: (Int, Float, String) -> Unit,
+    onPutLayerCustomGCode: (LayerCustomGCodeEvent) -> Unit,
     onRemoveLayerCustomGCode: (Float) -> Unit,
     onGoToSlice: () -> Unit,
     onOpenGcode: () -> Unit,
@@ -7163,6 +7165,7 @@ private fun PreviewSheet(
                             layerFilamentChanges = layerFilamentChanges,
                             layerCustomGCodeEvents = layerCustomGCodeEvents,
                             layerFilamentChangesAvailable = layerFilamentChangesAvailable,
+                            printerTemplateAvailable = printerTemplateGcode.isNotBlank(),
                             layerEventsEditable = !imported,
                             toolpathOpacity = toolpathOpacity,
                             onToolpathOpacityChanged = onToolpathOpacityChanged,
@@ -7281,6 +7284,7 @@ internal fun PreviewControls(
     layerFilamentChanges: LayerFilamentChanges = LayerFilamentChanges(),
     layerCustomGCodeEvents: LayerCustomGCodeEvents = LayerCustomGCodeEvents(),
     layerFilamentChangesAvailable: Boolean = false,
+    printerTemplateAvailable: Boolean = false,
     layerEventsEditable: Boolean = true,
     toolpathOpacity: Float,
     onToolpathOpacityChanged: (Float) -> Unit,
@@ -7295,7 +7299,7 @@ internal fun PreviewControls(
     onRemoveLayerPause: (Float) -> Unit = {},
     onPutLayerFilamentChange: (Int, Float, Int) -> Unit = { _, _, _ -> },
     onRemoveLayerFilamentChange: (Float) -> Unit = {},
-    onPutLayerCustomGCode: (Int, Float, String) -> Unit = { _, _, _ -> },
+    onPutLayerCustomGCode: (LayerCustomGCodeEvent) -> Unit = {},
     onRemoveLayerCustomGCode: (Float) -> Unit = {},
 ) {
     val lastLayerIndex = (preview.layerCount - 1).coerceAtLeast(0)
@@ -7537,7 +7541,10 @@ internal fun PreviewControls(
         Button(
             onClick = {
                 selectedLayerZ?.let { printZ ->
-                    customGCodeDraft = selectedCustomGCode?.gcode.orEmpty()
+                    customGCodeDraft = selectedCustomGCode
+                        ?.takeIf { it.kind == LayerCustomGCodeKind.CUSTOM }
+                        ?.gcode
+                        .orEmpty()
                     customGCodeTarget = selectedLayerIndex to printZ
                 }
             },
@@ -7666,7 +7673,11 @@ internal fun PreviewControls(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Text(
-                            event.gcode.lineSequence().first(),
+                            if (event.kind == LayerCustomGCodeKind.PRINTER_TEMPLATE) {
+                                stringResource(R.string.printer_gcode_template)
+                            } else {
+                                event.gcode.lineSequence().first()
+                            },
                             color = Color(0xFFAAABA6),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -7858,17 +7869,37 @@ internal fun PreviewControls(
             },
             title = { Text(stringResource(R.string.layer_custom_gcode_title, target.first + 1)) },
             text = {
-                OutlinedTextField(
-                    value = customGCodeDraft,
-                    onValueChange = { customGCodeDraft = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.gcode)) },
-                    placeholder = { Text(stringResource(R.string.layer_custom_gcode_example)) },
-                    supportingText = { Text(stringResource(R.string.layer_custom_gcode_limits)) },
-                    isError = customGCodeDraft.isNotEmpty() && !valid,
-                    minLines = 3,
-                    maxLines = 10,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = customGCodeDraft,
+                        onValueChange = { customGCodeDraft = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.gcode)) },
+                        placeholder = { Text(stringResource(R.string.layer_custom_gcode_example)) },
+                        supportingText = { Text(stringResource(R.string.layer_custom_gcode_limits)) },
+                        isError = customGCodeDraft.isNotEmpty() && !valid,
+                        minLines = 3,
+                        maxLines = 10,
+                    )
+                    if (printerTemplateAvailable) {
+                        OutlinedButton(
+                            onClick = {
+                                onPutLayerCustomGCode(
+                                    LayerCustomGCodeEvent(
+                                        target.second,
+                                        "",
+                                        LayerCustomGCodeKind.PRINTER_TEMPLATE,
+                                    ),
+                                )
+                                customGCodeTarget = null
+                                customGCodeDraft = ""
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.use_printer_gcode_template))
+                        }
+                    }
+                }
             },
             dismissButton = {
                 TextButton(
@@ -7884,7 +7915,9 @@ internal fun PreviewControls(
                 TextButton(
                     enabled = valid,
                     onClick = {
-                        onPutLayerCustomGCode(target.first, target.second, normalized)
+                        onPutLayerCustomGCode(
+                            LayerCustomGCodeEvent(target.second, normalized),
+                        )
                         customGCodeTarget = null
                         customGCodeDraft = ""
                     },

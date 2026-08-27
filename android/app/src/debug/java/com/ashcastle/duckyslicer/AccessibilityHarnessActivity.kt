@@ -377,6 +377,7 @@ private fun PreviewAccessibilityHarness() {
         layerFilamentChanges = filamentChanges,
         layerCustomGCodeEvents = customGCodeEvents,
         layerFilamentChangesAvailable = true,
+        printerTemplateAvailable = true,
         filamentColors = listOf(0xFFFFCF40.toInt(), 0xFF44D7FF.toInt()),
         layerFilamentColors = listOf(0xFFFFCF40.toInt(), 0xFF44D7FF.toInt()),
         toolpathOpacity = opacity,
@@ -402,8 +403,8 @@ private fun PreviewAccessibilityHarness() {
         onRemoveLayerFilamentChange = { printZMm ->
             filamentChanges = filamentChanges.remove(printZMm)
         },
-        onPutLayerCustomGCode = { _, printZMm, gcode ->
-            customGCodeEvents = customGCodeEvents.put(LayerCustomGCodeEvent(printZMm, gcode))
+        onPutLayerCustomGCode = { event ->
+            customGCodeEvents = customGCodeEvents.put(event)
         },
         onRemoveLayerCustomGCode = { printZMm ->
             customGCodeEvents = customGCodeEvents.remove(printZMm)
@@ -826,7 +827,7 @@ private fun WorkspaceAccessibilityHarness(
         onRemoveLayerPause = {},
         onPutLayerFilamentChange = { _, _, _ -> },
         onRemoveLayerFilamentChange = {},
-        onPutLayerCustomGCode = { _, _, _ -> },
+        onPutLayerCustomGCode = {},
         onRemoveLayerCustomGCode = {},
         onAppSettingsChanged = {},
         onSupportReportExport = {},

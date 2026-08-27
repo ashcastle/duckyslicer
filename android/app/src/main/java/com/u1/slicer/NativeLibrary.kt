@@ -69,6 +69,7 @@ class NativeLibrary(
         filamentChangePrintZValues: FloatArray,
         filamentChangeExtruders: IntArray,
         customGCodePrintZValues: FloatArray,
+        customGCodeTypes: IntArray,
         customGCodes: Array<String>,
     ): Boolean
     external fun getObjectBoundingBoxes(): FloatArray

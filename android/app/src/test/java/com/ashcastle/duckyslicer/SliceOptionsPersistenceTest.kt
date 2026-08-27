@@ -150,6 +150,7 @@ class SliceOptionsPersistenceTest {
                     beforeLayerChangeGcode = "; PERSISTED_BEFORE_LAYER",
                     layerChangeGcode = "; PERSISTED_AFTER_LAYER",
                     machinePauseGcode = "M25 ; PERSISTED_PAUSE",
+                    templateCustomGcode = "; PERSISTED_LAYER_TEMPLATE",
                     timeLapseGcode = "; PERSISTED_TIMELAPSE",
                     changeFilamentGcode = "T[next_extruder] ; PERSISTED_TOOL_CHANGE",
                     printingByObjectGcode = "; PERSISTED_BETWEEN_OBJECTS",
@@ -290,6 +291,7 @@ class SliceOptionsPersistenceTest {
         assertEquals("; PERSISTED_BEFORE_LAYER", native.beforeLayerChangeGcode)
         assertEquals("; PERSISTED_AFTER_LAYER", native.layerChangeGcode)
         assertEquals("M25 ; PERSISTED_PAUSE", native.machinePauseGcode)
+        assertEquals("; PERSISTED_LAYER_TEMPLATE", native.templateCustomGcode)
         assertEquals("; PERSISTED_TIMELAPSE", native.timeLapseGcode)
         assertEquals("T[next_extruder] ; PERSISTED_TOOL_CHANGE", native.changeFilamentGcode)
         assertEquals("; PERSISTED_BETWEEN_OBJECTS", native.printingByObjectGcode)
@@ -1403,6 +1405,13 @@ class SliceOptionsPersistenceTest {
         assertFalse(
             ProfileValidation.printer(
                 PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    templateCustomGcode = "한".repeat(87_382),
+                ),
+            ),
+        )
+        assertFalse(
+            ProfileValidation.printer(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
                     timeLapseGcode = "한".repeat(87_382),
                 ),
             ),
@@ -1472,6 +1481,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             fanKickstart = 0.25f,
             extruderOffsetsX = listOf(0f, 10.5f),
             extruderOffsetsY = listOf(0f, -2.5f),
+            templateCustomGcode = "; FIXTURE_LAYER_TEMPLATE",
             timeLapseGcode = "; FIXTURE_TIMELAPSE",
             beforeLayerChangeGcode = "; FIXTURE_BEFORE_LAYER",
             layerChangeGcode = "; FIXTURE_AFTER_LAYER",

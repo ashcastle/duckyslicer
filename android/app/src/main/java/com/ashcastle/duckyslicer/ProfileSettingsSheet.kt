@@ -1279,6 +1279,17 @@ private fun PrinterSettingsSheet(
         },
     )
     GcodeTemplateSetting(
+        label = stringResource(R.string.template_custom_gcode),
+        value = options.printerProfile.templateCustomGcode,
+        onValueChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(templateCustomGcode = it),
+                ),
+            )
+        },
+    )
+    GcodeTemplateSetting(
         label = stringResource(R.string.time_lapse_gcode),
         value = options.printerProfile.timeLapseGcode,
         onValueChange = {

@@ -1,6 +1,14 @@
 diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
+@@ -8,6 +8,7 @@
+ #include <jni.h>
+ #include <string>
+ #include <vector>
++#include <tuple>
+ #include <functional>
+ #include <optional>
+ #include <array>
 @@ -820,6 +820,10 @@ public:
      std::string getVolumeName(int objIdx, int volIdx) const;
      int  getVolumeExtruder(int objIdx, int volIdx) const;
@@ -8,7 +16,7 @@ diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 +    bool setLayerEvents(
 +        const std::vector<std::pair<float, std::string>>& pauses,
 +        const std::vector<std::pair<float, int>>& filament_changes,
-+        const std::vector<std::pair<float, std::string>>& custom_gcodes);
++        const std::vector<std::tuple<float, int, std::string>>& custom_gcodes);
  
  private:
      struct Impl;
@@ -23,14 +31,14 @@ diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_m
  #include "libslic3r/TriangleSelector.hpp"
  #include "libslic3r/QuadricEdgeCollapse.hpp"
  #include "libslic3r/Semver.hpp"
-@@ -1127,6 +1128,95 @@ void SlicerEngine::cancelPreviewMesh() {
+@@ -1127,6 +1128,100 @@ void SlicerEngine::cancelPreviewMesh() {
      SAPIL_LOGI("cancelPreviewMesh: signalled cancellation");
  }
  
 +bool SlicerEngine::setLayerEvents(
 +        const std::vector<std::pair<float, std::string>>& pauses,
 +        const std::vector<std::pair<float, int>>& filament_changes,
-+        const std::vector<std::pair<float, std::string>>& custom_gcodes) {
++        const std::vector<std::tuple<float, int, std::string>>& custom_gcodes) {
 +    if (!g_model_loaded || pauses.size() > 256 || filament_changes.size() > 256 ||
 +        custom_gcodes.size() > 64)
 +        return false;
@@ -79,11 +87,14 @@ diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_m
 +    previous_z = 0.0f;
 +    size_t total_custom_gcode_bytes = 0;
 +    for (const auto& custom_gcode : custom_gcodes) {
-+        const float print_z = custom_gcode.first;
-+        const std::string& code = custom_gcode.second;
++        const float print_z = std::get<0>(custom_gcode);
++        const int event_type = std::get<1>(custom_gcode);
++        const std::string& code = std::get<2>(custom_gcode);
 +        total_custom_gcode_bytes += code.size();
 +        if (!std::isfinite(print_z) || print_z < 0.001f || print_z > 10000.0f ||
-+            print_z <= previous_z || code.empty() || code.size() > 2048 ||
++            print_z <= previous_z || (event_type != 0 && event_type != 1) ||
++            (event_type == 0 && code.empty()) || (event_type == 1 && !code.empty()) ||
++            code.size() > 2048 ||
 +            total_custom_gcode_bytes > 32768 ||
 +            std::any_of(pauses.begin(), pauses.end(), [print_z](const auto& pause) {
 +                return pause.first == print_z;
@@ -102,9 +113,11 @@ diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_m
 +                return false;
 +            }
 +        }
++        const auto type = event_type == 0 ?
++            Slic3r::CustomGCode::Custom : Slic3r::CustomGCode::Template;
 +        info.gcodes.emplace_back(Slic3r::CustomGCode::Item{
 +            static_cast<double>(print_z),
-+            Slic3r::CustomGCode::Custom,
++            type,
 +            0,
 +            "",
 +            code,
@@ -122,7 +135,7 @@ diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_m
 diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slicer_wrapper.cpp
 --- a/app/src/main/cpp/src/slicer_wrapper.cpp
 +++ b/app/src/main/cpp/src/slicer_wrapper.cpp
-@@ -538,4 +538,87 @@ Java_com_u1_slicer_NativeLibrary_nativeSetVolumeExtruder(
+@@ -538,4 +538,94 @@ Java_com_u1_slicer_NativeLibrary_nativeSetVolumeExtruder(
      return (g_engine && g_engine->setVolumeExtruder(objIdx, volIdx, slot)) ? JNI_TRUE : JNI_FALSE;
  }
  
@@ -130,10 +143,10 @@ diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slic
 +Java_com_u1_slicer_NativeLibrary_nativeSetLayerEvents(
 +        JNIEnv* env, jobject, jfloatArray jpause_z_values, jobjectArray jmessages,
 +        jfloatArray jchange_z_values, jintArray jchange_extruders,
-+        jfloatArray jcustom_z_values, jobjectArray jcustom_gcodes) {
++        jfloatArray jcustom_z_values, jintArray jcustom_types, jobjectArray jcustom_gcodes) {
 +    if (!g_engine || !jpause_z_values || !jmessages ||
 +        !jchange_z_values || !jchange_extruders ||
-+        !jcustom_z_values || !jcustom_gcodes) return JNI_FALSE;
++        !jcustom_z_values || !jcustom_types || !jcustom_gcodes) return JNI_FALSE;
 +    const jsize pause_count = env->GetArrayLength(jpause_z_values);
 +    const jsize change_count = env->GetArrayLength(jchange_z_values);
 +    const jsize custom_count = env->GetArrayLength(jcustom_z_values);
@@ -142,6 +155,7 @@ diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slic
 +        change_count < 0 || change_count > 256 ||
 +        env->GetArrayLength(jchange_extruders) != change_count ||
 +        custom_count < 0 || custom_count > 64 ||
++        env->GetArrayLength(jcustom_types) != custom_count ||
 +        env->GetArrayLength(jcustom_gcodes) != custom_count) return JNI_FALSE;
 +
 +    std::vector<jfloat> pause_z_values(static_cast<size_t>(pause_count));
@@ -185,10 +199,13 @@ diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slic
 +    }
 +
 +    std::vector<jfloat> custom_z_values(static_cast<size_t>(custom_count));
-+    if (custom_count > 0)
++    std::vector<jint> custom_types(static_cast<size_t>(custom_count));
++    if (custom_count > 0) {
 +        env->GetFloatArrayRegion(jcustom_z_values, 0, custom_count, custom_z_values.data());
++        env->GetIntArrayRegion(jcustom_types, 0, custom_count, custom_types.data());
++    }
 +    if (env->ExceptionCheck()) return JNI_FALSE;
-+    std::vector<std::pair<float, std::string>> custom_gcodes;
++    std::vector<std::tuple<float, int, std::string>> custom_gcodes;
 +    custom_gcodes.reserve(static_cast<size_t>(custom_count));
 +    for (jsize index = 0; index < custom_count; ++index) {
 +        auto* value = static_cast<jstring>(env->GetObjectArrayElement(jcustom_gcodes, index));
@@ -201,7 +218,10 @@ diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slic
 +            env->DeleteLocalRef(value);
 +            return JNI_FALSE;
 +        }
-+        custom_gcodes.emplace_back(custom_z_values[static_cast<size_t>(index)], code);
++        custom_gcodes.emplace_back(
++            custom_z_values[static_cast<size_t>(index)],
++            custom_types[static_cast<size_t>(index)],
++            code);
 +        env->ReleaseStringUTFChars(value, code);
 +        env->DeleteLocalRef(value);
 +    }
@@ -213,7 +233,7 @@ diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slic
 diff --git a/app/src/main/java/com/u1/slicer/NativeLibrary.kt b/app/src/main/java/com/u1/slicer/NativeLibrary.kt
 --- a/app/src/main/java/com/u1/slicer/NativeLibrary.kt
 +++ b/app/src/main/java/com/u1/slicer/NativeLibrary.kt
-@@ -337,6 +337,16 @@ class NativeLibrary {
+@@ -337,6 +337,17 @@ class NativeLibrary {
      /** Assign a 1-indexed extruder slot to one volume — used by the Parts panel. */
      external fun nativeSetVolumeExtruder(objIdx: Int, volIdx: Int, slot: Int): Boolean
  
@@ -224,6 +244,7 @@ diff --git a/app/src/main/java/com/u1/slicer/NativeLibrary.kt b/app/src/main/jav
 +        filamentChangePrintZValues: FloatArray,
 +        filamentChangeExtruders: IntArray,
 +        customGCodePrintZValues: FloatArray,
++        customGCodeTypes: IntArray,
 +        customGCodes: Array<String>,
 +    ): Boolean
 +

@@ -988,6 +988,9 @@ internal object SlicerProcessClient {
         val customGCodePrintZValues = layerCustomGCodeEvents.values
             .map(LayerCustomGCodeEvent::printZMm)
             .toFloatArray()
+        val customGCodeTypes = layerCustomGCodeEvents.values
+            .map { it.kind.nativeValue }
+            .toIntArray()
         val customGCodes = layerCustomGCodeEvents.values.map(LayerCustomGCodeEvent::gcode)
         require(
             filamentChangeSlots.all { it in options.resolvedFilamentSlots().indices },
@@ -1003,7 +1006,7 @@ internal object SlicerProcessClient {
                     orcaMultiColorAnnotationPaths +
                     variableLayerHeightPaths + processOverridePaths +
                     heightRangeModifierPaths + brimPointPaths +
-                    volumeConfigPaths + pauseMessages + inputFilenameBase,
+                    volumeConfigPaths + pauseMessages + customGCodes + inputFilenameBase,
                 optionsText,
             ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
@@ -1073,6 +1076,10 @@ internal object SlicerProcessClient {
             putFloatArray(
                 SlicerProcessContract.KEY_LAYER_CUSTOM_GCODE_Z_VALUES,
                 customGCodePrintZValues,
+            )
+            putIntArray(
+                SlicerProcessContract.KEY_LAYER_CUSTOM_GCODE_TYPES,
+                customGCodeTypes,
             )
             putStringArrayList(
                 SlicerProcessContract.KEY_LAYER_CUSTOM_GCODES,
@@ -2528,15 +2535,27 @@ class SlicerProcessService : Service() {
         val customGCodePrintZValues = requireNotNull(
             extras.getFloatArray(SlicerProcessContract.KEY_LAYER_CUSTOM_GCODE_Z_VALUES),
         ) { "Layer G-code heights are unavailable" }
+        val customGCodeTypes = requireNotNull(
+            extras.getIntArray(SlicerProcessContract.KEY_LAYER_CUSTOM_GCODE_TYPES),
+        ) { "Layer G-code types are unavailable" }
         val customGCodes = requireNotNull(
             extras.getStringArrayList(SlicerProcessContract.KEY_LAYER_CUSTOM_GCODES),
         ) { "Layer G-codes are unavailable" }
-        require(customGCodePrintZValues.size == customGCodes.size) {
+        require(
+            customGCodePrintZValues.size == customGCodeTypes.size &&
+                customGCodePrintZValues.size == customGCodes.size,
+        ) {
             "Layer G-code events are invalid"
         }
         val layerCustomGCodeEvents = LayerCustomGCodeEvents(
             customGCodePrintZValues.indices.map { index ->
-                LayerCustomGCodeEvent(customGCodePrintZValues[index], customGCodes[index])
+                LayerCustomGCodeEvent(
+                    customGCodePrintZValues[index],
+                    customGCodes[index],
+                    requireNotNull(LayerCustomGCodeKind.fromNative(customGCodeTypes[index])) {
+                        "Layer G-code type is invalid"
+                    },
+                )
             },
         )
         val optionsText = requireNotNull(extras.getString(SlicerProcessContract.KEY_OPTIONS)) {
@@ -2558,7 +2577,7 @@ class SlicerProcessService : Service() {
                     orcaMultiColorAnnotationPaths +
                     variableLayerHeightPaths + processOverridePaths +
                     heightRangeModifierPaths + brimPointPaths +
-                    volumeConfigPaths + pauseMessages + inputFilenameBase,
+                    volumeConfigPaths + pauseMessages + customGCodes + inputFilenameBase,
                 optionsText,
             ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
@@ -3486,6 +3505,9 @@ class SlicerProcessService : Service() {
                         .map(LayerCustomGCodeEvent::printZMm)
                         .toFloatArray(),
                     layerCustomGCodeEvents.values
+                        .map { it.kind.nativeValue }
+                        .toIntArray(),
+                    layerCustomGCodeEvents.values
                         .map(LayerCustomGCodeEvent::gcode)
                         .toTypedArray(),
                 ),
@@ -4109,6 +4131,7 @@ private object SlicerProcessContract {
     const val KEY_LAYER_FILAMENT_CHANGE_Z_VALUES = "layerFilamentChangeZValues"
     const val KEY_LAYER_FILAMENT_CHANGE_SLOTS = "layerFilamentChangeSlots"
     const val KEY_LAYER_CUSTOM_GCODE_Z_VALUES = "layerCustomGCodeZValues"
+    const val KEY_LAYER_CUSTOM_GCODE_TYPES = "layerCustomGCodeTypes"
     const val KEY_LAYER_CUSTOM_GCODES = "layerCustomGCodes"
     const val KEY_OPTIONS = "options"
     const val KEY_INPUT_FILENAME_BASE = "inputFilenameBase"

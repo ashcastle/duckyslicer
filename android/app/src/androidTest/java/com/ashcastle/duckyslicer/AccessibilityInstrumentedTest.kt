@@ -280,6 +280,7 @@ class AccessibilityInstrumentedTest {
         val title = context.getString(R.string.layer_custom_gcode_title, 300)
         val fieldLabel = context.getString(R.string.gcode)
         val applyLabel = context.getString(R.string.layer_custom_gcode_apply)
+        val templateLabel = context.getString(R.string.use_printer_gcode_template)
         val removeLabel = context.getString(R.string.remove_layer_custom_gcode_height, 60.05f)
         launchHarness(AccessibilityHarnessActivity.SCREEN_PREVIEW).use {
             val addNode = scrollUntilClickable(addLabel)
@@ -287,6 +288,11 @@ class AccessibilityInstrumentedTest {
             assertTrue(addNode.performAction(AccessibilityNodeInfo.ACTION_CLICK))
             assertTrue(
                 waitForNode(title) { node -> node.effectiveLabel().contains(title) }.isVisibleToUser,
+            )
+            assertTrue(
+                waitForNodes(setOf(templateLabel)).any {
+                    it.isClickable && it.effectiveLabel() == templateLabel
+                },
             )
             replaceEditableText(fieldLabel, "M117 Inspect")
             val applyNode = waitForNodes(setOf(applyLabel)).single {

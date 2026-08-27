@@ -279,6 +279,7 @@ data class PrinterProfile(
     val machineStartGcode: String = "",
     val machineEndGcode: String = "",
     val machinePauseGcode: String = "",
+    val templateCustomGcode: String = "",
     val timeLapseGcode: String = "",
     val beforeLayerChangeGcode: String = "",
     val layerChangeGcode: String = "",
@@ -1394,7 +1395,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 112,
+    val schemaVersion: Int = 113,
     val sourceRevision: String = FALLBACK_PROFILE_CATALOG_REVISION,
     val rejectedCount: Int = 0,
 )
@@ -2526,6 +2527,7 @@ data class SliceOptions(
             native.beforeLayerChangeGcode = printerProfile.beforeLayerChangeGcode
             native.layerChangeGcode = printerProfile.layerChangeGcode
             native.machinePauseGcode = printerProfile.machinePauseGcode
+            native.templateCustomGcode = printerProfile.templateCustomGcode
             native.timeLapseGcode = printerProfile.timeLapseGcode
             native.changeFilamentGcode = printerProfile.changeFilamentGcode
             native.printingByObjectGcode = printerProfile.printingByObjectGcode

@@ -1426,6 +1426,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "max_layer_height": ["0.32"],
                 "gcode_flavor": "marlin",
                 "machine_pause_gcode": "M25 ; PROFILE_PAUSE",
+                "template_custom_gcode": ";FILAMENT_CHANGE\nM600",
                 "time_lapse_gcode": "; DUCKY_TIMELAPSE",
                 "auxiliary_fan": "1",
                 "fan_speedup_time": "0.5",
@@ -1455,6 +1456,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertFalse(profile["fanSpeedupOverhangs"])
         self.assertEqual(0.2, profile["fanKickstart"])
         self.assertEqual("M25 ; PROFILE_PAUSE", profile["machinePauseGcode"])
+        self.assertEqual(";FILAMENT_CHANGE\nM600", profile["templateCustomGcode"])
         self.assertEqual("; DUCKY_TIMELAPSE", profile["timeLapseGcode"])
         self.assertEqual(0.08, profile["minLayerHeight"])
         self.assertEqual(0.32, profile["maxLayerHeight"])
@@ -1491,6 +1493,20 @@ class GenerateProfileCatalogTest(unittest.TestCase):
 
         self.assertEqual("Fine", profile["defaultPrintProfile"])
         self.assertEqual(["PLA", "PETG"], profile["defaultFilamentProfiles"])
+
+    def test_rejects_oversized_layer_gcode_template(self) -> None:
+        with self.assertRaises(ValueError):
+            build_printer(
+                "Example",
+                {
+                    "name": "Oversized template printer",
+                    "printable_area": ["0x0", "200x0", "200x200", "0x200"],
+                    "printable_height": "220",
+                    "nozzle_diameter": "0.4",
+                    "gcode_flavor": "marlin",
+                    "template_custom_gcode": "M117 X" * 50_000,
+                },
+            )
 
     def test_resolves_orca_layer_height_sentinels_and_rejects_inverted_limits(self) -> None:
         base = {

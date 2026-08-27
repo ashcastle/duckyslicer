@@ -939,6 +939,9 @@
     <string name="machine_start_gcode">시작 G-code</string>
     <string name="machine_end_gcode">종료 G-code</string>
     <string name="machine_pause_gcode">일시정지 G-code</string>
+    <string name="template_custom_gcode">레이어 G-code 템플릿</string>
+    <string name="printer_gcode_template">프린터 템플릿</string>
+    <string name="use_printer_gcode_template">프린터 템플릿 사용</string>
     <string name="time_lapse_gcode">타임랩스 G-code</string>
     <string name="before_layer_change_gcode">레이어 변경 전 G-code</string>
     <string name="layer_change_gcode">레이어 변경 후 G-code</string>

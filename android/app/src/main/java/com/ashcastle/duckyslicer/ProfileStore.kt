@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 112
+internal const val USER_PROFILE_SCHEMA_VERSION = 113
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -100,6 +100,7 @@ class ProfileStore internal constructor(
             machineStartGcode = options.printerProfile.machineStartGcode,
             machineEndGcode = options.printerProfile.machineEndGcode,
             machinePauseGcode = options.printerProfile.machinePauseGcode,
+            templateCustomGcode = options.printerProfile.templateCustomGcode,
             timeLapseGcode = options.printerProfile.timeLapseGcode,
             beforeLayerChangeGcode = options.printerProfile.beforeLayerChangeGcode,
             layerChangeGcode = options.printerProfile.layerChangeGcode,
@@ -830,6 +831,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("pelletModded", pelletModded)
     .put("machineStartGcode", machineStartGcode).put("machineEndGcode", machineEndGcode)
     .put("machinePauseGcode", machinePauseGcode)
+    .put("templateCustomGcode", templateCustomGcode)
     .put("timeLapseGcode", timeLapseGcode)
     .put("beforeLayerChangeGcode", beforeLayerChangeGcode)
     .put("layerChangeGcode", layerChangeGcode)
@@ -1398,6 +1400,7 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         machineStartGcode = optString("machineStartGcode"),
         machineEndGcode = optString("machineEndGcode"),
         machinePauseGcode = optString("machinePauseGcode"),
+        templateCustomGcode = optString("templateCustomGcode"),
         timeLapseGcode = optString("timeLapseGcode"),
         beforeLayerChangeGcode = optString("beforeLayerChangeGcode"),
         layerChangeGcode = optString("layerChangeGcode"),

@@ -61,8 +61,6 @@ INTENTIONALLY_UNMAPPED_OPTIONS = {
     "printhost_user",
     # Engine-generated placeholder, not a user/profile input.
     "filament_extruder_id",
-    # Known specialized capabilities that remain explicit production backlog.
-    "template_custom_gcode",
 }
 
 # The pinned profile tree only contains neutral values for these legacy or dormant

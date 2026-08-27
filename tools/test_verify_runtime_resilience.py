@@ -435,7 +435,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "PROFILE_BUNDLE_FORMAT.md": (
             "`.duckyprofiles` application/vnd.duckyslicer.profiles+json "
-            '"bundleVersion": 1 "profileSchemaVersion": 112 '
+            '"bundleVersion": 1 "profileSchemaVersion": 113 '
             "exact profile duplicates are skipped "
             "profile names are trimmed and compared case-insensitively `Name (2)` "
             "recognizes an earlier conflict-adjusted copy additive and atomic 24 MiB 4,096 "
@@ -703,7 +703,7 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
     def test_rejects_stale_public_profile_schema_documentation(self) -> None:
         sources = valid_sources()
         sources["PROFILE_BUNDLE_FORMAT.md"] = sources["PROFILE_BUNDLE_FORMAT.md"].replace(
-            '"profileSchemaVersion": 112',
+            '"profileSchemaVersion": 113',
             '"profileSchemaVersion": 23',
         )
         with self.assertRaisesRegex(VerificationError, "public profile-bundle contract"):

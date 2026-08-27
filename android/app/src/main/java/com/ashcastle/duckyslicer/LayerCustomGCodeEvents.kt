@@ -3,15 +3,40 @@ package com.ashcastle.duckyslicer
 import org.json.JSONArray
 import org.json.JSONObject
 
+enum class LayerCustomGCodeKind(
+    val storageValue: String,
+    val nativeValue: Int,
+) {
+    CUSTOM("custom", 0),
+    PRINTER_TEMPLATE("printer_template", 1),
+    ;
+
+    companion object {
+        fun fromStorage(value: String): LayerCustomGCodeKind? = entries.firstOrNull {
+            it.storageValue == value
+        }
+
+        fun fromNative(value: Int): LayerCustomGCodeKind? = entries.firstOrNull {
+            it.nativeValue == value
+        }
+    }
+}
+
 data class LayerCustomGCodeEvent(
     val printZMm: Float,
     val gcode: String,
+    val kind: LayerCustomGCodeKind = LayerCustomGCodeKind.CUSTOM,
 ) {
     init {
         require(printZMm.isFinite() && printZMm in MIN_PRINT_Z_MM..MAX_PRINT_Z_MM) {
             "Invalid layer G-code height"
         }
-        require(gcode.isNotEmpty() && gcode == gcode.trim()) { "Invalid layer G-code" }
+        require(
+            when (kind) {
+                LayerCustomGCodeKind.CUSTOM -> gcode.isNotEmpty() && gcode == gcode.trim()
+                LayerCustomGCodeKind.PRINTER_TEMPLATE -> gcode.isEmpty()
+            },
+        ) { "Invalid layer G-code" }
         require('\r' !in gcode && '\u0000' !in gcode) { "Invalid layer G-code" }
         require(gcode.all { it == '\n' || it == '\t' || !it.isISOControl() }) {
             "Invalid layer G-code"
@@ -75,7 +100,8 @@ internal fun LayerCustomGCodeEvents.toProjectJson(): JSONArray = JSONArray().als
         events.put(
             JSONObject()
                 .put("printZMm", event.printZMm.toDouble())
-                .put("gcode", event.gcode),
+                .put("gcode", event.gcode)
+                .put("kind", event.kind.storageValue),
         )
     }
 }
@@ -85,12 +111,22 @@ internal fun JSONArray.toLayerCustomGCodeEvents(): LayerCustomGCodeEvents {
     return LayerCustomGCodeEvents(
         List(length()) { index ->
             val value = getJSONObject(index)
-            require(value.length() == 2 && value.has("printZMm") && value.has("gcode")) {
+            require(
+                value.length() in 2..3 && value.has("printZMm") && value.has("gcode") &&
+                    (value.length() == 2 || value.has("kind")),
+            ) {
                 "Invalid layer G-code event"
             }
             LayerCustomGCodeEvent(
                 printZMm = value.getDouble("printZMm").toFloat(),
                 gcode = value.getString("gcode"),
+                kind = if (value.has("kind")) {
+                    requireNotNull(LayerCustomGCodeKind.fromStorage(value.getString("kind"))) {
+                        "Invalid layer G-code kind"
+                    }
+                } else {
+                    LayerCustomGCodeKind.CUSTOM
+                },
             )
         },
     )

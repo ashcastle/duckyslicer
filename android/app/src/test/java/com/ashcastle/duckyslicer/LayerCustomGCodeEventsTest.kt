@@ -23,6 +23,32 @@ class LayerCustomGCodeEventsTest {
     }
 
     @Test
+    fun printerTemplateEventsRoundTripAndLegacyEventsRemainCustom() {
+        val template = LayerCustomGCodeEvents(
+            listOf(
+                LayerCustomGCodeEvent(
+                    printZMm = 4.2f,
+                    gcode = "",
+                    kind = LayerCustomGCodeKind.PRINTER_TEMPLATE,
+                ),
+            ),
+        )
+
+        assertEquals(
+            template,
+            JSONArray(template.toProjectJson().toString()).toLayerCustomGCodeEvents(),
+        )
+        assertEquals(
+            LayerCustomGCodeKind.CUSTOM,
+            JSONArray("""[{"printZMm":1,"gcode":"M117 legacy"}]""")
+                .toLayerCustomGCodeEvents()
+                .values
+                .single()
+                .kind,
+        )
+    }
+
+    @Test
     fun malformedOrUnboundedGCodeFailsClosed() {
         listOf("", " M117 padded", "M117 padded ", "M117 bad\rline", "M117 bad\u0000line")
             .forEach { gcode ->
@@ -43,6 +69,16 @@ class LayerCustomGCodeEventsTest {
         }
         assertThrows(IllegalArgumentException::class.java) {
             JSONArray("""[{"printZMm":1,"gcode":"M117 hi","extra":true}]""")
+                .toLayerCustomGCodeEvents()
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            LayerCustomGCodeEvent(1f, "", LayerCustomGCodeKind.CUSTOM)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            LayerCustomGCodeEvent(1f, "M117 invalid", LayerCustomGCodeKind.PRINTER_TEMPLATE)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            JSONArray("""[{"printZMm":1,"gcode":"","kind":"unknown"}]""")
                 .toLayerCustomGCodeEvents()
         }
     }

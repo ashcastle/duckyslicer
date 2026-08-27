@@ -24,7 +24,7 @@ def valid_sources() -> dict[str, str]:
                 "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
                 'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
                 "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-                "PROJECT_ARCHIVE_SCHEMA_VERSION = 76",
+                "PROJECT_ARCHIVE_SCHEMA_VERSION = 77",
                 'ArchivedProjectPlate ArchivedProjectVolume put("role", volume.role.name) '
                 'put("config", volume.config.toJson()) ProjectVolumeRole.valueOf '
                 "ProjectVolumeConfig.fromJson",
@@ -103,7 +103,7 @@ def valid_sources() -> dict[str, str]:
                 "checkCancellation: () -> Unit = {}",
                 "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
                 "beginCommit: () -> Unit = {} beginCommit()",
-                'SCHEMA_VERSION = 81 schemaVersion >= 70 schemaVersion >= 75 '
+                'SCHEMA_VERSION = 82 schemaVersion >= 70 schemaVersion >= 75 '
                 'schemaVersion >= 76 schemaVersion >= 77 schemaVersion >= 78 '
                 'schemaVersion >= 79 schemaVersion >= 80 schemaVersion >= 81 '
                 '"linkedDocument", '
@@ -619,8 +619,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "SUPPORT.md": "`.duckyproject` model geometry include saved printer addresses, access keys, or G-code",
         "PROJECT_FORMAT.md": (
-            "manifest.json models/000.stl schema version `76` "
-            "Schema 1 through 75 projects remain readable optional display name "
+            "manifest.json models/000.stl schema version `77` "
+            "Schema 1 through 76 projects remain readable optional display name "
             "brim chamfer policy up to 16 plates "
             "parameter modifier support blocker support enforcer "
             "plate-local objects and settings stable, bounded `volumes` list "

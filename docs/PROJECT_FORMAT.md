@@ -4,7 +4,7 @@ DuckySlicer saves portable projects with the `.duckyproject` extension and the M
 type `application/vnd.duckyslicer.project+zip`. The format is a versioned ZIP archive
 so a project can be inspected and recovered with standard tools.
 
-## Schema 76
+## Schema 77
 
 An archive contains exactly:
 
@@ -16,10 +16,12 @@ models/001.stl
 ```
 
 `manifest.json` identifies the format as `com.ashcastle.duckyslicer.project`, declares
-schema version `76`, and stores the selected plate plus a bounded `plates` list. Each plate
+schema version `77`, and stores the selected plate plus a bounded `plates` list. Each plate
 owns its stable identity, optional display name, selected object, objects, and resolved
 printer, filament, and slicing settings. It also owns up to 256 ordered print pauses, 256 ordered whole-layer
-filament changes, and 64 bounded custom G-code events at exact print heights. Each object owns
+filament changes, and 64 bounded custom G-code events at exact print heights. A G-code event
+stores either bounded inline code or a reference to the active printer's layer template, matching
+Orca's late-bound template behavior. Each object owns
 a stable, bounded `volumes` list. The object owns its
 transform (including independent X, Y, and Z scale), variable layer-height configuration
 using either automatic adaptive quality or bounded manual ranges,
@@ -40,7 +42,7 @@ auxiliary-fan capability. Prime-tower X/Y placement, brim chamfer policy, and ma
 width, purge-volume matrix, and optional flush multiplier are also retained, so portable projects
 preserve tool-change geometry, cooling output, adhesion geometry, and the user's bed layout.
 
-Schema 1 through 75 projects remain readable. Projects without plate names retain their
+Schema 1 through 76 projects remain readable. Projects without plate names retain their
 localized numbered labels, and schemas before multi-plate support migrate deterministically
 to one plate.
 Their single object-level model, filament, and paint fields migrate deterministically to

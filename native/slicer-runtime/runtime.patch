@@ -413,7 +413,7 @@ index 116a4a85..669271fe 100644
      float max_print_height = 270.0f;
  
      // Nozzle
-@@ -84,20 +362,149 @@ struct SliceConfig {
+@@ -84,20 +362,150 @@ struct SliceConfig {
      // Multi-extruder (up to 4 for Snapmaker U1)
      int extruder_count = 1;
      std::vector<int> extruder_temps;           // per-extruder nozzle temps
@@ -523,6 +523,7 @@ index 116a4a85..669271fe 100644
      std::string machine_start_gcode;
      std::string machine_end_gcode;
 +    std::string machine_pause_gcode;
++    std::string template_custom_gcode;
 +    std::string time_lapse_gcode;
 +    std::string before_layer_change_gcode;
 +    std::string layer_change_gcode;
@@ -1229,7 +1230,7 @@ index d93efb7d..cf6b9fdd 100644
      config.max_print_height = getFloat("maxPrintHeight");
  
      config.nozzle_diameter = getFloat("nozzleDiameter");
-@@ -127,23 +392,187 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -127,23 +392,188 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      // Multi-extruder
      config.extruder_count = getInt("extruderCount");
      config.extruder_temps = getIntArray("extruderTemps");
@@ -1338,6 +1339,7 @@ index d93efb7d..cf6b9fdd 100644
      config.machine_start_gcode = getString("machineStartGcode");
      config.machine_end_gcode = getString("machineEndGcode");
 +    config.machine_pause_gcode = getString("machinePauseGcode");
++    config.template_custom_gcode = getString("templateCustomGcode");
 +    config.time_lapse_gcode = getString("timeLapseGcode");
 +    config.before_layer_change_gcode = getString("beforeLayerChangeGcode");
 +    config.layer_change_gcode = getString("layerChangeGcode");
@@ -1737,7 +1739,7 @@ index d93efb7d..cf6b9fdd 100644
      setFloat("filamentDiameter", config.filament_diameter);
      setString("filamentType", config.filament_type);
      setStringArray("filamentTypes", config.filament_types);
-@@ -263,14 +973,172 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -263,14 +973,173 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      // Multi-extruder
      setInt("extruderCount", config.extruder_count);
      setIntArray("extruderTemps", config.extruder_temps);
@@ -1851,6 +1853,7 @@ index d93efb7d..cf6b9fdd 100644
      setString("machineStartGcode", config.machine_start_gcode);
      setString("machineEndGcode", config.machine_end_gcode);
 +    setString("machinePauseGcode", config.machine_pause_gcode);
++    setString("templateCustomGcode", config.template_custom_gcode);
 +    setString("timeLapseGcode", config.time_lapse_gcode);
 +    setString("beforeLayerChangeGcode", config.before_layer_change_gcode);
 +    setString("layerChangeGcode", config.layer_change_gcode);
@@ -3910,7 +3913,7 @@ index 8d61c9cf..6bd1edf6 100644
      if (n_ext > 1 && config.wipe_tower_enabled) {
          dpc.set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(true));
          dpc.set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, config.wipe_tower_x)));
-@@ -680,10 +1686,39 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -680,10 +1686,42 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          }
      }
  
@@ -3930,6 +3933,9 @@ index 8d61c9cf..6bd1edf6 100644
 +    dpc.set_key_value(
 +        "machine_pause_gcode",
 +        new Slic3r::ConfigOptionString(config.machine_pause_gcode));
++    dpc.set_key_value(
++        "template_custom_gcode",
++        new Slic3r::ConfigOptionString(config.template_custom_gcode));
 +    dpc.set_key_value(
 +        "time_lapse_gcode",
 +        new Slic3r::ConfigOptionString(config.time_lapse_gcode));
@@ -3954,7 +3960,7 @@ index 8d61c9cf..6bd1edf6 100644
  
      // Full-spectrum mixed-filament (stage 2): when the caller passed a
      // recipe via SliceConfig.mixed_filament_definitions, write it into
-@@ -708,6 +1743,31 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -708,6 +1743,32 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
      }
  
      try {
@@ -3970,6 +3976,7 @@ index 8d61c9cf..6bd1edf6 100644
 +        };
 +        const bool valid_machine_gcodes =
 +            config.machine_pause_gcode.size() <= MAX_GCODE_TEMPLATE_BYTES &&
++            config.template_custom_gcode.size() <= MAX_GCODE_TEMPLATE_BYTES &&
 +            config.time_lapse_gcode.size() <= MAX_GCODE_TEMPLATE_BYTES &&
 +            config.before_layer_change_gcode.size() <= MAX_GCODE_TEMPLATE_BYTES &&
 +            config.layer_change_gcode.size() <= MAX_GCODE_TEMPLATE_BYTES &&

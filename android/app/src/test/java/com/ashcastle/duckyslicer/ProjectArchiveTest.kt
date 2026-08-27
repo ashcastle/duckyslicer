@@ -148,7 +148,13 @@ class ProjectArchiveTest {
                                 listOf(LayerFilamentChange(4.2f, 1)),
                             ),
                             layerCustomGCodeEvents = LayerCustomGCodeEvents(
-                                listOf(LayerCustomGCodeEvent(6.4f, "M117 Inspect")),
+                                listOf(
+                                    LayerCustomGCodeEvent(
+                                        6.4f,
+                                        "",
+                                        LayerCustomGCodeKind.PRINTER_TEMPLATE,
+                                    ),
+                                ),
                             ),
                         )
                     },
@@ -172,7 +178,7 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(76, manifest.getInt("schemaVersion"))
+            assertEquals(77, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
@@ -334,6 +340,10 @@ class ProjectArchiveTest {
             assertEquals(
                 listOf(0f, -2.5f),
                 imported.sliceOptions?.printerProfile?.extruderOffsetsY,
+            )
+            assertEquals(
+                "; FIXTURE_LAYER_TEMPLATE",
+                imported.sliceOptions?.printerProfile?.templateCustomGcode,
             )
             assertEquals(
                 "; FIXTURE_TIMELAPSE",
