@@ -10,6 +10,21 @@ import org.junit.Test
 
 class SliceOptionsPersistenceTest {
     @Test
+    fun processConfigurationNotesRoundTripAndReachNativeConfiguration() {
+        val options = SliceOptions().copy(
+            quality = QualityProfile.STANDARD.copy(notes = "Enable chamber macro before printing."),
+        )
+
+        val restored = requireNotNull(options.toProjectJson().toProjectSliceOptionsOrNull())
+
+        assertEquals("Enable chamber macro before printing.", restored.quality.notes)
+        assertEquals(
+            "Enable chamber macro before printing.",
+            restored.toNativeConfig().configurationNotes,
+        )
+    }
+
+    @Test
     fun printerStructureRoundTripsAndReachesNativeConfiguration() {
         val options = SliceOptions().copy(
             printerProfile = PrinterProfile.U1_04.copy(printerStructure = "i3"),

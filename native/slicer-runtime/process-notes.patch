@@ -1,0 +1,45 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -621,6 +621,9 @@ struct SliceConfig {
+     // Full-spectrum mixed-filament recipe (stage 2; serialized MixedFilamentManager output)
+     std::string mixed_filament_definitions = "";
+ 
++    // Orca process-profile notes, serialized into the generated G-code header.
++    std::string configuration_notes = "";
++
+     // Process-local output ceiling. The Android worker sets RLIMIT_FSIZE before export.
+     unsigned long long maximum_gcode_bytes = 1024ULL * 1024ULL * 1024ULL;
+ };
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -648,6 +648,7 @@ SliceConfig readConfig(JNIEnv* env, jobject configObj) {
+     config.filament_soluble = getIntArray("filamentSoluble");
+     config.filament_is_support = getIntArray("filamentIsSupport");
+     config.mixed_filament_definitions = getString("mixedFilamentDefinitions");
++    config.configuration_notes = getString("configurationNotes");
+     const int maximum_gcode_bytes = getInt("maximumGcodeBytes");
+     config.maximum_gcode_bytes = maximum_gcode_bytes > 0
+         ? static_cast<unsigned long long>(maximum_gcode_bytes)
+@@ -1258,6 +1259,7 @@ void writeConfig(JNIEnv* env, jobject configObj, const SliceConfig& config) {
+     setIntArray("filamentAirFiltration", config.filament_air_filtration);
+     setIntArray("filamentDuringPrintExhaustFanSpeeds", config.filament_during_print_exhaust_fan_speeds);
+     setIntArray("filamentCompletePrintExhaustFanSpeeds", config.filament_complete_print_exhaust_fan_speeds);
++    setString("configurationNotes", config.configuration_notes);
+     setInt("maximumGcodeBytes", static_cast<int>(config.maximum_gcode_bytes));
+ 
+     env->DeleteLocalRef(cls);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -2190,6 +2190,9 @@ void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfig& conf
+         "disable_m73",
+         new Slic3r::ConfigOptionBool(config.disable_m73));
+ 
++    dpc.set_key_value(
++        "notes", new Slic3r::ConfigOptionString(config.configuration_notes));
++
+     // Full-spectrum mixed-filament (stage 2): when the caller passed a
+     // recipe via SliceConfig.mixed_filament_definitions, write it into
+     // the engine's config key. Empty (default) is a no-op — engine

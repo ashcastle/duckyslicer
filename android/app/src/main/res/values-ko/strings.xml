@@ -206,6 +206,7 @@
     <string name="printer_profile">프린터 프로필</string>
     <string name="filament_profile">필라멘트 프로필</string>
     <string name="filament_notes">필라멘트 메모</string>
+    <string name="configuration_notes">설정 메모</string>
     <string name="slicing_profile">슬라이싱 프로필</string>
     <string name="printer_profile_summary">%1$s · %2$d × %3$d mm · %4$.1f mm 노즐</string>
     <string name="filament_profile_summary">%1$s · %2$d °C / %3$d °C</string>

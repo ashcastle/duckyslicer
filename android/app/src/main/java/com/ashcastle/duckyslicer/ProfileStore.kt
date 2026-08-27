@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 117
+internal const val USER_PROFILE_SCHEMA_VERSION = 118
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -650,6 +650,7 @@ class ProfileStore internal constructor(
             spiralModeMaxXySmoothingPercent = options.spiralModeMaxXySmoothingPercent,
             spiralStartingFlowRatio = options.spiralStartingFlowRatio,
             spiralFinishingFlowRatio = options.spiralFinishingFlowRatio,
+            notes = options.quality.notes,
         )
         require(ProfileValidation.slicing(profile)) { "Slicing profile contains unsafe values" }
         writeProfile("slicing", profile.id, profile.toProfileJson(), replace)
@@ -1370,6 +1371,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
     .put("compatiblePrinters", JSONArray(compatiblePrinters))
+    .put("notes", notes)
 
 internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching {
     val bedSizeX = getDouble("bedSizeX").toFloat()
@@ -2063,6 +2065,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         spiralFinishingFlowRatio = optDouble("spiralFinishingFlowRatio", 0.0).toFloat(),
         brand = optionalString("brand"),
         compatiblePrinters = stringList("compatiblePrinters"),
+        notes = optString("notes"),
     )
 }.getOrNull()
 

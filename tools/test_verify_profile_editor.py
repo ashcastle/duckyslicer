@@ -134,7 +134,7 @@ def valid_sources() -> dict[str, str]:
             " bedMeshProbeDistanceX = bedMeshProbeDistanceY = adaptiveBedMeshMargin ="
             " CoordinatePairSettingField("
             " MAX_GCODE_TEMPLATE_BYTES"
-            " R.string.filament_gcode R.string.filament_notes R.string.pellet_flow_coefficient"
+            " R.string.filament_gcode R.string.filament_notes R.string.configuration_notes R.string.pellet_flow_coefficient"
             " filamentDiameterFromPelletFlowCoefficient pelletFlowCoefficient = coefficient"
             " R.string.filament_start_gcode R.string.filament_end_gcode"
             " R.string.filament_diameter diameter = diameter"
@@ -313,7 +313,7 @@ def valid_sources() -> dict[str, str]:
             ' name="minimum_layer_height" name="maximum_layer_height"'
             ' name="tool_change_retraction" name="tool_change_retraction_length"'
             ' name="tool_change_retract_restart_extra"'
-            ' name="filament_gcode" name="filament_notes" name="filament_start_gcode" name="filament_end_gcode"'
+            ' name="filament_gcode" name="filament_notes" name="configuration_notes" name="filament_start_gcode" name="filament_end_gcode"'
             ' name="filament_diameter"'
             ' name="filament_density" name="filament_price_per_kilogram"'
             ' name="filament_shrinkage_xy" name="filament_shrinkage_z"'
@@ -386,7 +386,7 @@ def valid_sources() -> dict[str, str]:
             ' name="minimum_layer_height" name="maximum_layer_height"'
             ' name="tool_change_retraction" name="tool_change_retraction_length"'
             ' name="tool_change_retract_restart_extra"'
-            ' name="filament_gcode" name="filament_notes" name="filament_start_gcode" name="filament_end_gcode"'
+            ' name="filament_gcode" name="filament_notes" name="configuration_notes" name="filament_start_gcode" name="filament_end_gcode"'
             ' name="filament_diameter"'
             ' name="filament_density" name="filament_price_per_kilogram"'
             ' name="filament_shrinkage_xy" name="filament_shrinkage_z"'

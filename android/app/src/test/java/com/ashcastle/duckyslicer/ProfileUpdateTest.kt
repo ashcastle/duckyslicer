@@ -22,6 +22,9 @@ class ProfileUpdateTest {
         assertFalse(ProfileValidation.filament(boundary.copy(flowRatio = 0f)))
         assertFalse(ProfileValidation.filament(boundary.copy(notes = "한".repeat(5_462))))
         assertFalse(ProfileValidation.filament(boundary.copy(notes = "Unsafe\u0000note")))
+        assertTrue(ProfileValidation.slicing(QualityProfile.STANDARD.copy(notes = "Process note")))
+        assertFalse(ProfileValidation.slicing(QualityProfile.STANDARD.copy(notes = "한".repeat(5_462))))
+        assertFalse(ProfileValidation.slicing(QualityProfile.STANDARD.copy(notes = "Unsafe\u0000note")))
     }
 
     @Test
@@ -58,7 +61,11 @@ class ProfileUpdateTest {
         val updatedSlicing = store.updateSlicing(
             slicing.id,
             slicing.name,
-            SliceOptions().selectQuality(slicing).copy(layerHeight = 0.18f, perimeters = 5),
+            SliceOptions().selectQuality(slicing).copy(
+                layerHeight = 0.18f,
+                perimeters = 5,
+                quality = slicing.copy(notes = "Enable chamber macro before printing."),
+            ),
         )
 
         assertEquals(printer.id, updatedPrinter.id)
@@ -88,6 +95,10 @@ class ProfileUpdateTest {
         assertEquals(1, restored.slicing.count { it.id == slicing.id })
         assertEquals(0.18f, restored.slicing.single { it.id == slicing.id }.layerHeightMm)
         assertEquals(5, restored.slicing.single { it.id == slicing.id }.perimeters)
+        assertEquals(
+            "Enable chamber macro before printing.",
+            restored.slicing.single { it.id == slicing.id }.notes,
+        )
     }
 
     @Test

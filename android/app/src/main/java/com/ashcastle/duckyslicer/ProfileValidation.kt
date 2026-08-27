@@ -540,12 +540,13 @@ internal object ProfileValidation {
             profile.minimumSkirtLength in 0f..1_000_000f &&
             profile.draftShield in setOf("disabled", "enabled") &&
             profile.brimWidth in 0f..1_000f &&
-            profile.compatiblePrinters.isSafeCompatibilityList()
+            profile.compatiblePrinters.isSafeCompatibilityList() &&
+            profile.notes.isSafeNotes()
 
     private fun String.isSafeLabel(): Boolean = isNotBlank() && length <= MAX_LABEL_LENGTH
 
     private fun String.isSafeNotes(): Boolean =
-        toByteArray(Charsets.UTF_8).size <= MAX_FILAMENT_NOTES_BYTES &&
+        toByteArray(Charsets.UTF_8).size <= MAX_PROFILE_NOTES_BYTES &&
             all { character -> character.code >= 32 || character == '\n' || character == '\t' }
 
     private fun String?.isSafeOptionalLabel(): Boolean = this == null || isSafeLabel()

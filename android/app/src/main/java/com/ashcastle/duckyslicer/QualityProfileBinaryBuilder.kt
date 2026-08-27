@@ -357,6 +357,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var treeSupportBrimWidth: Float = base.treeSupportBrimWidth
     private var brand: String? = base.brand
     private var compatiblePrinters: List<String> = base.compatiblePrinters
+    private var notes: String = base.notes
 
     fun read(input: DataInputStream) {
         readGroup0(input)
@@ -754,6 +755,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         fuzzySkinScale = input.readFloat()
         fuzzySkinOctaves = input.readInt()
         fuzzySkinPersistence = input.readFloat()
+        notes = input.readCatalogString()
     }
 
     fun build(): QualityProfile = QualityProfile(
@@ -1139,6 +1141,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         treeSupportBrimWidth = treeSupportBrimWidth,
         brand = brand,
         compatiblePrinters = compatiblePrinters,
+        notes = notes,
     )
 }
 
@@ -1494,4 +1497,5 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("fuzzySkinScale", BINARY_FLOAT),
     BinaryField("fuzzySkinOctaves", BINARY_INT),
     BinaryField("fuzzySkinPersistence", BINARY_FLOAT),
+    BinaryField("notes", BINARY_STRING),
 )

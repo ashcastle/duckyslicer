@@ -2214,7 +2214,7 @@ private fun FilamentSettingsSheet(
             OutlinedTextField(
                 value = activeProfile.notes,
                 onValueChange = { candidate ->
-                    if (candidate.toByteArray(Charsets.UTF_8).size <= MAX_FILAMENT_NOTES_BYTES) {
+                    if (candidate.toByteArray(Charsets.UTF_8).size <= MAX_PROFILE_NOTES_BYTES) {
                         onOptionsChanged(
                             options.updateFilamentSlot(
                                 selectedSlot,
@@ -6337,6 +6337,23 @@ private fun SlicingSettingsSheet(
             }
 
             SlicingSettingsSection.OTHERS -> {
+                val notesLabel = stringResource(R.string.configuration_notes)
+                if (settingQueryMatches(settingsQuery, notesLabel)) {
+                    OutlinedTextField(
+                        value = options.quality.notes,
+                        onValueChange = { candidate ->
+                            if (candidate.toByteArray(Charsets.UTF_8).size <= MAX_PROFILE_NOTES_BYTES) {
+                                onOptionsChanged(
+                                    options.copy(quality = options.quality.copy(notes = candidate)),
+                                )
+                            }
+                        },
+                        label = { Text(notesLabel) },
+                        minLines = 3,
+                        maxLines = 8,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 SettingsGroupTitle(stringResource(R.string.fuzzy_skin))
                 SettingChoices(
                     settingLabel = stringResource(R.string.fuzzy_skin_type),

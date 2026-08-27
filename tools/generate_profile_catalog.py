@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 117
+SCHEMA_VERSION = 118
 MAX_FILAMENT_SLOTS = 16
 NO_FILAMENT_COLOR = -1
 MAX_GCODE_THUMBNAILS = 8
@@ -27,7 +27,7 @@ DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL = (
 )
 MAX_GCODE_FILENAME_FORMAT_BYTES = 1_024
 MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES = 16_384
-MAX_FILAMENT_NOTES_BYTES = 16_384
+MAX_PROFILE_NOTES_BYTES = 16_384
 MIN_FILAMENT_NOZZLE_TEMPERATURE = 150
 MAX_FILAMENT_NOZZLE_TEMPERATURE = 500
 MIN_FILAMENT_FLOW_RATIO = 0.01
@@ -1348,7 +1348,7 @@ def build_filament(
         and NO_FILAMENT_COLOR <= profile["defaultColor"] <= 0xFFFFFF
         and len(profile["filamentStartGcode"].encode("utf-8")) <= 262_144
         and len(profile["filamentEndGcode"].encode("utf-8")) <= 262_144
-        and len(profile["notes"].encode("utf-8")) <= MAX_FILAMENT_NOTES_BYTES
+        and len(profile["notes"].encode("utf-8")) <= MAX_PROFILE_NOTES_BYTES
         and all(ord(character) >= 32 or character in "\n\t" for character in profile["notes"])
         and all(
             0 <= profile[key] <= 100
@@ -1971,6 +1971,7 @@ def build_process(
         "fuzzySkinScale": number(raw.get("fuzzy_skin_scale"), 1),
         "fuzzySkinOctaves": integer(raw.get("fuzzy_skin_octaves"), 4),
         "fuzzySkinPersistence": number(raw.get("fuzzy_skin_persistence"), 0.5),
+        "notes": str(scalar(raw.get("notes"), "")),
     }
     if not (
         0 <= profile["fillDensity"] <= 1
@@ -2235,6 +2236,8 @@ def build_process(
         and 0 <= profile["minimumWallWidth"] <= 1_000
         and 0 <= profile["firstLayerMinimumWallWidth"] <= 1_000
         and 0 <= profile["minimumWallLengthFactor"] <= 100
+        and len(profile["notes"].encode("utf-8")) <= MAX_PROFILE_NOTES_BYTES
+        and all(ord(character) >= 32 or character in "\n\t" for character in profile["notes"])
     ):
         raise ValueError("unsafe process limits")
     return profile

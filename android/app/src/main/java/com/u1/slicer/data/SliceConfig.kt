@@ -560,4 +560,5 @@ data class SliceConfig(
     @JvmField var fuzzySkinOctaves: Int = 4
     @JvmField var fuzzySkinPersistence: Float = 0.5f
     @JvmField var enforceSupportLayers: Int = 0
+    @JvmField var configurationNotes: String = ""
 }

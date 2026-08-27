@@ -537,6 +537,27 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(legacy["id"], profiles[0]["id"])
         self.assertNotEqual(profiles[0]["id"], profiles[1]["id"])
 
+    def test_preserves_bounded_process_configuration_notes(self) -> None:
+        base = {
+            "name": "Documented process",
+            "layer_height": "0.20",
+            "initial_layer_print_height": "0.20",
+        }
+        profile = build_process(
+            "Example",
+            base | {"notes": "Enable the chamber macro before printing.\nM191 S60"},
+            {},
+        )
+
+        self.assertEqual(
+            "Enable the chamber macro before printing.\nM191 S60",
+            profile["notes"],
+        )
+        with self.assertRaisesRegex(ValueError, "unsafe process limits"):
+            build_process("Example", base | {"notes": "한" * 5_462}, {})
+        with self.assertRaisesRegex(ValueError, "unsafe process limits"):
+            build_process("Example", base | {"notes": "Unsafe\u0000note"}, {})
+
     def test_omits_only_unsafe_nozzle_variant_from_shared_process(self) -> None:
         raw = {
             "name": "0.20mm Shared",

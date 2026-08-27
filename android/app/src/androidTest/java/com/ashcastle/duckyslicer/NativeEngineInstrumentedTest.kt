@@ -414,6 +414,20 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun processConfigurationNotesReachTheActualOrcaGcodeHeader() {
+        val note = "Ducky process note"
+        val options = SliceOptions().copy(
+            quality = QualityProfile.STANDARD.copy(notes = note),
+        )
+        val outcome = OnDeviceSlicer.slice(fixtureModel(), options)
+        try {
+            assertTrue(outcome.output.readText().contains("; notes = $note"))
+        } finally {
+            outcome.output.delete()
+        }
+    }
+
+    @Test
     fun adaptivePressureAdvanceChangesRealKlipperCommands() {
         val model = "0.20,0.001,1000\n0.80,1000,1000"
         val filament = FilamentProfile.GENERIC_PLA.copy(
@@ -2823,7 +2837,7 @@ class NativeEngineInstrumentedTest {
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
         assertFalse(loadResult.bundledCatalogUnavailable)
-        assertEquals(117, catalog.schemaVersion)
+        assertEquals(118, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertEquals(789, catalog.printers.count { it.id.startsWith("orca-printer-") })
@@ -2858,6 +2872,12 @@ class NativeEngineInstrumentedTest {
         )
         assertEquals(3_316, catalog.filaments.count { it.id.startsWith("orca-filament-") })
         assertEquals(2_332, catalog.slicing.count { it.id.startsWith("orca-process-") })
+        assertEquals(
+            "Process file version 1.0 20250620",
+            catalog.slicing.single {
+                it.name == "0.20mm Standard @iQ TiQ8 P1 - ABS Natur Material4Print (0.4 Nozzle)"
+            }.notes,
+        )
         assertEquals(42, catalog.rejectedCount)
         catalog.slicing.single { it.name == "0.55mm DRAFT @CORE One 0.8" }.let { process ->
             assertEquals(0.8f, process.nozzleDiameter)

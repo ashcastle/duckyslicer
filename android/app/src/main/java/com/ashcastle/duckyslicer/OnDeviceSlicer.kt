@@ -514,7 +514,7 @@ data class AdaptivePressureAdvanceSettings(
 )
 
 internal const val DEFAULT_ADAPTIVE_PRESSURE_ADVANCE_MODEL = "0,0,0\n0,0,0"
-internal const val MAX_FILAMENT_NOTES_BYTES = 16 * 1024
+internal const val MAX_PROFILE_NOTES_BYTES = 16 * 1024
 
 data class FilamentProfile(
     val id: String,
@@ -1333,6 +1333,7 @@ data class QualityProfile(
     val spiralFinishingFlowRatio: Float = 0f,
     val brand: String? = null,
     val compatiblePrinters: List<String> = emptyList(),
+    val notes: String = "",
 ) {
     val printableOverhangs: PrintableOverhangSettings
         get() = precision.printableOverhangs
@@ -2541,6 +2542,7 @@ data class SliceOptions(
             filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
+            native.configurationNotes = quality.notes
             native.filamentColors = resolvedFilamentColors().toIntArray()
             native.firstLayerTravelAcceleration = firstLayerTravelAcceleration
             native.firstLayerTravelAccelerationPercent = firstLayerTravelAccelerationPercent

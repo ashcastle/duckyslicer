@@ -1444,6 +1444,26 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun processConfigurationNotesAreSearchableAndEditable() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val slicingProfile = context.getString(R.string.slicing_profile)
+        val searchSettings = context.getString(R.string.search_settings)
+        val configurationNotes = context.getString(R.string.configuration_notes)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
+            tapCenter(waitForNode(slicingProfile) { it.isClickable })
+            replaceEditableText(searchSettings, configurationNotes)
+
+            val field = scrollUntilNode(
+                configurationNotes,
+                scrollAnchorLabel = searchSettings,
+                timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
+            ) { node -> node.isEditable }
+            assertTrue("Configuration notes must be editable", field.isEditable)
+            replaceEditableText(configurationNotes, "Enable chamber macro before printing.")
+        }
+    }
+
+    @Test
     fun objectSettingsExposeOrcaCategoriesAndStickyThirtySeventyActions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val title = context.getString(R.string.object_process_settings)

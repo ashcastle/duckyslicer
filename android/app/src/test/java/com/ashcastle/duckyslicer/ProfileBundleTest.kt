@@ -127,6 +127,7 @@ class ProfileBundleTest {
                     quality = QualityProfile.STANDARD.copy(
                         smallAreaFlowCompensation = true,
                         smallAreaFlowCompensationModel = "0,0\n0.5,0.6\n10,1",
+                        notes = "Portable process instructions.",
                     ),
                     multiMaterial = MultiMaterialSettings(
                         flushMultiplierOverrideEnabled = true,
@@ -259,6 +260,7 @@ class ProfileBundleTest {
             }
             assertTrue(importedSlicing.smallAreaFlowCompensation)
             assertEquals("0,0\n0.5,0.6\n10,1", importedSlicing.smallAreaFlowCompensationModel)
+            assertEquals("Portable process instructions.", importedSlicing.notes)
             assertTrue(importedSlicing.multiMaterial.flushMultiplierOverrideEnabled)
             assertEquals(1.25f, importedSlicing.multiMaterial.flushMultiplier)
             assertEquals(123.5f, importedSlicing.multiMaterial.primeTowerPositionX)
