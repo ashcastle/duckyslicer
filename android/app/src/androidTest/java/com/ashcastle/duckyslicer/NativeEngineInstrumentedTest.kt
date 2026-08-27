@@ -43,6 +43,36 @@ class NativeEngineInstrumentedTest {
     )
 
     @Test
+    fun filamentColorsDriveDirectionalPurgeCalculationThroughTheIsolatedEngine() {
+        val support = FilamentProfile.PLA.copy(
+            id = "purge-support",
+            name = "Support",
+            supportMaterial = true,
+        )
+        val options = SliceOptions()
+            .selectPrinter(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    extruderCount = 3,
+                    nozzleVolume = 0f,
+                ),
+            )
+            .copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG, support),
+                filamentColors = listOf(0x000000, 0xFFFFFF, 0x55AA55),
+            )
+
+        val volumes = SlicerProcessClient.calculatePurgeVolumes(options)
+
+        assertEquals(9, volumes.size)
+        assertEquals(0f, volumes[0], 0.001f)
+        assertTrue("Dark-to-light must purge more than light-to-dark", volumes[1] > volumes[3])
+        assertEquals("Every transition into support uses Orca's support amount", 230f, volumes[2], 0.001f)
+        assertEquals("Every transition into support uses Orca's support amount", 230f, volumes[5], 0.001f)
+        assertTrue("Transitions out of support retain Orca's safety minimum", volumes[6] >= 420f)
+        assertTrue("Transitions out of support retain Orca's safety minimum", volumes[7] >= 420f)
+    }
+
+    @Test
     fun gcodeLineNumbersAreAppliedToEveryExportedLine() {
         val outcome = OnDeviceSlicer.slice(
             fixtureModel(),

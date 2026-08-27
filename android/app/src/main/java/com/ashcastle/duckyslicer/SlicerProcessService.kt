@@ -183,6 +183,64 @@ internal object SlicerProcessClient {
         )
     }
 
+    /** Reuses the inherited slicer's color-aware purge calculator in the isolated worker. */
+    fun calculatePurgeVolumes(options: SliceOptions): List<Float> {
+        check(Looper.myLooper() != Looper.getMainLooper()) {
+            "Purge-volume calculation must run outside the application main thread"
+        }
+        val filaments = options.resolvedFilamentSlots()
+        require(filaments.size in 2..MAX_FILAMENT_SLOTS) {
+            "Purge-volume calculation requires multiple filaments"
+        }
+        val retractions = filaments.map { it.resolveRetraction(options.printerProfile) }
+        val requestId = UUID.randomUUID().toString()
+        check(activeRequestId.compareAndSet(null, requestId)) {
+            "Another slicer operation is already running"
+        }
+        return try {
+            val response = withWorker(DuckySlicerApplication.context()) { worker ->
+                worker.request(
+                    what = SlicerProcessContract.MESSAGE_CALCULATE_PURGE_VOLUMES,
+                    data = Bundle().apply {
+                        putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
+                        putIntArray(
+                            SlicerProcessContract.KEY_FILAMENT_COLORS,
+                            options.previewFilamentColors().take(filaments.size).toIntArray(),
+                        )
+                        putFloat(SlicerProcessContract.KEY_NOZZLE_VOLUME, options.printerProfile.nozzleVolume)
+                        putIntArray(
+                            SlicerProcessContract.KEY_LONG_RETRACTIONS,
+                            retractions.map { if (it.longRetractionWhenCut) 1 else 0 }.toIntArray(),
+                        )
+                        putFloatArray(
+                            SlicerProcessContract.KEY_RETRACTION_DISTANCES,
+                            retractions.map(RetractionSettings::retractionDistanceWhenCut).toFloatArray(),
+                        )
+                        putIntArray(
+                            SlicerProcessContract.KEY_SUPPORT_FILAMENTS,
+                            filaments.map { if (it.supportMaterial) 1 else 0 }.toIntArray(),
+                        )
+                    },
+                    timeoutSeconds = PURGE_CALCULATION_TIMEOUT_SECONDS,
+                )
+            }
+            check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
+                response.getString(SlicerProcessContract.KEY_ERROR)
+                    ?: "Purge volumes could not be calculated"
+            }
+            val volumes = requireNotNull(
+                response.getFloatArray(SlicerProcessContract.KEY_PURGE_VOLUMES),
+            ) { "Slicer returned no purge volumes" }
+            require(
+                volumes.size == filaments.size * filaments.size &&
+                    volumes.all { it.isFinite() && it in MIN_PURGE_VOLUME..MAX_PURGE_VOLUME },
+            ) { "Slicer returned invalid purge volumes" }
+            volumes.toList()
+        } finally {
+            activeRequestId.compareAndSet(requestId, null)
+        }
+    }
+
     /** Runs automatic orientation in the isolated native worker. */
     fun autoOrient(
         models: List<File>,
@@ -1522,6 +1580,7 @@ internal object SlicerProcessClient {
                 what == SlicerProcessContract.MESSAGE_CREATE_PRIMITIVE ||
                 what == SlicerProcessContract.MESSAGE_EXPORT_THREE_MF ||
                 what == SlicerProcessContract.MESSAGE_EXPORT_STL ||
+                what == SlicerProcessContract.MESSAGE_CALCULATE_PURGE_VOLUMES ||
                 what == SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST
             if (!cancellable) return
             val requestId = data.getString(SlicerProcessContract.KEY_REQUEST_ID) ?: return
@@ -1561,6 +1620,7 @@ internal object SlicerProcessClient {
     private const val ARRANGEMENT_TIMEOUT_SECONDS = 5L * 60L
     private const val MODEL_NORMALIZATION_TIMEOUT_SECONDS = 5L * 60L
     private const val ORIENTATION_TIMEOUT_SECONDS = 5L * 60L
+    private const val PURGE_CALCULATION_TIMEOUT_SECONDS = 30L
     private const val SLICE_TIMEOUT_SECONDS = 30L * 60L
     private const val TEST_PROBE_TIMEOUT_SECONDS = 60L
     private const val TEST_MINIMUM_GCODE_BYTES = 16 * 1_024
@@ -1928,6 +1988,8 @@ class SlicerProcessService : Service() {
                 startWork(message, WorkOperation.EXPORT_THREE_MF)
             SlicerProcessContract.MESSAGE_EXPORT_STL ->
                 startWork(message, WorkOperation.EXPORT_STL)
+            SlicerProcessContract.MESSAGE_CALCULATE_PURGE_VOLUMES ->
+                startWork(message, WorkOperation.CALCULATE_PURGE_VOLUMES)
             SlicerProcessContract.MESSAGE_ATTACH -> attachToForegroundSlice(message)
             SlicerProcessContract.MESSAGE_CANCEL -> cancelWork(message)
             SlicerProcessContract.MESSAGE_HEALTH -> send(
@@ -2095,6 +2157,7 @@ class SlicerProcessService : Service() {
                 WorkOperation.CREATE_PRIMITIVE -> runCreatePrimitive(requestData)
                 WorkOperation.EXPORT_THREE_MF -> runExportThreeMf(requestData)
                 WorkOperation.EXPORT_STL -> runExportStl(requestData)
+                WorkOperation.CALCULATE_PURGE_VOLUMES -> runCalculatePurgeVolumes(requestData)
                 WorkOperation.SLICE -> runSlice(requestData) { percent ->
                     foregroundProgress = maxOf(foregroundProgress, percent.coerceIn(0, 100))
                     mainHandler.post { updateForegroundSlice(requestId, percent) }
@@ -2269,6 +2332,55 @@ class SlicerProcessService : Service() {
         send(reply, SlicerProcessContract.MESSAGE_PROGRESS, 1)
         Thread.sleep(TEST_PROBE_DURATION_MILLIS)
         return failure("Cancellation probe was not cancelled")
+    }
+
+    private fun runCalculatePurgeVolumes(extras: Bundle): Bundle = try {
+        val colors = requireNotNull(
+            extras.getIntArray(SlicerProcessContract.KEY_FILAMENT_COLORS),
+        ) { "Filament colors are unavailable" }
+        val longRetractions = requireNotNull(
+            extras.getIntArray(SlicerProcessContract.KEY_LONG_RETRACTIONS),
+        ) { "Retraction modes are unavailable" }
+        val retractionDistances = requireNotNull(
+            extras.getFloatArray(SlicerProcessContract.KEY_RETRACTION_DISTANCES),
+        ) { "Retraction distances are unavailable" }
+        val supportFilaments = requireNotNull(
+            extras.getIntArray(SlicerProcessContract.KEY_SUPPORT_FILAMENTS),
+        ) { "Support-filament flags are unavailable" }
+        require(
+            colors.size in 2..MAX_FILAMENT_SLOTS &&
+                longRetractions.size == colors.size &&
+                retractionDistances.size == colors.size &&
+                supportFilaments.size == colors.size &&
+                colors.all { it in MIN_FILAMENT_RGB..MAX_FILAMENT_RGB } &&
+                longRetractions.all { it in 0..1 } &&
+                retractionDistances.all { it.isFinite() && it in 0f..1_000f } &&
+                supportFilaments.all { it in 0..1 },
+        ) { "Purge-volume request is invalid" }
+        val nozzleVolume = extras.getFloat(SlicerProcessContract.KEY_NOZZLE_VOLUME, Float.NaN)
+        require(nozzleVolume.isFinite() && nozzleVolume in 0f..1_000f) {
+            "Nozzle volume is invalid"
+        }
+        val volumes = requireNotNull(
+            createNativeRuntime().nativeCalculateFlushVolumes(
+                colors,
+                nozzleVolume,
+                longRetractions,
+                retractionDistances,
+                supportFilaments,
+            ),
+        ) { "Native purge-volume calculation failed" }
+        require(
+            volumes.size == colors.size * colors.size &&
+                volumes.all { it.isFinite() && it in MIN_PURGE_VOLUME..MAX_PURGE_VOLUME },
+        ) { "Native purge-volume result is invalid" }
+        Bundle().apply {
+            putBoolean(SlicerProcessContract.KEY_OK, true)
+            putInt(SlicerProcessContract.KEY_PID, Process.myPid())
+            putFloatArray(SlicerProcessContract.KEY_PURGE_VOLUMES, volumes)
+        }
+    } catch (error: Exception) {
+        failure(error.message ?: "Purge volumes could not be calculated")
     }
 
     private fun runSlice(extras: Bundle, onProgress: (Int) -> Unit): Bundle = try {
@@ -3909,6 +4021,7 @@ class SlicerProcessService : Service() {
         CREATE_PRIMITIVE,
         EXPORT_THREE_MF,
         EXPORT_STL,
+        CALCULATE_PURGE_VOLUMES,
         TEST_PROBE,
     }
 
@@ -3961,6 +4074,7 @@ private object SlicerProcessContract {
     const val MESSAGE_SPLIT_MODEL_VOLUME = 16
     const val MESSAGE_EXPORT_THREE_MF = 17
     const val MESSAGE_EXPORT_STL = 18
+    const val MESSAGE_CALCULATE_PURGE_VOLUMES = 19
     const val KEY_REQUEST_ID = "requestId"
     const val KEY_MODEL_PATH = "modelPath"
     const val KEY_MODEL_PATHS = "modelPaths"
@@ -4010,6 +4124,12 @@ private object SlicerProcessContract {
     const val KEY_FILAMENT_GRAMS = "filamentGrams"
     const val KEY_SUGGESTED_FILENAME = "suggestedFilename"
     const val KEY_WARNING_CODES = "warningCodes"
+    const val KEY_FILAMENT_COLORS = "filamentColors"
+    const val KEY_NOZZLE_VOLUME = "nozzleVolume"
+    const val KEY_LONG_RETRACTIONS = "longRetractions"
+    const val KEY_RETRACTION_DISTANCES = "retractionDistances"
+    const val KEY_SUPPORT_FILAMENTS = "supportFilaments"
+    const val KEY_PURGE_VOLUMES = "purgeVolumes"
     const val KEY_ROTATION_RADIANS = "rotationRadians"
     const val KEY_BED_SIZE_X = "bedSizeX"
     const val KEY_BED_SIZE_Y = "bedSizeY"

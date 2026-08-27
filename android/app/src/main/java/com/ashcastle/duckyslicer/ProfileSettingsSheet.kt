@@ -6872,9 +6872,7 @@ private fun SlicingSettingsSheet(
                     if (options.printerProfile.singleExtruderMultiMaterial) {
                         SettingsGroupTitle(stringResource(R.string.filament_changes))
                         DirectionalPurgeSetting(
-                            filaments = options.resolvedFilamentSlots(),
-                            filamentColors = options.previewFilamentColors(),
-                            multiMaterial = options.multiMaterial,
+                            options = options,
                             onChanged = {
                                 onOptionsChanged(options.copy(multiMaterial = it))
                             },
@@ -8495,17 +8493,19 @@ private fun <T> SettingChoices(
 
 @Composable
 private fun DirectionalPurgeSetting(
-    filaments: List<FilamentProfile>,
-    filamentColors: List<Int>,
-    multiMaterial: MultiMaterialSettings,
+    options: SliceOptions,
     onChanged: (MultiMaterialSettings) -> Unit,
 ) {
+    val filaments = options.resolvedFilamentSlots()
     if (filaments.size < 2) return
+    val filamentColors = options.previewFilamentColors()
+    val multiMaterial = options.multiMaterial
     val purgeLabel = stringResource(R.string.purge_volume)
     val fromLabel = stringResource(R.string.from_filament)
     val toLabel = stringResource(R.string.to_filament)
+    val calculateLabel = stringResource(R.string.calculate_purge_volumes)
     val query = LocalSettingsQuery.current
-    if (listOf(purgeLabel, fromLabel, toLabel).none { settingQueryMatches(query, it) }) return
+    if (listOf(purgeLabel, fromLabel, toLabel, calculateLabel).none { settingQueryMatches(query, it) }) return
 
     var fromSlot by rememberSaveable(filaments.size) { mutableStateOf(1) }
     var toSlot by rememberSaveable(filaments.size) { mutableStateOf(2) }
@@ -8519,6 +8519,10 @@ private fun DirectionalPurgeSetting(
     fun differentFrom(slot: Int): Int = if (slot < filaments.size) slot + 1 else 1
 
     CompositionLocalProvider(LocalSettingsQuery provides "") {
+        AutomaticPurgeVolumeSetting(
+            options = options,
+            onChanged = onChanged,
+        )
         FilamentSlotSetting(
             label = fromLabel,
             filaments = filaments,

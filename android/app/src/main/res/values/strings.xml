@@ -1181,6 +1181,9 @@
     <string name="from_filament">From filament</string>
     <string name="to_filament">To filament</string>
     <string name="purge_volume">Flushing Volume</string>
+    <string name="calculate_purge_volumes">Calculate from colors</string>
+    <string name="calculating_purge_volumes">Calculating…</string>
+    <string name="purge_volume_calculation_failed">Couldn’t calculate. Current values were kept.</string>
     <string name="custom_purge_multiplier">Custom purge multiplier</string>
     <string name="purge_multiplier">Purge multiplier</string>
     <string name="flush_into_infill">Flush into objects\' infill</string>

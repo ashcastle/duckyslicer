@@ -1181,6 +1181,9 @@
     <string name="from_filament">이전 필라멘트</string>
     <string name="to_filament">다음 필라멘트</string>
     <string name="purge_volume">퍼지량</string>
+    <string name="calculate_purge_volumes">색상으로 계산</string>
+    <string name="calculating_purge_volumes">계산 중…</string>
+    <string name="purge_volume_calculation_failed">계산하지 못했습니다. 현재 값은 유지됩니다.</string>
     <string name="custom_purge_multiplier">퍼지 배율 직접 설정</string>
     <string name="purge_multiplier">퍼지 배율</string>
     <string name="flush_into_infill">객체의 채우기에서 버리기</string>

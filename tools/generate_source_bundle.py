@@ -62,6 +62,7 @@ BUILD_INPUTS = (
     "native/slicer-runtime/overlay/png.h",
     "native/slicer-runtime/overlay/sapil_gcode_thumbnail.cpp",
     "native/slicer-runtime/overlay/sapil_gcode_thumbnail.h",
+    "native/slicer-runtime/purge-volume-calculator.patch",
     "native/slicer-runtime/adaptive-pressure-advance.patch",
     "native/slicer-runtime/adaptive-layer-height.patch",
     "native/slicer-runtime/auto-arrange-rotations.patch",

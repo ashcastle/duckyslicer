@@ -1,0 +1,120 @@
+diff --git a/app/src/main/cpp/CMakeLists.txt b/app/src/main/cpp/CMakeLists.txt
+--- a/app/src/main/cpp/CMakeLists.txt
++++ b/app/src/main/cpp/CMakeLists.txt
+@@ -599,6 +599,7 @@ if(SLICER_BACKEND STREQUAL "orca")
+         ${LIBSLIC3R_DIR}/Fill/FillTpmsFK.cpp
+         ${LIBSLIC3R_DIR}/Flow.cpp
+         ${LIBSLIC3R_DIR}/FlushVolCalc.cpp
++        ${PRUSA_DIR}/src/slic3r/Utils/ColorSpaceConvert.cpp
+ 
+         # Format loaders
+         ${LIBSLIC3R_DIR}/Format/3mf.cpp
+diff --git a/app/src/main/cpp/orcaslicer/src/slic3r/Utils/ColorSpaceConvert.cpp b/app/src/main/cpp/orcaslicer/src/slic3r/Utils/ColorSpaceConvert.cpp
+--- a/app/src/main/cpp/orcaslicer/src/slic3r/Utils/ColorSpaceConvert.cpp
++++ b/app/src/main/cpp/orcaslicer/src/slic3r/Utils/ColorSpaceConvert.cpp
+@@ -1,8 +1,10 @@
+ #include "ColorSpaceConvert.hpp"
+ 
+ #include <algorithm>
++#ifndef SLIC3R_ANDROID
+ #include <boost/algorithm/string.hpp>
+ #include <wx/colordlg.h>
++#endif
+ #include <cmath>
+ 
+ const static float param_13 = 1.0f / 3.0f;
+@@ -236,6 +238,7 @@ float DeltaE76(float l1, float a1, float b1, float l2, float a2, float b2)
+     return std::sqrt(std::pow((l1 - l2), 2) + std::pow((a1 - a2), 2) + std::pow((b1 - b2), 2));
+ }
+ 
++#ifndef SLIC3R_ANDROID
+ std::string color_to_string(const wxColour &color)
+ {
+     std::string str = std::to_string(color.Red()) + "," + std::to_string(color.Green()) + "," + std::to_string(color.Blue()) + "," + std::to_string(color.Alpha());
+@@ -253,3 +256,4 @@ wxColour string_to_wxColor(const std::string &str)
+     }
+     return color;
+ };
++#endif
+diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slicer_wrapper.cpp
+--- a/app/src/main/cpp/src/slicer_wrapper.cpp
++++ b/app/src/main/cpp/src/slicer_wrapper.cpp
+@@ -1,5 +1,6 @@
+ #include "../include/sapil.h"
+ #include "sapil_diagnostics.h"
++#include "libslic3r/FlushVolCalc.hpp"
+ // =============================================================================
+ // slicer_wrapper.cpp — Main JNI entry points
+ // =============================================================================
+@@ -31,6 +32,71 @@ Java_com_u1_slicer_NativeLibrary_getCoreVersion(JNIEnv* env, jobject /* this */)
+     return env->NewStringUTF(version.c_str());
+ }
+ 
++JNIEXPORT jfloatArray JNICALL
++Java_com_u1_slicer_NativeLibrary_nativeCalculateFlushVolumes(
++        JNIEnv* env, jobject, jintArray jcolors, jfloat jnozzle_volume,
++        jintArray jlong_retractions, jfloatArray jretraction_distances,
++        jintArray jsupport_filaments) {
++    if (!jcolors || !jlong_retractions || !jretraction_distances || !jsupport_filaments ||
++        !std::isfinite(jnozzle_volume) || jnozzle_volume < 0.0f || jnozzle_volume > 1000.0f) {
++        return nullptr;
++    }
++    const jsize count = env->GetArrayLength(jcolors);
++    if (count < 2 || count > 16 ||
++        env->GetArrayLength(jlong_retractions) != count ||
++        env->GetArrayLength(jretraction_distances) != count ||
++        env->GetArrayLength(jsupport_filaments) != count) {
++        return nullptr;
++    }
++
++    std::vector<jint> colors(static_cast<size_t>(count));
++    std::vector<jint> long_retractions(static_cast<size_t>(count));
++    std::vector<jfloat> retraction_distances(static_cast<size_t>(count));
++    std::vector<jint> support_filaments(static_cast<size_t>(count));
++    env->GetIntArrayRegion(jcolors, 0, count, colors.data());
++    env->GetIntArrayRegion(jlong_retractions, 0, count, long_retractions.data());
++    env->GetFloatArrayRegion(jretraction_distances, 0, count, retraction_distances.data());
++    env->GetIntArrayRegion(jsupport_filaments, 0, count, support_filaments.data());
++    if (env->ExceptionCheck()) return nullptr;
++
++    std::vector<float> volumes(static_cast<size_t>(count) * static_cast<size_t>(count), 0.0f);
++    constexpr float filament_area = 3.14159265358979323846f * 1.75f * 1.75f / 4.0f;
++    for (jsize from = 0; from < count; ++from) {
++        if ((colors[from] & ~0x00ffffff) != 0 ||
++            (long_retractions[from] != 0 && long_retractions[from] != 1) ||
++            !std::isfinite(retraction_distances[from]) || retraction_distances[from] < 0.0f ||
++            retraction_distances[from] > 1000.0f ||
++            (support_filaments[from] != 0 && support_filaments[from] != 1)) {
++            return nullptr;
++        }
++        const int retract_length = long_retractions[from] == 1 ?
++            static_cast<int>(retraction_distances[from]) : 0;
++        const int minimum = static_cast<int>(jnozzle_volume) -
++            static_cast<int>(filament_area * static_cast<float>(retract_length));
++        Slic3r::FlushVolCalculator calculator(minimum, Slic3r::g_max_flush_volume);
++        const unsigned int source = static_cast<unsigned int>(colors[from]);
++        for (jsize to = 0; to < count; ++to) {
++            if (from == to) continue;
++            int volume;
++            if (support_filaments[to] == 1) {
++                volume = Slic3r::g_flush_volume_to_support;
++            } else {
++                const unsigned int target = static_cast<unsigned int>(colors[to]);
++                volume = calculator.calc_flush_vol(
++                    255, (source >> 16) & 0xff, (source >> 8) & 0xff, source & 0xff,
++                    255, (target >> 16) & 0xff, (target >> 8) & 0xff, target & 0xff);
++                if (support_filaments[from] == 1)
++                    volume = std::max(volume, Slic3r::g_min_flush_volume_from_support);
++            }
++            volumes[static_cast<size_t>(from) * static_cast<size_t>(count) + static_cast<size_t>(to)] =
++                static_cast<float>(volume);
++        }
++    }
++    jfloatArray result = env->NewFloatArray(static_cast<jsize>(volumes.size()));
++    if (result) env->SetFloatArrayRegion(result, 0, static_cast<jsize>(volumes.size()), volumes.data());
++    return result;
++}
++
+ JNIEXPORT void JNICALL
+ Java_com_u1_slicer_NativeLibrary_configureDiagnostics(JNIEnv* env, jobject, jstring jpath) {
+     if (!jpath) return;
