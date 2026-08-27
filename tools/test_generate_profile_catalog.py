@@ -146,6 +146,25 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported G-code flavor"):
             build_printer("Example", base | {"gcode_flavor": "unknown"})
 
+    def test_preserves_and_validates_printer_structure(self) -> None:
+        base = {
+            "name": "Structured printer",
+            "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+            "printable_height": "250",
+            "nozzle_diameter": ["0.4"],
+            "gcode_flavor": "marlin",
+        }
+
+        self.assertEqual("undefine", build_printer("Example", base)["printerStructure"])
+        for structure in ("corexy", "i3", "hbot", "delta"):
+            profile = build_printer(
+                "Example",
+                base | {"printer_structure": structure.upper()},
+            )
+            self.assertEqual(structure, profile["printerStructure"])
+        with self.assertRaisesRegex(ValueError, "unsupported printer structure"):
+            build_printer("Example", base | {"printer_structure": "polar"})
+
     def test_preserves_and_validates_resonance_avoidance(self) -> None:
         base = {
             "name": "Resonance-aware printer",

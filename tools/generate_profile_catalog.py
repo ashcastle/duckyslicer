@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 106
+SCHEMA_VERSION = 107
 MAX_FILAMENT_SLOTS = 16
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
@@ -27,6 +27,7 @@ DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL = (
 MAX_GCODE_FILENAME_FORMAT_BYTES = 1_024
 MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES = 16_384
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper", "reprapfirmware"}
+SUPPORTED_PRINTER_STRUCTURES = {"undefine", "corexy", "i3", "hbot", "delta"}
 NOZZLE_MATERIALS = {"undefine", "hardened_steel", "stainless_steel", "brass"}
 INFILL_PATTERNS = {
     "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
@@ -505,6 +506,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         else physical_extruder_count
     )
     flavor = str(scalar(raw.get("gcode_flavor"), "")).lower()
+    printer_structure = str(scalar(raw.get("printer_structure"), "undefine")).strip().lower()
     if not (
         50 <= height <= 1_500 and
         0.1 <= nozzle <= 2.0 and
@@ -514,6 +516,8 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("unsafe printer dimensions")
     if flavor not in SUPPORTED_GCODE_FLAVORS:
         raise ValueError(f"unsupported G-code flavor: {flavor}")
+    if printer_structure not in SUPPORTED_PRINTER_STRUCTURES:
+        raise ValueError(f"unsupported printer structure: {printer_structure}")
 
     def motion(key: str, default: float) -> float:
         parsed = number(raw.get(key), default)
@@ -591,6 +595,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "machineToolChangeTime": number(raw.get("machine_tool_change_time"), 0),
         "toolChangeTemperatureWait": boolean(raw.get("tool_change_temprature_wait"), True),
         "gcodeFlavor": flavor,
+        "printerStructure": printer_structure,
         "maxSpeedX": motion("machine_max_speed_x", 300),
         "maxSpeedY": motion("machine_max_speed_y", 300),
         "maxSpeedZ": motion("machine_max_speed_z", 15),

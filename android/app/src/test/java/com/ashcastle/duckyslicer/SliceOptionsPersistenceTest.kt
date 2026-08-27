@@ -10,6 +10,20 @@ import org.junit.Test
 
 class SliceOptionsPersistenceTest {
     @Test
+    fun printerStructureRoundTripsAndReachesNativeConfiguration() {
+        val options = SliceOptions().copy(
+            printerProfile = PrinterProfile.U1_04.copy(printerStructure = "i3"),
+            printerStructure = "i3",
+        )
+
+        val restored = requireNotNull(options.toProjectJson().toProjectSliceOptionsOrNull())
+
+        assertEquals("i3", restored.printerProfile.printerStructure)
+        assertEquals("i3", restored.printerStructure)
+        assertEquals("i3", restored.toNativeConfig().printerStructure)
+    }
+
+    @Test
     fun filamentSlotsRoundTripAndReachTheNativeExtruderConfiguration() {
         val primary = FilamentProfile.GENERIC_PLA.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_04.name),

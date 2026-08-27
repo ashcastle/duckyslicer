@@ -904,6 +904,21 @@ private fun PrinterSettingsSheet(
         },
         onSelected = { onOptionsChanged(options.copy(gcodeFlavor = it)) },
     )
+    SettingChoices(
+        settingLabel = stringResource(R.string.printer_motion_system),
+        entries = PRINTER_STRUCTURES,
+        selected = options.printerStructure,
+        optionLabel = {
+            when (it) {
+                "corexy" -> "CoreXY"
+                "i3" -> stringResource(R.string.printer_motion_system_bed_slinger)
+                "hbot" -> "H-bot"
+                "delta" -> "Delta"
+                else -> stringResource(R.string.printer_motion_system_unspecified)
+            }
+        },
+        onSelected = { onOptionsChanged(options.copy(printerStructure = it)) },
+    )
     SettingsGroupTitle(stringResource(R.string.adaptive_bed_mesh))
     CoordinatePairSettingField(
         label = stringResource(R.string.bed_mesh_min),

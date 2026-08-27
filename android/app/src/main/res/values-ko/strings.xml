@@ -929,6 +929,9 @@
     <string name="close">닫기</string>
     <string name="build_height">출력 높이</string>
     <string name="printer_firmware">프린터 펌웨어</string>
+    <string name="printer_motion_system">구동 구조</string>
+    <string name="printer_motion_system_bed_slinger">베드 이동형</string>
+    <string name="printer_motion_system_unspecified">지정 안 함</string>
     <string name="machine_gcode">시작 및 종료 G-code</string>
     <string name="machine_start_gcode">시작 G-code</string>
     <string name="machine_end_gcode">종료 G-code</string>

@@ -308,6 +308,7 @@ class ProfileStoreMigrationTest {
                     longRetractionWhenCutLevel = 2,
                     longRetractionWhenCut = true,
                     retractionDistanceWhenCut = 16.5f,
+                    printerStructure = "delta",
                 ),
             )
             val saved = ProfileStore(file).savePrinter("Delta bed", options)
@@ -324,6 +325,7 @@ class ProfileStoreMigrationTest {
             )
             assertEquals(-110f, restored.bedOriginX)
             assertEquals(-110f, restored.bedOriginY)
+            assertEquals("delta", restored.printerStructure)
             assertTrue(restored.singleExtruderMultiMaterial)
             assertEquals(2, restored.extruderCount)
             assertTrue(restored.auxiliaryFan)

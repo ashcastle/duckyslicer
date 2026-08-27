@@ -71,6 +71,7 @@ BUILD_INPUTS = (
     "native/slicer-runtime/engine-resonance-profile.patch",
     "native/slicer-runtime/extra-solid-infills.patch",
     "native/slicer-runtime/resonance-avoidance.patch",
+    "native/slicer-runtime/printer-structure.patch",
     "native/slicer-runtime/filament-colors.patch",
     "native/slicer-runtime/layer-pauses.patch",
     "native/slicer-runtime/gcode-thumbnail.patch",

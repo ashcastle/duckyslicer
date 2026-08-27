@@ -15,6 +15,7 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         maxPrintHeight = maxPrintHeight,
         nozzleDiameter = nozzleDiameter,
         gcodeFlavor = gcodeFlavor,
+        printerStructure = printerStructure,
         maxSpeedX = maxSpeedX,
         maxSpeedY = maxSpeedY,
         maxSpeedZ = maxSpeedZ,

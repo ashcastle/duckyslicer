@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 106
+internal const val USER_PROFILE_SCHEMA_VERSION = 107
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -103,6 +103,7 @@ class ProfileStore private constructor(
             machineToolChangeTime = options.printerProfile.machineToolChangeTime,
             toolChangeTemperatureWait = options.printerProfile.toolChangeTemperatureWait,
             gcodeFlavor = options.gcodeFlavor,
+            printerStructure = options.printerStructure,
             maxSpeedX = options.maxSpeedX,
             maxSpeedY = options.maxSpeedY,
             maxSpeedZ = options.maxSpeedZ,
@@ -822,6 +823,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("machineToolChangeTime", machineToolChangeTime)
     .put("toolChangeTemperatureWait", toolChangeTemperatureWait)
     .put("gcodeFlavor", gcodeFlavor)
+    .put("printerStructure", printerStructure)
     .put("maxSpeedX", maxSpeedX).put("maxSpeedY", maxSpeedY)
     .put("maxSpeedZ", maxSpeedZ).put("maxSpeedE", maxSpeedE)
     .put("maxAccelerationX", maxAccelerationX).put("maxAccelerationY", maxAccelerationY)
@@ -1363,6 +1365,7 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         machineToolChangeTime = optDouble("machineToolChangeTime", 0.0).toFloat(),
         toolChangeTemperatureWait = optBoolean("toolChangeTemperatureWait", true),
         gcodeFlavor = optString("gcodeFlavor", "marlin"),
+        printerStructure = optString("printerStructure", "undefine"),
         maxSpeedX = optDouble("maxSpeedX", 500.0).toFloat(),
         maxSpeedY = optDouble("maxSpeedY", 500.0).toFloat(),
         maxSpeedZ = optDouble("maxSpeedZ", 20.0).toFloat(),

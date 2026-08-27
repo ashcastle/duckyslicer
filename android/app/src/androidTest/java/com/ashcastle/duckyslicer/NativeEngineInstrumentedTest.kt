@@ -13,6 +13,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.ByteArrayInputStream
@@ -295,6 +296,22 @@ class NativeEngineInstrumentedTest {
             assertTrue(gcode.contains("; travel_jerk = 12.5"))
         } finally {
             outcome.output.delete()
+        }
+    }
+
+    @Test
+    fun printerStructureReachesOrcaGcodeConfiguration() {
+        val options = SliceOptions()
+            .selectPrinter(PrinterProfile.U1_04.copy(printerStructure = "i3"))
+        val outcome = OnDeviceSlicer.slice(fixtureModel(), options)
+        try {
+            assertTrue(outcome.output.readText().contains("; printer_structure = i3"))
+        } finally {
+            outcome.output.delete()
+        }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            options.copy(printerStructure = "polar").toNativeConfig()
         }
     }
 
@@ -2706,13 +2723,25 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(106, catalog.schemaVersion)
+        assertEquals(107, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertEquals(794, catalog.printers.size)
         assertEquals(3_322, catalog.filaments.size)
         assertEquals(2_331, catalog.slicing.size)
         assertEquals(66, catalog.rejectedCount)
+        assertEquals(
+            "i3",
+            catalog.printers.single { it.name == "Anker M5 0.4 nozzle" }.printerStructure,
+        )
+        assertEquals(
+            "corexy",
+            catalog.printers.single { it.name == "Anycubic Kobra S1 0.4 nozzle" }.printerStructure,
+        )
+        assertEquals(
+            "delta",
+            catalog.printers.single { it.name == "FLSun S1 0.4 nozzle" }.printerStructure,
+        )
         val repRapFirmwarePrinters = setOf(
             "Construct 1 0.4 nozzle",
             "Construct 1 XL 0.6 nozzle",

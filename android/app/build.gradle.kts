@@ -87,6 +87,7 @@ val buildSlicerRuntime = tasks.register<Exec>("buildSlicerRuntime") {
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/layer-pauses.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/extra-solid-infills.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/resonance-avoidance.patch"))
+    inputs.file(repositoryRoot.resolve("native/slicer-runtime/printer-structure.patch"))
     inputs.dir(repositoryRoot.resolve("native/slicer-runtime/overlay"))
     inputs.file(repositoryRoot.resolve(".gitmodules"))
     inputs.property("androidNdkVersion", "28.2.13676358")
@@ -116,7 +117,7 @@ val generateOrcaProfileCatalog = tasks.register<Exec>("generateOrcaProfileCatalo
     )
     inputs.file(profileCatalogGenerator)
     inputs.dir(orcaProfileRoot)
-    inputs.property("profileSchemaVersion", 95)
+    inputs.property("profileSchemaVersion", 107)
     inputs.property("orcaRevision", orcaEngineRevision)
     outputs.file(generatedProfileCatalog)
     outputs.upToDateWhen {

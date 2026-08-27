@@ -212,6 +212,8 @@ enum class NozzleMaterial(
     }
 }
 
+internal val PRINTER_STRUCTURES = listOf("undefine", "corexy", "i3", "hbot", "delta")
+
 data class PrinterProfile(
     val id: String,
     val name: String,
@@ -244,6 +246,7 @@ data class PrinterProfile(
     val machineToolChangeTime: Float = 0f,
     val toolChangeTemperatureWait: Boolean = true,
     val gcodeFlavor: String = "marlin",
+    val printerStructure: String = "undefine",
     val maxSpeedX: Float = 500f,
     val maxSpeedY: Float = 500f,
     val maxSpeedZ: Float = 20f,
@@ -1321,7 +1324,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 106,
+    val schemaVersion: Int = 107,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1608,6 +1611,7 @@ data class SliceOptions(
     val spiralStartingFlowRatio: Float = quality.spiralStartingFlowRatio,
     val spiralFinishingFlowRatio: Float = quality.spiralFinishingFlowRatio,
     val gcodeFlavor: String = printerProfile.gcodeFlavor,
+    val printerStructure: String = printerProfile.printerStructure,
     val machineMotion: MachineMotionSettings = MachineMotionSettings.fromProfile(printerProfile),
     val extruderClearanceRadius: Float = printerProfile.extruderClearanceRadius,
     val extruderClearanceHeightToRod: Float = printerProfile.extruderClearanceHeightToRod,
@@ -1676,6 +1680,7 @@ data class SliceOptions(
             maxPrintHeight = profile.maxPrintHeight,
             nozzleDiameter = profile.nozzleDiameter,
             gcodeFlavor = profile.gcodeFlavor,
+            printerStructure = profile.printerStructure,
             machineMotion = MachineMotionSettings.fromProfile(profile),
             extruderClearanceRadius = profile.extruderClearanceRadius,
             extruderClearanceHeightToRod = profile.extruderClearanceHeightToRod,
@@ -2088,6 +2093,7 @@ data class SliceOptions(
     )
 
     fun toNativeConfig(): SliceConfig {
+        require(printerStructure in PRINTER_STRUCTURES) { "Invalid printer structure" }
         require(gcodeSettings.timelapseType in setOf("traditional", "smooth")) {
             "Invalid timelapse type"
         }
@@ -2409,6 +2415,7 @@ data class SliceOptions(
             native.adaptiveBedMeshMargin = printerProfile.adaptiveBedMeshMargin
             native.gcodeThumbnails = canonicalGcodeThumbnailDefinitions(printerProfile.gcodeThumbnails)
                 ?: printerProfile.gcodeThumbnails
+            native.printerStructure = printerStructure
             native.skirtType = quality.skirtType
             native.singleLoopDraftShield = quality.singleLoopDraftShield
             native.lateralLatticeAngle1 = quality.lateralInfill.firstAngle

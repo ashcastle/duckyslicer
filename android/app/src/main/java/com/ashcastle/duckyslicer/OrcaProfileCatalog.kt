@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 106) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 107) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -118,6 +118,7 @@ class OrcaProfileCatalog(private val context: Context) {
         machineToolChangeTime = input.readFloat(),
         toolChangeTemperatureWait = input.readCatalogBoolean(),
         gcodeFlavor = input.readCatalogString(),
+        printerStructure = input.readCatalogString(),
         maxSpeedX = input.readFloat(),
         maxSpeedY = input.readFloat(),
         maxSpeedZ = input.readFloat(),
@@ -402,6 +403,7 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("machineToolChangeTime", BINARY_FLOAT),
     BinaryField("toolChangeTemperatureWait", BINARY_BOOL),
     BinaryField("gcodeFlavor", BINARY_STRING),
+    BinaryField("printerStructure", BINARY_STRING),
     BinaryField("maxSpeedX", BINARY_FLOAT),
     BinaryField("maxSpeedY", BINARY_FLOAT),
     BinaryField("maxSpeedZ", BINARY_FLOAT),

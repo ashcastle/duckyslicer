@@ -1,0 +1,46 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -506,6 +506,7 @@ struct SliceConfig {
+     bool manual_filament_change = false;
+     bool disable_m73 = false;
+     std::string gcode_flavor = "marlin";
++    std::string printer_structure = "undefine";
+     bool auxiliary_fan = false;
+     float fan_speedup_time = 0.0f;
+     bool fan_speedup_overhangs = true;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -540,6 +540,7 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.manual_filament_change = getBool("manualFilamentChange");
+     config.disable_m73 = getBool("disableM73");
+     config.gcode_flavor = getString("gcodeFlavor");
++    config.printer_structure = getString("printerStructure");
+     config.auxiliary_fan = getBool("auxiliaryFan");
+     config.fan_speedup_time = getFloat("fanSpeedupTime");
+     config.fan_speedup_overhangs = getBool("fanSpeedupOverhangs");
+@@ -1180,6 +1181,7 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setBool("manualFilamentChange", config.manual_filament_change);
+     setBool("disableM73", config.disable_m73);
+     setString("gcodeFlavor", config.gcode_flavor);
++    setString("printerStructure", config.printer_structure);
+     setBool("auxiliaryFan", config.auxiliary_fan);
+     setFloat("fanSpeedupTime", config.fan_speedup_time);
+     setBool("fanSpeedupOverhangs", config.fan_speedup_overhangs);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -691,6 +691,12 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     else if (config.gcode_flavor == "klipper") flavor = Slic3r::gcfKlipper;
+     else if (config.gcode_flavor == "reprapfirmware") flavor = Slic3r::gcfRepRapFirmware;
+     dpc.set_key_value("gcode_flavor", new Slic3r::ConfigOptionEnum<Slic3r::GCodeFlavor>(flavor));
++    if (config.printer_structure != "undefine" && config.printer_structure != "corexy" &&
++        config.printer_structure != "i3" && config.printer_structure != "hbot" &&
++        config.printer_structure != "delta") {
++        throw std::invalid_argument("Invalid printer structure");
++    }
++    dpc.set_deserialize_strict("printer_structure", config.printer_structure);
+     dpc.set_key_value("auxiliary_fan", new Slic3r::ConfigOptionBool(config.auxiliary_fan));
+     if (!std::isfinite(config.fan_speedup_time) || config.fan_speedup_time < 0.0f ||
+         config.fan_speedup_time > 60.0f || !std::isfinite(config.fan_kickstart) ||
