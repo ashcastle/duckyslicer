@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import math
+import tempfile
 import unittest
 from pathlib import Path
 
 from tools.generate_profile_catalog import (
+    Resolver,
     adaptive_pressure_advance_model,
     bed_exclude_geometry,
     build_filament,
@@ -24,6 +27,57 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_indexes_only_non_instantiable_untyped_filament_parents(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            profile_root = Path(temporary)
+            filament_root = profile_root / "Example" / "filament"
+            filament_root.mkdir(parents=True)
+            (filament_root / "Base.json").write_text(
+                json.dumps(
+                    {
+                        "name": "Untyped reusable base",
+                        "instantiation": "false",
+                        "filament_density": ["1.3"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (filament_root / "Child.json").write_text(
+                json.dumps(
+                    {
+                        "type": "filament",
+                        "name": "Selectable child",
+                        "instantiation": "true",
+                        "inherits": "Untyped reusable base",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (filament_root / "Unsafe.json").write_text(
+                json.dumps(
+                    {
+                        "name": "Untyped selectable profile",
+                        "instantiation": "true",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            resolver = Resolver(profile_root)
+            child_id = next(
+                entry_id
+                for entry_id, (_, _, raw) in enumerate(resolver.entries)
+                if raw["name"] == "Selectable child"
+            )
+            resolved = resolver.resolve(child_id)
+
+            self.assertEqual("filament", resolved["type"])
+            self.assertEqual(["1.3"], resolved["filament_density"])
+            self.assertNotIn(
+                "Untyped selectable profile",
+                {raw["name"] for _, _, raw in resolver.entries},
+            )
+
     def test_canonicalizes_duplicate_profile_sources_without_silent_conflicts(self) -> None:
         canonical = {
             "id": "orca-process-example",

@@ -2764,13 +2764,33 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(107, catalog.schemaVersion)
+        assertEquals(108, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
-        assertEquals(794, catalog.printers.size)
-        assertEquals(3_322, catalog.filaments.size)
-        assertEquals(2_331, catalog.slicing.size)
-        assertEquals(66, catalog.rejectedCount)
+        assertEquals(789, catalog.printers.size)
+        assertEquals(3_311, catalog.filaments.size)
+        assertEquals(2_319, catalog.slicing.size)
+        assertEquals(60, catalog.rejectedCount)
+        val restoredBreakawayProfiles = setOf(
+            "Snapmaker Breakaway Support",
+            "Snapmaker Breakaway Support @J1",
+            "Snapmaker Breakaway Support For PLA @U1",
+            "Snapmaker Breakaway Support For PLA @U1 0.2 nozzle",
+            "Snapmaker Breakaway Support For PLA @U1 0.6 nozzle",
+            "Snapmaker Breakaway Support For PLA @U1 0.8 nozzle",
+        )
+        assertEquals(
+            restoredBreakawayProfiles,
+            catalog.filaments
+                .filter { it.name in restoredBreakawayProfiles }
+                .onEach {
+                    assertTrue(it.supportMaterial)
+                    assertEquals(220, it.nozzleTemp)
+                    assertEquals(230, it.firstLayerNozzleTemp)
+                }
+                .map(FilamentProfile::name)
+                .toSet(),
+        )
         assertEquals(
             "i3",
             catalog.printers.single { it.name == "Anker M5 0.4 nozzle" }.printerStructure,

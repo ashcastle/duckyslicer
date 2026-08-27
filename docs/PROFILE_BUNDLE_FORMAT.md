@@ -12,7 +12,7 @@ The top-level object contains exactly four fields:
 {
   "type": "com.ashcastle.duckyslicer.user-profiles",
   "bundleVersion": 1,
-  "profileSchemaVersion": 107,
+  "profileSchemaVersion": 108,
   "profiles": {
     "printers": [],
     "filaments": [],

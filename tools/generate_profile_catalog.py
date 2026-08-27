@@ -393,6 +393,22 @@ def stable_id(kind: str, brand: str, name: str) -> str:
     return f"orca-{kind}-{digest}"
 
 
+def profile_entry_kind(path: Path, raw: dict[str, Any]) -> str | None:
+    kind = raw.get("type")
+    if kind in {"machine", "filament", "process"}:
+        return str(kind)
+    # Orca occasionally keeps a non-instantiable filament base without a type.
+    # It is still an inheritance node, but never a selectable catalog record.
+    if (
+        kind is None
+        and raw.get("instantiation") is not None
+        and not boolean(raw.get("instantiation"))
+        and path.parent.name == "filament"
+    ):
+        return "filament"
+    return None
+
+
 class Resolver:
     def __init__(self, profile_root: Path) -> None:
         self.profile_root = profile_root
@@ -401,10 +417,12 @@ class Resolver:
         self.cache: dict[int, dict[str, Any]] = {}
         for path in sorted(profile_root.rglob("*.json")):
             raw = json.loads(path.read_text(encoding="utf-8"))
-            kind = raw.get("type")
+            kind = profile_entry_kind(path, raw)
             name = raw.get("name")
-            if kind not in {"machine", "filament", "process"} or not name:
+            if kind is None or not name:
                 continue
+            if raw.get("type") is None:
+                raw = raw | {"type": kind}
             relative = path.relative_to(profile_root)
             brand = relative.parts[0] if len(relative.parts) > 2 else "Common"
             entry_id = len(self.entries)
