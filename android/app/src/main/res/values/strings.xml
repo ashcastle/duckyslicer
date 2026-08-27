@@ -588,6 +588,7 @@
     <string name="slice_gap_closing_radius">Slice gap closing radius</string>
     <string name="precise_z_height">Precise Z height</string>
     <string name="arc_fitting">Arc fitting</string>
+    <string name="gcode_line_numbers">G-code line numbers</string>
     <string name="hole_to_polyhole">Convert holes to polyholes</string>
     <string name="hole_to_polyhole_threshold">Polyhole detection margin</string>
     <string name="hole_to_polyhole_twisted">Polyhole twist</string>

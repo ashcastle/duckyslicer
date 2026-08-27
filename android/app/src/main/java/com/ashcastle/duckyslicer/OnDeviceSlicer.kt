@@ -830,6 +830,7 @@ internal const val DEFAULT_GCODE_FILENAME_FORMAT =
 
 data class GcodeSettings(
     val arcFitting: Boolean = false,
+    val addLineNumbers: Boolean = false,
     val labelObjects: Boolean = true,
     val excludeObjects: Boolean = false,
     val verboseComments: Boolean = false,
@@ -1319,7 +1320,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 104,
+    val schemaVersion: Int = 105,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2718,6 +2719,7 @@ data class SliceOptions(
             native.extrusionRateSmoothingExternalOnly = quality.extrusionRateSmoothing.externalOnly
             native.enableArcFitting = gcodeSettings.arcFitting &&
                 quality.extrusionRateSmoothing.maximumSlope <= 0f
+            native.gcodeAddLineNumber = gcodeSettings.addLineNumbers
             native.slicingMode = precision.mode
             native.sliceClosingRadius = precision.closingRadius
             native.preciseZHeight = precision.preciseZHeight

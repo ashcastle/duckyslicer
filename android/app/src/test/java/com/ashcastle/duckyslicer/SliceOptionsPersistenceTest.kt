@@ -230,6 +230,7 @@ class SliceOptionsPersistenceTest {
                 ),
                 gcodeSettings = GcodeSettings(
                     arcFitting = true,
+                    addLineNumbers = true,
                     labelObjects = false,
                     excludeObjects = true,
                     verboseComments = true,
@@ -444,6 +445,7 @@ class SliceOptionsPersistenceTest {
         assertEquals(5f, native.maxVolumetricExtrusionRateSlopeSegmentLength)
         assertEquals(true, native.extrusionRateSmoothingExternalOnly)
         assertEquals(false, native.enableArcFitting)
+        assertEquals(true, native.gcodeAddLineNumber)
         assertEquals(false, native.gcodeLabelObjects)
         assertEquals(true, native.excludeObject)
         assertEquals(35f, native.initialLayerTravelSpeed)

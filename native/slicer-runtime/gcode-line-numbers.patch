@@ -1,0 +1,107 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -467,6 +467,7 @@ struct SliceConfig {
+     float max_volumetric_extrusion_rate_slope_segment_length = 3.0f;
+     bool extrusion_rate_smoothing_external_perimeter_only = false;
+     bool enable_arc_fitting = false;
++    bool gcode_add_line_number = false;
+     bool gcode_label_objects = true;
+     bool exclude_object = false;
+     bool gcode_comments = false;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -502,6 +502,7 @@ SliceConfig readConfig(JNIEnv* env, jobject configObj) {
+     config.extrusion_rate_smoothing_external_perimeter_only =
+         getBool("extrusionRateSmoothingExternalOnly");
+     config.enable_arc_fitting = getBool("enableArcFitting");
++    config.gcode_add_line_number = getBool("gcodeAddLineNumber");
+     config.gcode_label_objects = getBool("gcodeLabelObjects");
+     config.exclude_object = getBool("excludeObject");
+     config.gcode_comments = getBool("gcodeComments");
+@@ -1142,6 +1143,7 @@ void writeConfig(JNIEnv* env, jobject configObj, const SliceConfig& config) {
+         "extrusionRateSmoothingExternalOnly",
+         config.extrusion_rate_smoothing_external_perimeter_only);
+     setBool("enableArcFitting", config.enable_arc_fitting);
++    setBool("gcodeAddLineNumber", config.gcode_add_line_number);
+     setBool("gcodeLabelObjects", config.gcode_label_objects);
+     setBool("excludeObject", config.exclude_object);
+     setBool("gcodeComments", config.gcode_comments);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -8,6 +8,7 @@
+ #include <thread>
+ #include <chrono>
+ #include <cmath>
++#include <cstdio>
+ #include <fstream>
+ #include <limits>
+ #include <map>
+@@ -71,6 +72,45 @@ static bool validRotationTemplate(const std::string& value) {
+     return count > 0 && value.back() != ',';
+ }
+ 
++static void addGcodeLineNumbers(const std::string& output_path) {
++    const std::string temporary_path = output_path + ".line-numbers.tmp";
++    std::remove(temporary_path.c_str());
++    struct TemporaryFileGuard {
++        const std::string& path;
++        bool committed = false;
++        ~TemporaryFileGuard() {
++            if (!committed) std::remove(path.c_str());
++        }
++    } temporary_guard{temporary_path};
++
++    std::ifstream input(output_path, std::ios::binary);
++    std::ofstream output(temporary_path, std::ios::binary | std::ios::trunc);
++    if (!input || !output) {
++        throw std::runtime_error("Could not open G-code line-number stream");
++    }
++
++    std::string line;
++    std::uint64_t line_number = 1;
++    while (std::getline(input, line)) {
++        output << 'N' << line_number++ << ' ' << line << '\n';
++        if (!output) {
++            throw std::runtime_error("Could not write G-code line numbers");
++        }
++    }
++    if (!input.eof()) {
++        throw std::runtime_error("Could not read G-code for line numbering");
++    }
++    output.close();
++    if (!output) {
++        throw std::runtime_error("Could not finish G-code line numbering");
++    }
++    input.close();
++    if (std::rename(temporary_path.c_str(), output_path.c_str()) != 0) {
++        throw std::runtime_error("Could not replace G-code with numbered output");
++    }
++    temporary_guard.committed = true;
++}
++
+ static bool validExtraSolidInfills(const std::string& value) {
+     std::string candidate;
+     candidate.reserve(value.size());
+@@ -1873,6 +1913,9 @@ void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfig& conf
+         "enable_arc_fitting",
+         new Slic3r::ConfigOptionBool(
+             config.enable_arc_fitting && config.max_volumetric_extrusion_rate_slope <= 0.0f));
++    dpc.set_key_value(
++        "gcode_add_line_number",
++        new Slic3r::ConfigOptionBool(config.gcode_add_line_number));
+     dpc.set_key_value("gcode_label_objects", new Slic3r::ConfigOptionBool(config.gcode_label_objects));
+     dpc.set_key_value("exclude_object", new Slic3r::ConfigOptionBool(config.exclude_object));
+     dpc.set_key_value("gcode_comments", new Slic3r::ConfigOptionBool(config.gcode_comments));
+@@ -2961,6 +3004,9 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+             });
+         print.export_gcode(output_path, &gcode_result, thumbnail_callback);
+         g_active_print.store(nullptr, std::memory_order_release);
++        if (config.gcode_add_line_number) {
++            addGcodeLineNumbers(output_path);
++        }
+ 
+         for (const auto& warning : gcode_result.warnings) {
+             if (warning.error_code == "1000C002") {

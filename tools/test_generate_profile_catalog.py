@@ -484,6 +484,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "max_volumetric_extrusion_rate_slope_segment_length": "5",
                 "extrusion_rate_smoothing_external_perimeter_only": "1",
                 "enable_arc_fitting": "1",
+                "gcode_add_line_number": "1",
                 "gcode_label_objects": "0",
                 "exclude_object": "1",
                 "gcode_comments": "1",
@@ -569,6 +570,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(5.0, profile["maxVolumetricExtrusionRateSlopeSegmentLength"])
         self.assertTrue(profile["extrusionRateSmoothingExternalOnly"])
         self.assertTrue(profile["enableArcFitting"])
+        self.assertTrue(profile["gcodeAddLineNumber"])
         self.assertFalse(profile["gcodeLabelObjects"])
         self.assertTrue(profile["excludeObject"])
         self.assertTrue(profile["gcodeComments"])

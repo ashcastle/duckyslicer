@@ -518,6 +518,7 @@ data class SliceConfig(
     @JvmField var interlockingDepth: Int = 2
     @JvmField var interlockingBoundaryAvoidance: Int = 2
     @JvmField var enableArcFitting: Boolean = false
+    @JvmField var gcodeAddLineNumber: Boolean = false
     @JvmField var maxVolumetricExtrusionRateSlope: Float = 0f
     @JvmField var maxVolumetricExtrusionRateSlopeSegmentLength: Float = 3f
     @JvmField var extrusionRateSmoothingExternalOnly: Boolean = false

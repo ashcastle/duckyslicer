@@ -588,6 +588,7 @@
     <string name="slice_gap_closing_radius">슬라이스 틈 닫기 반경</string>
     <string name="precise_z_height">정밀 Z 높이</string>
     <string name="arc_fitting">원호 맞춤</string>
+    <string name="gcode_line_numbers">G-code 줄 번호</string>
     <string name="hole_to_polyhole">구멍을 폴리홀로 변환</string>
     <string name="hole_to_polyhole_threshold">폴리홀 감지 여유</string>
     <string name="hole_to_polyhole_twisted">폴리홀 비틀기</string>

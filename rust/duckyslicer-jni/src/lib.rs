@@ -2267,7 +2267,7 @@ fn preview_gcode(
         }
         let line = std::str::from_utf8(&line_buffer)
             .map_err(|_| EngineError::Parse("G-code contains invalid UTF-8".to_owned()))?;
-        let trimmed = line.trim_ascii();
+        let trimmed = strip_gcode_line_number(line.trim_ascii());
         if matches!(trimmed, ";LAYER_CHANGE" | "; CHANGE_LAYER") {
             preview_paths.break_path();
             let next = current_layer
@@ -2476,6 +2476,21 @@ fn preview_gcode(
         segments: completed_paths.segments,
         paths: completed_paths.paths,
     })
+}
+
+fn strip_gcode_line_number(line: &str) -> &str {
+    let bytes = line.as_bytes();
+    if !matches!(bytes.first(), Some(b'N' | b'n')) {
+        return line;
+    }
+    let mut end = 1usize;
+    while end < bytes.len() && bytes[end].is_ascii_digit() {
+        end += 1;
+    }
+    if end == 1 || end >= bytes.len() || !bytes[end].is_ascii_whitespace() {
+        return line;
+    }
+    line[end..].trim_ascii_start()
 }
 
 fn write_preview_payload(
@@ -2935,6 +2950,17 @@ mod tests {
         let duplicates = parse_gcode_axes("Xbad X7 YNaN Y8".split_ascii_whitespace());
         assert_eq!(duplicates.x, None);
         assert_eq!(duplicates.y, None);
+    }
+
+    #[test]
+    fn gcode_line_numbers_are_removed_before_preview_parsing() {
+        assert_eq!(strip_gcode_line_number("N1 G1 X10 E1"), "G1 X10 E1");
+        assert_eq!(
+            strip_gcode_line_number("n42 ;LAYER_CHANGE"),
+            ";LAYER_CHANGE"
+        );
+        assert_eq!(strip_gcode_line_number("N G1 X10"), "N G1 X10");
+        assert_eq!(strip_gcode_line_number("N12G1 X10"), "N12G1 X10");
     }
 
     #[derive(Serialize)]

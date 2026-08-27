@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 104
+internal const val USER_PROFILE_SCHEMA_VERSION = 105
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -1209,6 +1209,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("interlockingDepth", multiMaterial.interlockingDepth)
     .put("interlockingBoundaryAvoidance", multiMaterial.interlockingBoundaryAvoidance)
     .put("enableArcFitting", gcodeSettings.arcFitting)
+    .put("gcodeAddLineNumber", gcodeSettings.addLineNumbers)
     .put("gcodeLabelObjects", gcodeSettings.labelObjects)
     .put("excludeObject", gcodeSettings.excludeObjects)
     .put("gcodeComments", gcodeSettings.verboseComments)
@@ -1832,6 +1833,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         ),
         gcodeSettings = GcodeSettings(
             arcFitting = optBoolean("enableArcFitting"),
+            addLineNumbers = optBoolean("gcodeAddLineNumber"),
             labelObjects = optBoolean("gcodeLabelObjects", true),
             excludeObjects = optBoolean("excludeObject"),
             verboseComments = optBoolean("gcodeComments"),

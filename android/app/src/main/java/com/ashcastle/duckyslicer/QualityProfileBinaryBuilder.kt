@@ -223,6 +223,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         base.extrusionRateSmoothing.segmentLength
     private var extrusionRateSmoothingExternalOnly: Boolean = base.extrusionRateSmoothing.externalOnly
     private var enableArcFitting: Boolean = base.gcodeSettings.arcFitting
+    private var gcodeAddLineNumber: Boolean = base.gcodeSettings.addLineNumbers
     private var gcodeLabelObjects: Boolean = base.gcodeSettings.labelObjects
     private var excludeObject: Boolean = base.gcodeSettings.excludeObjects
     private var gcodeComments: Boolean = base.gcodeSettings.verboseComments
@@ -692,6 +693,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         maxVolumetricExtrusionRateSlopeSegmentLength = input.readFloat()
         extrusionRateSmoothingExternalOnly = input.readCatalogBoolean()
         enableArcFitting = input.readCatalogBoolean()
+        gcodeAddLineNumber = input.readCatalogBoolean()
         gcodeLabelObjects = input.readCatalogBoolean()
         excludeObject = input.readCatalogBoolean()
         gcodeComments = input.readCatalogBoolean()
@@ -985,6 +987,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         ),
         gcodeSettings = GcodeSettings(
             arcFitting = enableArcFitting,
+            addLineNumbers = gcodeAddLineNumber,
             labelObjects = gcodeLabelObjects,
             excludeObjects = excludeObject,
             verboseComments = gcodeComments,
@@ -1436,6 +1439,7 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("maxVolumetricExtrusionRateSlopeSegmentLength", BINARY_FLOAT),
     BinaryField("extrusionRateSmoothingExternalOnly", BINARY_BOOL),
     BinaryField("enableArcFitting", BINARY_BOOL),
+    BinaryField("gcodeAddLineNumber", BINARY_BOOL),
     BinaryField("gcodeLabelObjects", BINARY_BOOL),
     BinaryField("excludeObject", BINARY_BOOL),
     BinaryField("gcodeComments", BINARY_BOOL),

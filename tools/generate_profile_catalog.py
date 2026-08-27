@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 104
+SCHEMA_VERSION = 105
 MAX_FILAMENT_SLOTS = 16
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
@@ -1599,6 +1599,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
             raw.get("extrusion_rate_smoothing_external_perimeter_only")
         ),
         "enableArcFitting": boolean(raw.get("enable_arc_fitting")),
+        "gcodeAddLineNumber": boolean(raw.get("gcode_add_line_number")),
         "gcodeLabelObjects": boolean(raw.get("gcode_label_objects"), True),
         "excludeObject": boolean(raw.get("exclude_object")),
         "gcodeComments": boolean(raw.get("gcode_comments")),

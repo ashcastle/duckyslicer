@@ -42,6 +42,32 @@ class NativeEngineInstrumentedTest {
     )
 
     @Test
+    fun gcodeLineNumbersAreAppliedToEveryExportedLine() {
+        val outcome = OnDeviceSlicer.slice(
+            fixtureModel(),
+            SliceOptions().copy(
+                gcodeSettings = GcodeSettings(addLineNumbers = true),
+            ),
+        )
+        try {
+            val lines = outcome.output.readLines()
+            assertTrue("Numbered G-code must not be empty", lines.isNotEmpty())
+            lines.forEachIndexed { index, line ->
+                assertTrue(
+                    "Every G-code line must have a contiguous line number",
+                    line.startsWith("N${index + 1} "),
+                )
+            }
+            assertTrue(lines.any { it.contains("; gcode_add_line_number = 1") })
+            val preview = loadGcodePreview(outcome.output.absolutePath, 0, Int.MAX_VALUE)
+            assertTrue("Numbered G-code must remain previewable", preview.layerCount > 0)
+            assertTrue("Numbered G-code preview must retain toolpaths", preview.segments.isNotEmpty())
+        } finally {
+            outcome.output.delete()
+        }
+    }
+
+    @Test
     fun selectedPreviewLayerPauseUsesTheActivePrinterCommandThroughWorker() {
         val model = fixtureModel()
         val projectObject = ProjectObject("layer-pause", inspectModel(model.absolutePath))

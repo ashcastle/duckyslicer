@@ -6177,6 +6177,17 @@ private fun SlicingSettingsSheet(
                         )
                     },
                 )
+                SettingsSwitch(
+                    label = stringResource(R.string.gcode_line_numbers),
+                    checked = options.gcodeSettings.addLineNumbers,
+                    onCheckedChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                gcodeSettings = options.gcodeSettings.copy(addLineNumbers = it),
+                            ),
+                        )
+                    },
+                )
                 SettingChoices(
                     settingLabel = stringResource(R.string.timelapse),
                     entries = listOf("traditional", "smooth"),
