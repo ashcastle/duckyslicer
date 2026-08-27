@@ -960,15 +960,31 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     vendor = filament_vendor(raw.get("filament_vendor"), brand)
     filament_type = str(scalar(raw.get("filament_type"), "")).strip()
     nozzle = integer(raw.get("nozzle_temperature"), 0)
-    first_nozzle = integer(raw.get("nozzle_temperature_initial_layer"), nozzle)
+    first_nozzle = integer(
+        first_present(
+            raw,
+            ["nozzle_temperature_initial_layer", "first_layer_temperature"],
+            nozzle,
+        ),
+        nozzle,
+    )
     bed_value = first_present(
         raw,
-        ["hot_plate_temp", "textured_plate_temp", "hot_plate_temp_initial_layer"],
+        [
+            "hot_plate_temp",
+            "textured_plate_temp",
+            "bed_temperature",
+            "hot_plate_temp_initial_layer",
+        ],
         0,
     )
     first_bed_value = first_present(
         raw,
-        ["hot_plate_temp_initial_layer", "textured_plate_temp_initial_layer"],
+        [
+            "hot_plate_temp_initial_layer",
+            "textured_plate_temp_initial_layer",
+            "bed_temperature_initial_layer",
+        ],
         bed_value,
     )
     bed = integer(bed_value, 0)

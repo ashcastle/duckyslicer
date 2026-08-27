@@ -29,6 +29,44 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_preserves_generic_orca_temperature_aliases(self) -> None:
+        profile = build_filament(
+            "Example",
+            {
+                "name": "Generic alias filament",
+                "filament_type": ["PLA"],
+                "nozzle_temperature": ["215"],
+                "first_layer_temperature": ["225"],
+                "bed_temperature": ["55"],
+                "bed_temperature_initial_layer": ["60"],
+            },
+        )
+
+        self.assertEqual(215, profile["nozzleTemp"])
+        self.assertEqual(225, profile["firstLayerNozzleTemp"])
+        self.assertEqual(55, profile["bedTemp"])
+        self.assertEqual(60, profile["firstLayerBedTemp"])
+
+    def test_prefers_plate_specific_temperatures_over_generic_aliases(self) -> None:
+        profile = build_filament(
+            "Example",
+            {
+                "name": "Plate-specific filament",
+                "filament_type": ["PLA"],
+                "nozzle_temperature": ["215"],
+                "nozzle_temperature_initial_layer": ["220"],
+                "first_layer_temperature": ["225"],
+                "hot_plate_temp": ["65"],
+                "hot_plate_temp_initial_layer": ["70"],
+                "bed_temperature": ["55"],
+                "bed_temperature_initial_layer": ["60"],
+            },
+        )
+
+        self.assertEqual(220, profile["firstLayerNozzleTemp"])
+        self.assertEqual(65, profile["bedTemp"])
+        self.assertEqual(70, profile["firstLayerBedTemp"])
+
     def test_groups_filaments_by_material_vendor_without_changing_stable_ids(self) -> None:
         raw = {
             "name": "PolyLite PLA @Example",

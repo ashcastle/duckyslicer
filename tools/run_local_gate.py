@@ -33,6 +33,7 @@ STATIC_VERIFIERS = (
     "verify_slice_storage.py",
     "verify_preview_boundary.py",
     "verify_profile_editor.py",
+    "verify_profile_option_coverage.py",
     "verify_open_source_distribution.py",
     "verify_runtime_resilience.py",
     "verify_startup_performance.py",
