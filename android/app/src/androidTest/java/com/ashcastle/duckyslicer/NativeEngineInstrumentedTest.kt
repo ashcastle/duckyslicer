@@ -2712,7 +2712,7 @@ class NativeEngineInstrumentedTest {
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include upstream filament presets", catalog.filaments.size > 3_000)
         assertTrue("The catalog must include upstream slicing presets", catalog.slicing.size > 2_000)
-        assertEquals(72, catalog.rejectedCount)
+        assertEquals(66, catalog.rejectedCount)
         val repRapFirmwarePrinters = setOf(
             "Construct 1 0.4 nozzle",
             "Construct 1 XL 0.6 nozzle",
@@ -2727,6 +2727,25 @@ class NativeEngineInstrumentedTest {
                 .map(PrinterProfile::name)
                 .toSet(),
         )
+        val sharedMultiNozzleProcesses = setOf(
+            "0.40mm Standard @MyKlipper",
+            "0.40mm Standard @MyToolChanger",
+            "0.40mm Standard @M1",
+            "0.40mm Standard @The Positron",
+            "0.40mm Standard @MK4",
+            "0.40mm Standard @Rook MK1 LDO",
+        )
+        sharedMultiNozzleProcesses.forEach { profileName ->
+            val variants = catalog.slicing.filter { it.name == profileName }
+            assertEquals(setOf(0.6f, 0.8f), variants.map(QualityProfile::nozzleDiameter).toSet())
+            assertEquals(2, variants.map(QualityProfile::id).distinct().size)
+            variants.forEach { variant ->
+                assertEquals(1, variant.compatiblePrinters.size)
+                assertTrue(
+                    variant.compatiblePrinters.single().contains("${variant.nozzleDiameter} nozzle"),
+                )
+            }
+        }
         val clockwiseSovolProfiles = setOf(
             "0.20mm Standard @Sovol SV08 MAX 0.4 nozzle",
             "0.20mm Standard @Sovol Zero 0.4 nozzle",

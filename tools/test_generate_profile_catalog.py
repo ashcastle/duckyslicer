@@ -9,6 +9,7 @@ from tools.generate_profile_catalog import (
     build_filament,
     build_printer,
     build_process,
+    build_process_variants,
     coordinate_pair,
     extra_solid_infills,
     nozzle_material,
@@ -21,6 +22,66 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_expands_shared_processes_for_each_compatible_nozzle(self) -> None:
+        raw = {
+            "name": "0.40mm Shared",
+            "layer_height": "0.40",
+            "initial_layer_print_height": "0.40",
+            "line_width": "100%",
+            "compatible_printers": ["Printer 0.6", "Printer 0.8"],
+        }
+
+        profiles = build_process_variants(
+            "Example",
+            raw,
+            {"Printer 0.6": 0.6, "Printer 0.8": 0.8},
+        )
+
+        self.assertEqual([0.6, 0.8], [profile["nozzleDiameter"] for profile in profiles])
+        self.assertEqual(
+            [["Printer 0.6"], ["Printer 0.8"]],
+            [profile["compatiblePrinters"] for profile in profiles],
+        )
+        self.assertEqual([0.6, 0.8], [profile["outerWallLineWidth"] for profile in profiles])
+        self.assertEqual(2, len({profile["id"] for profile in profiles}))
+        self.assertEqual({"0.40mm Shared"}, {profile["name"] for profile in profiles})
+
+    def test_preserves_legacy_id_for_shared_point_four_process_variant(self) -> None:
+        raw = {
+            "name": "0.20mm Shared",
+            "layer_height": "0.20",
+            "initial_layer_print_height": "0.20",
+            "compatible_printers": ["Printer 0.4", "Printer 0.6"],
+        }
+
+        profiles = build_process_variants(
+            "Example",
+            raw,
+            {"Printer 0.4": 0.4, "Printer 0.6": 0.6},
+        )
+        legacy = build_process("Example", raw, {"Printer 0.4": 0.4, "Printer 0.6": 0.6})
+
+        self.assertEqual(legacy["id"], profiles[0]["id"])
+        self.assertNotEqual(profiles[0]["id"], profiles[1]["id"])
+
+    def test_omits_only_unsafe_nozzle_variant_from_shared_process(self) -> None:
+        raw = {
+            "name": "0.20mm Shared",
+            "layer_height": "0.20",
+            "initial_layer_print_height": "0.20",
+            "compatible_printers": ["Printer 0.2", "Printer 0.4"],
+        }
+
+        profiles = build_process_variants(
+            "Example",
+            raw,
+            {"Printer 0.2": 0.2, "Printer 0.4": 0.4},
+        )
+
+        self.assertEqual(1, len(profiles))
+        self.assertEqual(0.4, profiles[0]["nozzleDiameter"])
+        self.assertEqual(["Printer 0.4"], profiles[0]["compatiblePrinters"])
+
     def test_accepts_reprapfirmware_and_rejects_unknown_gcode_flavors(self) -> None:
         base = {
             "name": "RepRapFirmware printer",

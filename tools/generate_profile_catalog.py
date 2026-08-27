@@ -1131,11 +1131,24 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     return profile
 
 
-def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, float]) -> dict[str, Any]:
+def build_process(
+    brand: str,
+    raw: dict[str, Any],
+    printer_nozzles: dict[str, float],
+    *,
+    nozzle_override: float | None = None,
+    compatible_override: list[str] | None = None,
+) -> dict[str, Any]:
     name = str(raw["name"])
-    compatible = values(raw.get("compatible_printers"))
+    compatible = (
+        compatible_override
+        if compatible_override is not None
+        else values(raw.get("compatible_printers"))
+    )
     nozzles = {printer_nozzles[item] for item in compatible if item in printer_nozzles}
-    nozzle = nozzles.pop() if len(nozzles) == 1 else 0.4
+    nozzle = nozzle_override if nozzle_override is not None else (
+        nozzles.pop() if len(nozzles) == 1 else 0.4
+    )
     layer_height = number(raw.get("layer_height"), 0)
     first_layer = number(raw.get("initial_layer_print_height"), layer_height)
     if not (0.02 <= layer_height <= nozzle * 0.9 and 0.02 <= first_layer <= 1.0):
@@ -1948,6 +1961,52 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     return profile
 
 
+def build_process_variants(
+    brand: str,
+    raw: dict[str, Any],
+    printer_nozzles: dict[str, float],
+) -> list[dict[str, Any]]:
+    compatible = values(raw.get("compatible_printers"))
+    compatible_by_nozzle: dict[float, list[str]] = defaultdict(list)
+    for printer_name in compatible:
+        nozzle = printer_nozzles.get(printer_name)
+        if nozzle is not None:
+            compatible_by_nozzle[nozzle].append(printer_name)
+
+    if len(compatible_by_nozzle) <= 1:
+        return [build_process(brand, raw, printer_nozzles)]
+
+    sorted_nozzles = sorted(compatible_by_nozzle)
+    base_nozzle = next(
+        (nozzle for nozzle in sorted_nozzles if math.isclose(nozzle, 0.4, abs_tol=0.0001)),
+        sorted_nozzles[0],
+    )
+    profiles: list[dict[str, Any]] = []
+    errors: list[ValueError] = []
+    for nozzle in sorted_nozzles:
+        try:
+            profile = build_process(
+                brand,
+                raw,
+                printer_nozzles,
+                nozzle_override=nozzle,
+                compatible_override=compatible_by_nozzle[nozzle],
+            )
+        except ValueError as error:
+            errors.append(error)
+            continue
+        if nozzle != base_nozzle:
+            profile["id"] = stable_id(
+                "process",
+                brand,
+                f"{raw['name']} @ nozzle {nozzle:g}",
+            )
+        profiles.append(profile)
+    if not profiles:
+        raise errors[0]
+    return profiles
+
+
 def binary_kind(value: Any) -> int:
     if value is None:
         return 0
@@ -2105,7 +2164,7 @@ def main() -> None:
             if raw.get("type") == "filament":
                 filaments.append(build_filament(brand, raw))
             elif raw.get("type") == "process":
-                processes.append(build_process(brand, raw, printer_nozzles))
+                processes.extend(build_process_variants(brand, raw, printer_nozzles))
         except ValueError as error:
             rejected[f"{raw.get('type')}: {error}"] += 1
     filaments.sort(key=lambda profile: (profile["brand"].casefold(), profile["name"].casefold()))
