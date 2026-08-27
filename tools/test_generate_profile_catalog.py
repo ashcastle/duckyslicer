@@ -597,6 +597,31 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(13, profile["scarfSteps"])
         self.assertTrue(profile["scarfInnerWalls"])
 
+    def test_preserves_legacy_wall_loop_direction_alias(self) -> None:
+        clockwise = build_process(
+            "Example",
+            {
+                "name": "Clockwise walls",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "wall_loop_direction": "clockwise",
+            },
+            {},
+        )
+        counter_clockwise = build_process(
+            "Example",
+            {
+                "name": "Counter-clockwise walls",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "wall_loop_direction": "counter-clockwise",
+            },
+            {},
+        )
+
+        self.assertEqual("cw", clockwise["wallDirection"])
+        self.assertEqual("ccw", counter_clockwise["wallDirection"])
+
     def test_rejects_segmented_region_depth_larger_than_its_width(self) -> None:
         with self.assertRaises(ValueError):
             build_process(

@@ -800,6 +800,19 @@ def wall_sequence(value: Any) -> str:
     }.get(str(scalar(value, "inner wall/outer wall")), "inner-outer")
 
 
+def wall_direction(value: Any) -> str:
+    candidate = str(scalar(value, "auto")).strip().lower()
+    return {
+        "auto": "auto",
+        "cw": "cw",
+        "clockwise": "cw",
+        "ccw": "ccw",
+        "counter clockwise": "ccw",
+        "counter-clockwise": "ccw",
+        "counterclockwise": "ccw",
+    }.get(candidate, "auto")
+
+
 def wall_generator(value: Any) -> str:
     candidate = str(scalar(value, "arachne")).strip().lower()
     return candidate if candidate in {"arachne", "classic"} else "arachne"
@@ -1496,7 +1509,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "firstLayerMinimumWallWidth": number(raw.get("initial_layer_min_bead_width"), 85),
         "minimumWallLengthFactor": number(raw.get("min_length_factor"), 0.5),
         "wallSequence": wall_sequence(resolved_wall_order),
-        "wallDirection": enum_value(raw.get("wall_direction"), {"auto", "ccw", "cw"}, "auto"),
+        "wallDirection": wall_direction(
+            raw.get("wall_direction", raw.get("wall_loop_direction"))
+        ),
         "detectThinWalls": boolean(raw.get("detect_thin_wall")),
         "detectOverhangWalls": boolean(raw.get("detect_overhang_wall"), True),
         "makeOverhangPrintable": boolean(raw.get("make_overhang_printable")),

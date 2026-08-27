@@ -2712,6 +2712,20 @@ class NativeEngineInstrumentedTest {
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include upstream filament presets", catalog.filaments.size > 3_000)
         assertTrue("The catalog must include upstream slicing presets", catalog.slicing.size > 2_000)
+        val clockwiseSovolProfiles = setOf(
+            "0.20mm Standard @Sovol SV08 MAX 0.4 nozzle",
+            "0.20mm Standard @Sovol Zero 0.4 nozzle",
+            "0.30mm Standard @Sovol SV08 MAX 0.6 nozzle",
+            "0.40mm Standard @Sovol SV08 MAX 0.8 nozzle",
+        )
+        assertEquals(
+            clockwiseSovolProfiles,
+            catalog.slicing
+                .filter { it.brand == "Sovol" && it.name in clockwiseSovolProfiles }
+                .onEach { assertEquals("cw", it.wallDirection) }
+                .map(QualityProfile::name)
+                .toSet(),
+        )
         assertEquals(
             mapOf(
                 NozzleMaterial.UNDEFINED to 345,
