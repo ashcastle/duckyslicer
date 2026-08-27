@@ -2007,6 +2007,36 @@ def build_process_variants(
     return profiles
 
 
+def canonical_profiles(
+    candidates: list[tuple[Path, dict[str, Any]]],
+    profile_kind: str,
+) -> list[dict[str, Any]]:
+    grouped: dict[str, list[tuple[Path, dict[str, Any]]]] = defaultdict(list)
+    for source, profile in candidates:
+        grouped[profile["id"]].append((source, profile))
+
+    canonical: list[dict[str, Any]] = []
+    for profile_id, entries in grouped.items():
+        if len(entries) == 1:
+            canonical.append(entries[0][1])
+            continue
+
+        def priority(entry: tuple[Path, dict[str, Any]]) -> tuple[bool, bool]:
+            source, profile = entry
+            stem = source.stem.casefold()
+            archival_copy = stem.endswith(" copy") or stem.endswith("_old")
+            unscoped = not profile.get("compatiblePrinters", [])
+            return archival_copy, unscoped
+
+        best_priority = min(priority(entry) for entry in entries)
+        preferred = [entry for entry in entries if priority(entry) == best_priority]
+        baseline = preferred[0][1]
+        if any(profile != baseline for _, profile in preferred[1:]):
+            raise ValueError(f"conflicting {profile_kind} stable id: {profile_id}")
+        canonical.append(baseline)
+    return canonical
+
+
 def binary_kind(value: Any) -> int:
     if value is None:
         return 0
@@ -2137,36 +2167,42 @@ def main() -> None:
     resolver = Resolver(profile_root)
     rejected: Counter[str] = Counter()
 
-    resolved_entries: list[tuple[str, dict[str, Any]]] = []
-    for entry_id, (_, brand, raw) in enumerate(resolver.entries):
+    resolved_entries: list[tuple[Path, str, dict[str, Any]]] = []
+    for entry_id, (source, brand, raw) in enumerate(resolver.entries):
         if not boolean(raw.get("instantiation")):
             continue
         try:
-            resolved_entries.append((brand, resolver.resolve(entry_id)))
+            resolved_entries.append((source, brand, resolver.resolve(entry_id)))
         except ValueError as error:
             rejected[f"inheritance: {error}"] += 1
 
-    printers: list[dict[str, Any]] = []
-    for brand, raw in resolved_entries:
+    printer_candidates: list[tuple[Path, dict[str, Any]]] = []
+    for source, brand, raw in resolved_entries:
         if raw.get("type") != "machine":
             continue
         try:
-            printers.append(build_printer(brand, raw))
+            printer_candidates.append((source, build_printer(brand, raw)))
         except ValueError as error:
             rejected[f"printer: {error}"] += 1
+    printers = canonical_profiles(printer_candidates, "printer")
     printers.sort(key=lambda profile: (profile["brand"].casefold(), profile["name"].casefold()))
     printer_nozzles = {profile["name"]: profile["nozzleDiameter"] for profile in printers}
 
-    filaments: list[dict[str, Any]] = []
-    processes: list[dict[str, Any]] = []
-    for brand, raw in resolved_entries:
+    filament_candidates: list[tuple[Path, dict[str, Any]]] = []
+    process_candidates: list[tuple[Path, dict[str, Any]]] = []
+    for source, brand, raw in resolved_entries:
         try:
             if raw.get("type") == "filament":
-                filaments.append(build_filament(brand, raw))
+                filament_candidates.append((source, build_filament(brand, raw)))
             elif raw.get("type") == "process":
-                processes.extend(build_process_variants(brand, raw, printer_nozzles))
+                process_candidates.extend(
+                    (source, profile)
+                    for profile in build_process_variants(brand, raw, printer_nozzles)
+                )
         except ValueError as error:
             rejected[f"{raw.get('type')}: {error}"] += 1
+    filaments = canonical_profiles(filament_candidates, "filament")
+    processes = canonical_profiles(process_candidates, "process")
     filaments.sort(key=lambda profile: (profile["brand"].casefold(), profile["name"].casefold()))
     processes.sort(key=lambda profile: (profile["brand"].casefold(), profile["name"].casefold()))
 

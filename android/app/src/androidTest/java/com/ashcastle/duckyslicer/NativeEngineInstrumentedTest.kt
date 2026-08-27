@@ -2709,9 +2709,9 @@ class NativeEngineInstrumentedTest {
         assertEquals(106, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
-        assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
-        assertTrue("The catalog must include upstream filament presets", catalog.filaments.size > 3_000)
-        assertTrue("The catalog must include upstream slicing presets", catalog.slicing.size > 2_000)
+        assertEquals(794, catalog.printers.size)
+        assertEquals(3_322, catalog.filaments.size)
+        assertEquals(2_331, catalog.slicing.size)
         assertEquals(66, catalog.rejectedCount)
         val repRapFirmwarePrinters = setOf(
             "Construct 1 0.4 nozzle",
@@ -2746,6 +2746,19 @@ class NativeEngineInstrumentedTest {
                 )
             }
         }
+        val canonicalSnapmakerProcess = catalog.slicing.single {
+            it.name == "0.20 Standard @Snapmaker U1 (0.4 nozzle)"
+        }
+        assertEquals(0.8f, canonicalSnapmakerProcess.bridgeFlowRatio)
+        assertEquals("tree(auto)", canonicalSnapmakerProcess.supportType)
+        assertEquals(
+            listOf("Prusa MK3S 0.4 nozzle"),
+            catalog.slicing.single { it.name == "0.15mm Speed @MK3S" }.compatiblePrinters,
+        )
+        assertEquals(
+            1,
+            catalog.filaments.count { it.name == "Snapmaker PLA Basic @U1" },
+        )
         val clockwiseSovolProfiles = setOf(
             "0.20mm Standard @Sovol SV08 MAX 0.4 nozzle",
             "0.20mm Standard @Sovol Zero 0.4 nozzle",

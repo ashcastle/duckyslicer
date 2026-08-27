@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import unittest
+from pathlib import Path
 
 from tools.generate_profile_catalog import (
     adaptive_pressure_advance_model,
@@ -10,6 +11,7 @@ from tools.generate_profile_catalog import (
     build_printer,
     build_process,
     build_process_variants,
+    canonical_profiles,
     coordinate_pair,
     extra_solid_infills,
     nozzle_material,
@@ -22,6 +24,54 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_canonicalizes_duplicate_profile_sources_without_silent_conflicts(self) -> None:
+        canonical = {
+            "id": "orca-process-example",
+            "compatiblePrinters": ["Printer 0.4"],
+            "speed": 100,
+        }
+        archival = canonical | {"speed": 80}
+        unscoped = canonical | {"compatiblePrinters": []}
+
+        self.assertEqual(
+            [canonical],
+            canonical_profiles(
+                [
+                    (Path("Profile copy.json"), canonical.copy()),
+                    (Path("Profile.json"), canonical),
+                ],
+                "process",
+            ),
+        )
+        self.assertEqual(
+            [canonical],
+            canonical_profiles(
+                [
+                    (Path("Profile_old.json"), archival),
+                    (Path("Profile.json"), canonical),
+                ],
+                "process",
+            ),
+        )
+        self.assertEqual(
+            [canonical],
+            canonical_profiles(
+                [
+                    (Path("Profile.json"), unscoped),
+                    (Path("Profile 0.4.json"), canonical),
+                ],
+                "process",
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "conflicting process stable id"):
+            canonical_profiles(
+                [
+                    (Path("Profile A.json"), canonical),
+                    (Path("Profile B.json"), canonical | {"speed": 120}),
+                ],
+                "process",
+            )
+
     def test_expands_shared_processes_for_each_compatible_nozzle(self) -> None:
         raw = {
             "name": "0.40mm Shared",
