@@ -27,6 +27,10 @@ DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL = (
 )
 MAX_GCODE_FILENAME_FORMAT_BYTES = 1_024
 MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES = 16_384
+MIN_FILAMENT_NOZZLE_TEMPERATURE = 150
+MAX_FILAMENT_NOZZLE_TEMPERATURE = 500
+MIN_FILAMENT_FLOW_RATIO = 0.01
+MAX_FILAMENT_FLOW_RATIO = 2.0
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper", "reprapfirmware"}
 SUPPORTED_PRINTER_STRUCTURES = {"undefine", "corexy", "i3", "hbot", "delta"}
 NOZZLE_MATERIALS = {"undefine", "hardened_steel", "stainless_steel", "brass"}
@@ -1160,7 +1164,10 @@ def build_filament(
     first_graphic_effect_bed = integer(
         raw.get("graphic_effect_plate_temp_initial_layer"), graphic_effect_bed
     )
-    if not filament_type or not (150 <= nozzle <= 400 and 0 <= bed <= 160):
+    if not filament_type or not (
+        MIN_FILAMENT_NOZZLE_TEMPERATURE <= nozzle <= MAX_FILAMENT_NOZZLE_TEMPERATURE
+        and 0 <= bed <= 160
+    ):
         raise ValueError("unsafe filament temperatures")
     diameter = number(raw.get("filament_diameter"), 1.75)
     pellet_flow_coefficient = number(
@@ -1326,7 +1333,7 @@ def build_filament(
                 "firstLayerGraphicEffectPlateTemp",
             ]
         )
-        and 0.5 <= profile["flowRatio"] <= 1.5
+        and MIN_FILAMENT_FLOW_RATIO <= profile["flowRatio"] <= MAX_FILAMENT_FLOW_RATIO
         and 0.1 <= profile["maxVolumetricSpeed"] <= 300
         and 0.5 <= profile["diameter"] <= 4
         and 4 / (math.pi * 4 * 4)

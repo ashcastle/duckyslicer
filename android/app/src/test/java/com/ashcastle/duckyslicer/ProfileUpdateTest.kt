@@ -3,11 +3,25 @@ package com.ashcastle.duckyslicer
 import java.io.File
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProfileUpdateTest {
+    @Test
+    fun filamentSafetyBoundsMatchTheEngineContract() {
+        val boundary = FilamentProfile.GENERIC_PLA.copy(
+            nozzleTemp = MAX_FILAMENT_NOZZLE_TEMPERATURE,
+            firstLayerNozzleTemp = MAX_FILAMENT_NOZZLE_TEMPERATURE,
+            flowRatio = MIN_FILAMENT_FLOW_RATIO,
+        )
+
+        assertTrue(ProfileValidation.filament(boundary))
+        assertFalse(ProfileValidation.filament(boundary.copy(nozzleTemp = 501)))
+        assertFalse(ProfileValidation.filament(boundary.copy(flowRatio = 0f)))
+    }
+
     @Test
     fun userProfilesUpdateInPlaceAndSurviveReload() = withStore { file, store ->
         val printer = store.savePrinter("My printer", SliceOptions())
@@ -31,7 +45,11 @@ class ProfileUpdateTest {
             filament.id,
             filament.name,
             SliceOptions().selectFilament(filament)
-                .copy(nozzleTemp = 231, flowRatio = 0.97f)
+                .copy(
+                    nozzleTemp = 420,
+                    firstLayerNozzleTemp = 420,
+                    flowRatio = 0.48f,
+                )
                 .updateFilamentColor(0, 0x124943),
         )
         val updatedSlicing = store.updateSlicing(
@@ -48,8 +66,9 @@ class ProfileUpdateTest {
         assertEquals(1, restored.printers.count { it.id == printer.id })
         assertEquals(345f, restored.printers.single { it.id == printer.id }.maxPrintHeight)
         assertEquals(1, restored.filaments.count { it.id == filament.id })
-        assertEquals(231, restored.filaments.single { it.id == filament.id }.nozzleTemp)
-        assertEquals(0.97f, restored.filaments.single { it.id == filament.id }.flowRatio)
+        assertEquals(420, restored.filaments.single { it.id == filament.id }.nozzleTemp)
+        assertEquals(420, restored.filaments.single { it.id == filament.id }.firstLayerNozzleTemp)
+        assertEquals(0.48f, restored.filaments.single { it.id == filament.id }.flowRatio)
         assertEquals(0x124943, restored.filaments.single { it.id == filament.id }.defaultColor)
         assertEquals(
             listOf(PrinterProfile.U1_04.name),

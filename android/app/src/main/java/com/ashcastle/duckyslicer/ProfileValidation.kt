@@ -135,8 +135,10 @@ internal object ProfileValidation {
             profile.name.isSafeLabel() &&
             profile.nativeName.isSafeLabel() &&
             profile.brand.isSafeOptionalLabel() &&
-            profile.nozzleTemp in 150..400 &&
-            profile.firstLayerNozzleTemp in 150..400 &&
+            profile.nozzleTemp in
+                MIN_FILAMENT_NOZZLE_TEMPERATURE..MAX_FILAMENT_NOZZLE_TEMPERATURE &&
+            profile.firstLayerNozzleTemp in
+                MIN_FILAMENT_NOZZLE_TEMPERATURE..MAX_FILAMENT_NOZZLE_TEMPERATURE &&
             profile.idleTemperature in 0..500 &&
             listOf(
                 profile.bedTemp,
@@ -154,7 +156,7 @@ internal object ProfileValidation {
                 profile.graphicEffectPlateTemp,
                 profile.firstLayerGraphicEffectPlateTemp,
             ).all { it in 0..160 } &&
-            profile.flowRatio in 0.5f..1.5f &&
+            profile.flowRatio in MIN_FILAMENT_FLOW_RATIO..MAX_FILAMENT_FLOW_RATIO &&
             profile.maxVolumetricSpeed in 0.1f..300f &&
             profile.diameter in 0.5f..4f &&
             profile.pelletFlowCoefficient in

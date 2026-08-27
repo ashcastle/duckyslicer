@@ -2239,8 +2239,9 @@ private fun FilamentSettingsSheet(
             label = stringResource(R.string.nozzle_temperature),
             valueText = stringResource(R.string.celsius_value, activeProfile.nozzleTemp),
             value = activeProfile.nozzleTemp.toFloat(),
-            range = 170f..300f,
-            steps = 129,
+            range = MIN_FILAMENT_NOZZLE_TEMPERATURE.toFloat()..
+                MAX_FILAMENT_NOZZLE_TEMPERATURE.toFloat(),
+            steps = MAX_FILAMENT_NOZZLE_TEMPERATURE - MIN_FILAMENT_NOZZLE_TEMPERATURE - 1,
             onValueChange = {
                 onOptionsChanged(options.updateFilamentSlot(selectedSlot, activeProfile.copy(nozzleTemp = it.roundToInt())))
             },
@@ -2249,8 +2250,9 @@ private fun FilamentSettingsSheet(
             label = stringResource(R.string.first_layer_nozzle_temperature),
             valueText = stringResource(R.string.celsius_value, activeProfile.firstLayerNozzleTemp),
             value = activeProfile.firstLayerNozzleTemp.toFloat(),
-            range = 170f..300f,
-            steps = 129,
+            range = MIN_FILAMENT_NOZZLE_TEMPERATURE.toFloat()..
+                MAX_FILAMENT_NOZZLE_TEMPERATURE.toFloat(),
+            steps = MAX_FILAMENT_NOZZLE_TEMPERATURE - MIN_FILAMENT_NOZZLE_TEMPERATURE - 1,
             onValueChange = {
                 onOptionsChanged(
                     options.updateFilamentSlot(
@@ -2327,8 +2329,10 @@ private fun FilamentSettingsSheet(
             label = stringResource(R.string.flow_ratio),
             valueText = stringResource(R.string.flow_ratio_value, activeProfile.flowRatio),
             value = activeProfile.flowRatio,
-            range = 0.8f..1.2f,
-            steps = 39,
+            range = MIN_FILAMENT_FLOW_RATIO..MAX_FILAMENT_FLOW_RATIO,
+            steps = (
+                (MAX_FILAMENT_FLOW_RATIO - MIN_FILAMENT_FLOW_RATIO) / 0.01f
+            ).roundToInt() - 1,
             onValueChange = {
                 onOptionsChanged(options.updateFilamentSlot(selectedSlot, activeProfile.copy(flowRatio = it)))
             },

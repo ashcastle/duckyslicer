@@ -2844,9 +2844,17 @@ class NativeEngineInstrumentedTest {
             catalog.filaments.single { it.name == "Snapmaker ABS Benchy @U1" }
                 .compatiblePrints,
         )
-        assertEquals(3_314, catalog.filaments.count { it.id.startsWith("orca-filament-") })
+        catalog.filaments.single { it.name == "MM Generic PEEK" }.let { filament ->
+            assertEquals(420, filament.nozzleTemp)
+            assertEquals(420, filament.firstLayerNozzleTemp)
+        }
+        assertEquals(
+            0.48f,
+            catalog.filaments.single { it.name == "eSUN ePLA-LW @System" }.flowRatio,
+        )
+        assertEquals(3_316, catalog.filaments.count { it.id.startsWith("orca-filament-") })
         assertEquals(2_332, catalog.slicing.count { it.id.startsWith("orca-process-") })
-        assertEquals(44, catalog.rejectedCount)
+        assertEquals(42, catalog.rejectedCount)
         catalog.slicing.single { it.name == "0.55mm DRAFT @CORE One 0.8" }.let { process ->
             assertEquals(0.8f, process.nozzleDiameter)
             assertEquals(listOf("Prusa CORE One 0.8 nozzle"), process.compatiblePrinters)
@@ -3008,7 +3016,7 @@ class NativeEngineInstrumentedTest {
             catalog.printers.groupingBy(PrinterProfile::nozzleHeight).eachCount(),
         )
         assertEquals(
-            mapOf(0 to 1_784, 3 to 1_329, 40 to 218),
+            mapOf(0 to 1_784, 3 to 1_331, 40 to 218),
             catalog.filaments.groupingBy(FilamentProfile::requiredNozzleHrc).eachCount(),
         )
         val generatedU1 = catalog.printers.single { it.name == "Snapmaker U1 (0.4 nozzle)" }
@@ -8483,18 +8491,40 @@ class NativeEngineInstrumentedTest {
                 material = "ABS",
                 flavor = "klipper",
             ),
+            Contract(
+                printerName = "MM hj SK 0.4 nozzle",
+                processName = "0.20mm Standard @MM hj SK",
+                filamentName = "MM Generic PEEK",
+                nozzleDiameter = 0.4f,
+                material = "PEEK",
+                flavor = "klipper",
+            ),
+            Contract(
+                printerName = "Creality Ender-3 0.2 nozzle",
+                processName = "0.12mm Fine @Creality Ender3 0.2",
+                filamentName = "eSUN ePLA-LW @System",
+                nozzleDiameter = 0.2f,
+                material = "PLA-AERO",
+                flavor = "marlin",
+            ),
         )
 
         contracts.forEach { contract ->
-            val printer = catalog.printers.single {
+            val printers = catalog.printers.filter {
                 it.name == contract.printerName && it.id.startsWith("orca-printer-")
             }
-            val process = catalog.slicing.single {
+            val processes = catalog.slicing.filter {
                 it.name == contract.processName && it.id.startsWith("orca-process-")
             }
-            val filament = catalog.filaments.single {
+            val filaments = catalog.filaments.filter {
                 it.name == contract.filamentName && it.id.startsWith("orca-filament-")
             }
+            assertEquals("Expected one bundled printer named ${contract.printerName}", 1, printers.size)
+            assertEquals("Expected one bundled process named ${contract.processName}", 1, processes.size)
+            assertEquals("Expected one bundled filament named ${contract.filamentName}", 1, filaments.size)
+            val printer = printers.single()
+            val process = processes.single()
+            val filament = filaments.single()
             assertEquals(contract.nozzleDiameter, printer.nozzleDiameter, 0.001f)
             assertEquals(contract.nozzleDiameter, process.nozzleDiameter, 0.001f)
             assertTrue(process.compatiblePrinters.matchesPrinter(printer))
@@ -8521,6 +8551,10 @@ class NativeEngineInstrumentedTest {
                 assertEquals(contract.material, settings["filament_type"])
                 assertEquals(contract.nozzleDiameter, settings.getValue("nozzle_diameter").toFloat(), 0.001f)
                 assertEquals(process.layerHeightMm, settings.getValue("layer_height").toFloat(), 0.001f)
+                assertEquals(
+                    filament.nozzleTemp,
+                    settings.getValue("nozzle_temperature").substringBefore(',').trim().toInt(),
+                )
                 assertEquals(filament.flowRatio, settings.getValue("filament_flow_ratio").toFloat(), 0.001f)
                 assertEquals(
                     filament.maxVolumetricSpeed,

@@ -706,6 +706,10 @@ internal fun filamentDiameterFromPelletFlowCoefficient(coefficient: Float): Floa
 
 internal val MIN_PELLET_FLOW_COEFFICIENT = pelletFlowCoefficientFromDiameter(4f)
 internal val MAX_PELLET_FLOW_COEFFICIENT = pelletFlowCoefficientFromDiameter(0.5f)
+internal const val MIN_FILAMENT_NOZZLE_TEMPERATURE = 150
+internal const val MAX_FILAMENT_NOZZLE_TEMPERATURE = 500
+internal const val MIN_FILAMENT_FLOW_RATIO = 0.01f
+internal const val MAX_FILAMENT_FLOW_RATIO = 2f
 
 internal const val DEFAULT_FILAMENT_RAMMING_PARAMETERS =
     "120 100 6.6 6.8 7.2 7.6 7.9 8.2 8.7 9.4 9.9 10.0|" +

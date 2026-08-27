@@ -90,6 +90,53 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(55, profile["bedTemp"])
         self.assertEqual(60, profile["firstLayerBedTemp"])
 
+    def test_preserves_high_temperature_and_lightweight_filaments(self) -> None:
+        peek = build_filament(
+            "Example",
+            {
+                "name": "Generic PEEK",
+                "filament_type": ["PEEK"],
+                "nozzle_temperature": ["420"],
+                "nozzle_temperature_initial_layer": ["420"],
+                "hot_plate_temp": ["60"],
+            },
+        )
+        lightweight = build_filament(
+            "Example",
+            {
+                "name": "Lightweight PLA",
+                "filament_type": ["PLA"],
+                "nozzle_temperature": ["243"],
+                "hot_plate_temp": ["55"],
+                "filament_flow_ratio": ["0.48"],
+            },
+        )
+
+        self.assertEqual(420, peek["nozzleTemp"])
+        self.assertEqual(420, peek["firstLayerNozzleTemp"])
+        self.assertEqual(0.48, lightweight["flowRatio"])
+        with self.assertRaisesRegex(ValueError, "unsafe filament temperatures"):
+            build_filament(
+                "Example",
+                {
+                    "name": "Unsafe temperature",
+                    "filament_type": ["PEEK"],
+                    "nozzle_temperature": ["501"],
+                    "hot_plate_temp": ["60"],
+                },
+            )
+        with self.assertRaisesRegex(ValueError, "unsafe filament limits"):
+            build_filament(
+                "Example",
+                {
+                    "name": "Unsafe flow",
+                    "filament_type": ["PLA"],
+                    "nozzle_temperature": ["220"],
+                    "hot_plate_temp": ["60"],
+                    "filament_flow_ratio": ["0"],
+                },
+            )
+
     def test_preserves_filament_print_profile_compatibility(self) -> None:
         profile = build_filament(
             "Example",
