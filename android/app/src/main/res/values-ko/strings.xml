@@ -1032,6 +1032,7 @@
     <string name="add_filament_slot">필라멘트 슬롯 추가</string>
     <string name="remove_filament_slot">T%1$d 슬롯 제거</string>
     <string name="filament_color">필라멘트 색상</string>
+    <string name="default_color">기본 색상</string>
     <string name="filament_color_for_tool">T%1$d 색상</string>
     <string name="filament_color_option">색상 %1$d</string>
     <string name="custom_filament_color">사용자 색상</string>

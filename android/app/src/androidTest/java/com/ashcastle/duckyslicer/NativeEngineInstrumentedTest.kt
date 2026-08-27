@@ -2764,29 +2764,29 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(108, catalog.schemaVersion)
+        assertEquals(110, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
-        assertEquals(789, catalog.printers.size)
-        assertEquals(3_311, catalog.filaments.size)
-        assertEquals(2_319, catalog.slicing.size)
+        assertEquals(789, catalog.printers.count { it.id.startsWith("orca-printer-") })
+        assertEquals(3_311, catalog.filaments.count { it.id.startsWith("orca-filament-") })
+        assertEquals(2_319, catalog.slicing.count { it.id.startsWith("orca-process-") })
         assertEquals(60, catalog.rejectedCount)
-        val restoredBreakawayProfiles = setOf(
-            "Snapmaker Breakaway Support",
-            "Snapmaker Breakaway Support @J1",
-            "Snapmaker Breakaway Support For PLA @U1",
-            "Snapmaker Breakaway Support For PLA @U1 0.2 nozzle",
-            "Snapmaker Breakaway Support For PLA @U1 0.6 nozzle",
-            "Snapmaker Breakaway Support For PLA @U1 0.8 nozzle",
+        val restoredBreakawayProfiles = mapOf(
+            "Snapmaker Breakaway Support" to (220 to 230),
+            "Snapmaker Breakaway Support @J1" to (220 to 230),
+            "Snapmaker Breakaway Support For PLA @U1" to (220 to 230),
+            "Snapmaker Breakaway Support For PLA @U1 0.2 nozzle" to (240 to 240),
+            "Snapmaker Breakaway Support For PLA @U1 0.6 nozzle" to (210 to 210),
+            "Snapmaker Breakaway Support For PLA @U1 0.8 nozzle" to (210 to 210),
         )
         assertEquals(
-            restoredBreakawayProfiles,
+            restoredBreakawayProfiles.keys,
             catalog.filaments
-                .filter { it.name in restoredBreakawayProfiles }
+                .filter { it.name in restoredBreakawayProfiles.keys }
                 .onEach {
                     assertTrue(it.supportMaterial)
-                    assertEquals(220, it.nozzleTemp)
-                    assertEquals(230, it.firstLayerNozzleTemp)
+                    assertEquals(restoredBreakawayProfiles.getValue(it.name).first, it.nozzleTemp)
+                    assertEquals(restoredBreakawayProfiles.getValue(it.name).second, it.firstLayerNozzleTemp)
                 }
                 .map(FilamentProfile::name)
                 .toSet(),
@@ -2799,6 +2799,11 @@ class NativeEngineInstrumentedTest {
             "Generic",
             catalog.filaments.single { it.name == "Anker Generic PLA" }.brand,
         )
+        assertEquals(
+            0xFFF2EC,
+            catalog.filaments.single { it.name == "Prusa Generic ABS @MK4S" }.defaultColor,
+        )
+        assertEquals(41, catalog.filaments.count { it.defaultColor >= 0 })
         assertEquals(
             "i3",
             catalog.printers.single { it.name == "Anker M5 0.4 nozzle" }.printerStructure,
@@ -2904,7 +2909,7 @@ class NativeEngineInstrumentedTest {
             catalog.printers.groupingBy(PrinterProfile::nozzleHeight).eachCount(),
         )
         assertEquals(
-            mapOf(0 to 1_781, 3 to 1_323, 40 to 218),
+            mapOf(0 to 1_781, 3 to 1_329, 40 to 218),
             catalog.filaments.groupingBy(FilamentProfile::requiredNozzleHrc).eachCount(),
         )
         val generatedU1 = catalog.printers.single { it.name == "Snapmaker U1 (0.4 nozzle)" }
@@ -3193,19 +3198,25 @@ class NativeEngineInstrumentedTest {
                 it.nozzleTemperatureRangeLow != 190 || it.nozzleTemperatureRangeHigh != 240
             },
         )
-        val representativeBrands = setOf(
+        val representativePrinterBrands = setOf(
             "Prusa", "Creality", "Anycubic", "Elegoo", "Snapmaker", "Sovol", "Qidi",
         )
-        representativeBrands.forEach { brand ->
+        representativePrinterBrands.forEach { brand ->
             val printers = catalog.printers.filter { it.brand == brand }
             assertTrue("$brand printer profiles must be present", printers.isNotEmpty())
-            assertTrue("$brand filament profiles must be present", catalog.filaments.any { it.brand == brand })
             assertTrue("$brand slicing profiles must be present", catalog.slicing.any { it.brand == brand })
             assertTrue(
                 "$brand must cover common mobile-selectable nozzle sizes",
                 printers.map { it.nozzleDiameter }.toSet().containsAll(setOf(0.2f, 0.4f, 0.6f, 0.8f)),
             )
         }
+        setOf("Prusa Polymers", "Creality", "Anycubic", "Elegoo", "Snapmaker", "QIDI")
+            .forEach { brand ->
+                assertTrue(
+                    "$brand filament profiles must be present",
+                    catalog.filaments.any { it.brand == brand },
+                )
+            }
         assertTrue(catalog.printers.all(ProfileValidation::printer))
         assertTrue(
             "The catalog must retain non-rectangular build plates",

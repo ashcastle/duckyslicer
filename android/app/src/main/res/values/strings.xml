@@ -1032,6 +1032,7 @@
     <string name="add_filament_slot">Add filament slot</string>
     <string name="remove_filament_slot">Remove T%1$d</string>
     <string name="filament_color">Filament color</string>
+    <string name="default_color">Default color</string>
     <string name="filament_color_for_tool">T%1$d color</string>
     <string name="filament_color_option">Color %1$d</string>
     <string name="custom_filament_color">Custom color</string>

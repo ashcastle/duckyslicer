@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 109
+internal const val USER_PROFILE_SCHEMA_VERSION = 110
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -335,6 +335,7 @@ class ProfileStore private constructor(
             shrinkageZPercent = effective.shrinkageZPercent,
             soluble = effective.soluble,
             supportMaterial = effective.supportMaterial,
+            defaultColor = options.resolvedFilamentColors()[slot],
             minimalPurgeOnWipeTower = effective.minimalPurgeOnWipeTower,
             towerInterfacePreExtrusionDistance = effective.towerInterfacePreExtrusionDistance,
             towerInterfacePreExtrusionLength = effective.towerInterfacePreExtrusionLength,
@@ -963,6 +964,7 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("shrinkageZPercent", shrinkageZPercent)
     .put("soluble", soluble)
     .put("supportMaterial", supportMaterial)
+    .put("defaultColor", defaultColor)
     .put("minimalPurgeOnWipeTower", minimalPurgeOnWipeTower)
     .put("towerInterfacePreExtrusionDistance", towerInterfacePreExtrusionDistance)
     .put("towerInterfacePreExtrusionLength", towerInterfacePreExtrusionLength)
@@ -1569,6 +1571,7 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
             bridge = optDouble("adaptivePressureAdvanceBridge", 0.0).toFloat(),
         ),
         requiredNozzleHrc = optInt("requiredNozzleHrc", 0),
+        defaultColor = optInt("defaultColor", NO_FILAMENT_COLOR),
         compatiblePrinters = stringList("compatiblePrinters"),
         diameter = optDouble("diameter", 1.75).toFloat(),
         density = optDouble("density", 1.24).toFloat(),

@@ -157,6 +157,7 @@ internal object ProfileValidation {
             profile.costPerKilogram in 0f..1_000_000f &&
             profile.shrinkageXyPercent in 10f..200f &&
             profile.shrinkageZPercent in 10f..200f &&
+            profile.defaultColor in NO_FILAMENT_COLOR..MAX_FILAMENT_RGB &&
             listOf(
                 profile.fanMinSpeed,
                 profile.fanMaxSpeed,

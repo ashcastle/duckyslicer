@@ -2135,6 +2135,9 @@ private fun FilamentSettingsSheet(
         FilamentColorSetting(
             slot = selectedSlot,
             color = options.resolvedFilamentColors()[selectedSlot],
+            profileDefaultColor = slots[selectedSlot].defaultColor.takeIf {
+                it in MIN_FILAMENT_RGB..MAX_FILAMENT_RGB
+            },
             onSelected = { color ->
                 onOptionsChanged(options.updateFilamentColor(selectedSlot, color))
             },
@@ -3340,6 +3343,7 @@ private fun FilamentSettingsSheet(
 private fun FilamentColorSetting(
     slot: Int,
     color: Int,
+    profileDefaultColor: Int?,
     onSelected: (Int) -> Unit,
 ) {
     val label = stringResource(R.string.filament_color)
@@ -3431,7 +3435,7 @@ private fun FilamentColorSetting(
                     Text(stringResource(R.string.use_filament_color))
                 }
                 HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
-                (listOf(color) + DefaultFilamentColors)
+                (listOfNotNull(profileDefaultColor, color) + DefaultFilamentColors)
                     .distinct()
                     .chunked(4)
                     .forEach { rowColors ->
@@ -3442,7 +3446,9 @@ private fun FilamentColorSetting(
                             rowColors.forEach { choice ->
                                 val selectedChoice = choice == color
                                 val optionIndex = DefaultFilamentColors.indexOf(choice)
-                                val optionLabel = if (optionIndex >= 0) {
+                                val optionLabel = if (choice == profileDefaultColor) {
+                                    stringResource(R.string.default_color)
+                                } else if (optionIndex >= 0) {
                                     stringResource(R.string.filament_color_option, optionIndex + 1)
                                 } else {
                                     stringResource(R.string.custom_filament_color)

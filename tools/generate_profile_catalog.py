@@ -13,8 +13,9 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 109
+SCHEMA_VERSION = 110
 MAX_FILAMENT_SLOTS = 16
+NO_FILAMENT_COLOR = -1
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
 DEFAULT_GCODE_FILENAME_FORMAT = (
@@ -93,6 +94,13 @@ def filament_vendor(value: Any, source_brand: str) -> str:
     return {
         "snapmaker": "Snapmaker",
     }.get(candidate.casefold(), candidate)
+
+
+def filament_color(value: Any) -> int:
+    candidate = str(scalar(value, "")).strip().strip('"')
+    if re.fullmatch(r"#[0-9A-Fa-f]{6}", candidate) is None:
+        return NO_FILAMENT_COLOR
+    return int(candidate[1:], 16)
 
 
 def boolean(value: Any, default: bool = False) -> bool:
@@ -670,10 +678,12 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "silentMode": boolean(raw.get("silent_mode")),
         "silentMotionLimits": [motion_pairs[key][1] for key, _ in motion_defaults],
         "maxJunctionDeviation": number(raw.get("machine_max_junction_deviation"), 0),
-        "minimumExtrudingRate": minimum_extruding_rates[0],
-        "minimumTravelRate": minimum_travel_rates[0],
-        "silentMinimumExtrudingRate": minimum_extruding_rates[1],
-        "silentMinimumTravelRate": minimum_travel_rates[1],
+        # Keep the binary contract stable even when every resolved source value
+        # happens to be an integer. Android reads these four fields as floats.
+        "minimumExtrudingRate": float(minimum_extruding_rates[0]),
+        "minimumTravelRate": float(minimum_travel_rates[0]),
+        "silentMinimumExtrudingRate": float(minimum_extruding_rates[1]),
+        "silentMinimumTravelRate": float(minimum_travel_rates[1]),
         "resonanceAvoidance": boolean(raw.get("resonance_avoidance")),
         "minResonanceAvoidanceSpeed": number(raw.get("min_resonance_avoidance_speed"), 70),
         "maxResonanceAvoidanceSpeed": number(raw.get("max_resonance_avoidance_speed"), 120),
@@ -1019,6 +1029,7 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "shrinkageZPercent": number(raw.get("filament_shrinkage_compensation_z"), 100),
         "soluble": boolean(raw.get("filament_soluble")),
         "supportMaterial": boolean(raw.get("filament_is_support")),
+        "defaultColor": filament_color(raw.get("default_filament_colour")),
         "minimalPurgeOnWipeTower": number(raw.get("filament_minimal_purge_on_wipe_tower"), 15),
         "towerInterfacePreExtrusionDistance": number(
             raw.get("filament_tower_interface_pre_extrusion_dist"), 10
@@ -1146,6 +1157,7 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and 0 <= profile["costPerKilogram"] <= 1_000_000
         and 10 <= profile["shrinkageXyPercent"] <= 200
         and 10 <= profile["shrinkageZPercent"] <= 200
+        and NO_FILAMENT_COLOR <= profile["defaultColor"] <= 0xFFFFFF
         and len(profile["filamentStartGcode"].encode("utf-8")) <= 262_144
         and len(profile["filamentEndGcode"].encode("utf-8")) <= 262_144
         and all(

@@ -56,7 +56,7 @@ class NozzleHardnessSettingsTest {
         assertEquals(40, restoredFilament.requiredNozzleHrc)
 
         val projectJson = options.toProjectJson()
-        assertEquals(100, projectJson.getInt("formatVersion"))
+        assertEquals(101, projectJson.getInt("formatVersion"))
         val restored = requireNotNull(projectJson.toProjectSliceOptionsOrNull())
         assertEquals(NozzleMaterial.BRASS, restored.printerProfile.nozzleMaterial)
         assertEquals(listOf(40, 0), restored.filamentSlots.map(FilamentProfile::requiredNozzleHrc))

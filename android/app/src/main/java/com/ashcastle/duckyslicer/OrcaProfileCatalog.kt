@@ -1,6 +1,7 @@
 package com.ashcastle.duckyslicer
 
 import android.content.Context
+import android.util.Log
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
@@ -27,14 +28,17 @@ class OrcaProfileCatalog(private val context: Context) {
         context.assets.open(CATALOG_ASSET).use { asset ->
             DataInputStream(BufferedInputStream(asset, 64 * 1024)).use(::readCatalog)
         }
-    }.getOrElse { ProfileCatalog() }
+    }.getOrElse { failure ->
+        Log.w("DuckyProfileCatalog", "Bundled profile catalog is invalid; using fallback", failure)
+        ProfileCatalog()
+    }
 
     private fun readCatalog(input: DataInputStream): ProfileCatalog {
         val magic = ByteArray(CATALOG_MAGIC.size)
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 109) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 110) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -207,6 +211,7 @@ class OrcaProfileCatalog(private val context: Context) {
         shrinkageZPercent = input.readFloat(),
         soluble = input.readBoolean(),
         supportMaterial = input.readBoolean(),
+        defaultColor = input.readInt(),
         minimalPurgeOnWipeTower = input.readFloat(),
         towerInterfacePreExtrusionDistance = input.readFloat(),
         towerInterfacePreExtrusionLength = input.readFloat(),
@@ -499,6 +504,7 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("shrinkageZPercent", BINARY_FLOAT),
     BinaryField("soluble", BINARY_BOOL),
     BinaryField("supportMaterial", BINARY_BOOL),
+    BinaryField("defaultColor", BINARY_INT),
     BinaryField("minimalPurgeOnWipeTower", BINARY_FLOAT),
     BinaryField("towerInterfacePreExtrusionDistance", BINARY_FLOAT),
     BinaryField("towerInterfacePreExtrusionLength", BINARY_FLOAT),

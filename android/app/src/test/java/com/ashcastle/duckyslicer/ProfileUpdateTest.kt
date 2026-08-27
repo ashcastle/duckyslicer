@@ -22,7 +22,9 @@ class ProfileUpdateTest {
         val updatedFilament = store.updateFilament(
             filament.id,
             filament.name,
-            SliceOptions().selectFilament(filament).copy(nozzleTemp = 231, flowRatio = 0.97f),
+            SliceOptions().selectFilament(filament)
+                .copy(nozzleTemp = 231, flowRatio = 0.97f)
+                .updateFilamentColor(0, 0x124943),
         )
         val updatedSlicing = store.updateSlicing(
             slicing.id,
@@ -40,6 +42,7 @@ class ProfileUpdateTest {
         assertEquals(1, restored.filaments.count { it.id == filament.id })
         assertEquals(231, restored.filaments.single { it.id == filament.id }.nozzleTemp)
         assertEquals(0.97f, restored.filaments.single { it.id == filament.id }.flowRatio)
+        assertEquals(0x124943, restored.filaments.single { it.id == filament.id }.defaultColor)
         assertEquals(1, restored.slicing.count { it.id == slicing.id })
         assertEquals(0.18f, restored.slicing.single { it.id == slicing.id }.layerHeightMm)
         assertEquals(5, restored.slicing.single { it.id == slicing.id }.perimeters)

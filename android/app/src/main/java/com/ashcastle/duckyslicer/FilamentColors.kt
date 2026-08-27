@@ -23,6 +23,7 @@ internal val DefaultFilamentColors: List<Int> = listOf(
 
 internal const val MIN_FILAMENT_RGB = 0x000000
 internal const val MAX_FILAMENT_RGB = 0xFFFFFF
+internal const val NO_FILAMENT_COLOR = -1
 
 internal fun filamentColorText(color: Int): String {
     require(color in MIN_FILAMENT_RGB..MAX_FILAMENT_RGB) { "Filament color is invalid" }
@@ -49,6 +50,10 @@ internal fun filamentColorContrast(color: Int): Int {
 
 internal fun defaultFilamentColor(slot: Int): Int =
     DefaultFilamentColors[Math.floorMod(slot, DefaultFilamentColors.size)]
+
+internal fun suggestedFilamentColor(slot: Int, profile: FilamentProfile): Int =
+    profile.defaultColor.takeIf { it in MIN_FILAMENT_RGB..MAX_FILAMENT_RGB }
+        ?: defaultFilamentColor(slot)
 
 internal fun defaultFilamentColors(count: Int): List<Int> {
     require(count in 1..MAX_FILAMENT_SLOTS) { "Filament color count is invalid" }

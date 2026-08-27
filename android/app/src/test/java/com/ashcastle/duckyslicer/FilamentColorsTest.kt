@@ -37,4 +37,16 @@ class FilamentColorsTest {
         assertEquals(0x000000, filamentColorContrast(0xFFFFFF))
         assertEquals(0x000000, filamentColorContrast(0xF6C945))
     }
+
+    @Test
+    fun profileColorIsPreferredOnlyWhenItIsValid() {
+        assertEquals(
+            0x124943,
+            suggestedFilamentColor(1, FilamentProfile.PETG.copy(defaultColor = 0x124943)),
+        )
+        assertEquals(
+            defaultFilamentColor(1),
+            suggestedFilamentColor(1, FilamentProfile.PETG.copy(defaultColor = NO_FILAMENT_COLOR)),
+        )
+    }
 }

@@ -76,6 +76,7 @@ class SliceOptionsPersistenceTest {
             firstLayerBedTemp = 72,
             texturedPlateTemp = 53,
             firstLayerTexturedPlateTemp = 54,
+            defaultColor = 0x124943,
         )
         val secondary = FilamentProfile.PETG.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_04.name),
@@ -88,6 +89,7 @@ class SliceOptionsPersistenceTest {
             shrinkageZPercent = 98.8f,
             soluble = true,
             supportMaterial = true,
+            defaultColor = 0x010203,
             minimalPurgeOnWipeTower = 35f,
             towerInterfacePreExtrusionDistance = 21f,
             towerInterfacePreExtrusionLength = 22f,
@@ -272,6 +274,8 @@ class SliceOptionsPersistenceTest {
         val native = restored.toNativeConfig()
 
         assertEquals(listOf(primary.id, secondary.id), restored.resolvedFilamentSlots().map { it.id })
+        assertEquals(0x124943, restored.resolvedFilamentSlots()[0].defaultColor)
+        assertEquals(0x010203, restored.resolvedFilamentSlots()[1].defaultColor)
         assertEquals(listOf(0x123456, 0xABCDEF), restored.resolvedFilamentColors())
         assertEquals(listOf(0x123456, 0xABCDEF), native.filamentColors.toList())
         assertNull(restored.filamentProfile.retractLength)
@@ -577,6 +581,12 @@ class SliceOptionsPersistenceTest {
         assertEquals(
             listOf(0x102030, 0xA0B0C0, defaultFilamentColor(2)),
             expanded.addFilamentSlot(FilamentProfile.ABS).resolvedFilamentColors(),
+        )
+        assertEquals(
+            listOf(0x102030, 0xA0B0C0, 0x124943),
+            expanded.addFilamentSlot(
+                FilamentProfile.ABS.copy(defaultColor = 0x124943),
+            ).resolvedFilamentColors(),
         )
         assertEquals(
             listOf(0x102030),
@@ -1300,7 +1310,7 @@ class SliceOptionsPersistenceTest {
         assertNull(unsafe.toProjectSliceOptionsOrNull())
 
         val unknown = JSONObject(restoredSettingsFixture().toProjectJson().toString())
-            .put("formatVersion", 101)
+            .put("formatVersion", 102)
         assertNull(unknown.toProjectSliceOptionsOrNull())
     }
 

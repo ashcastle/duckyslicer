@@ -556,6 +556,7 @@ data class FilamentProfile(
     val shrinkageZPercent: Float = 100f,
     val soluble: Boolean = false,
     val supportMaterial: Boolean = false,
+    val defaultColor: Int = NO_FILAMENT_COLOR,
     val minimalPurgeOnWipeTower: Float = 15f,
     val towerInterfacePreExtrusionDistance: Float = 10f,
     val towerInterfacePreExtrusionLength: Float = 0f,
@@ -1379,7 +1380,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 109,
+    val schemaVersion: Int = 110,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1440,7 +1441,7 @@ data class SliceOptions(
     val printerProfile: PrinterProfile = PrinterProfile.U1_04,
     val filamentProfile: FilamentProfile = FilamentProfile.PLA,
     val filamentSlots: List<FilamentProfile> = listOf(filamentProfile),
-    val filamentColors: List<Int> = defaultFilamentColors(filamentSlots.size.coerceAtLeast(1)),
+    val filamentColors: List<Int> = filamentSlots.mapIndexed(::suggestedFilamentColor),
     val quality: QualityProfile = QualityProfile.STANDARD,
     val bedSizeX: Float = printerProfile.bedSizeX,
     val bedSizeY: Float = printerProfile.bedSizeY,
@@ -1906,7 +1907,7 @@ data class SliceOptions(
         return FilamentSlotAssignment(
             options = copy(
                 filamentSlots = current + profile,
-                filamentColors = resolvedFilamentColors() + defaultFilamentColor(current.size),
+                filamentColors = resolvedFilamentColors() + suggestedFilamentColor(current.size, profile),
             )
                 .boundedToFilamentSlots(current.size + 1),
             slot = current.size,
@@ -1923,7 +1924,7 @@ data class SliceOptions(
         }
         return copy(
             filamentSlots = current + profile,
-            filamentColors = resolvedFilamentColors() + defaultFilamentColor(current.size),
+            filamentColors = resolvedFilamentColors() + suggestedFilamentColor(current.size, profile),
         )
             .boundedToFilamentSlots(current.size + 1)
     }

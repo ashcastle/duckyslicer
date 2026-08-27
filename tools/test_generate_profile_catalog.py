@@ -497,6 +497,10 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(3.5, profile["minimumTravelRate"])
         self.assertEqual(1.5, profile["silentMinimumExtrudingRate"])
         self.assertEqual(2.5, profile["silentMinimumTravelRate"])
+        self.assertIsInstance(profile["minimumExtrudingRate"], float)
+        self.assertIsInstance(profile["minimumTravelRate"], float)
+        self.assertIsInstance(profile["silentMinimumExtrudingRate"], float)
+        self.assertIsInstance(profile["silentMinimumTravelRate"], float)
         self.assertEqual(0.032, profile["maxJunctionDeviation"])
         with self.assertRaises(ValueError):
             build_printer("Example", base | {"bed_mesh_min": "295,11"})
@@ -1555,6 +1559,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "filament_shrinkage_compensation_z": ["99.18%"],
                 "filament_soluble": ["1"],
                 "filament_is_support": ["1"],
+                "default_filament_colour": ["#124943"],
                 "filament_minimal_purge_on_wipe_tower": ["35"],
                 "filament_tower_interface_pre_extrusion_dist": ["21"],
                 "filament_tower_interface_pre_extrusion_length": ["22"],
@@ -1652,6 +1657,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertIsNone(inherited["retractLiftEnforce"])
         self.assertIsNone(inherited["longRetractionWhenCut"])
         self.assertIsNone(inherited["retractionDistanceWhenCut"])
+        self.assertEqual(-1, inherited["defaultColor"])
         self.assertEqual(0.55, overridden["retractLength"])
         self.assertEqual(2.85, overridden["diameter"])
         self.assertEqual(1.07, overridden["density"])
@@ -1660,6 +1666,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(99.18, overridden["shrinkageZPercent"])
         self.assertTrue(overridden["soluble"])
         self.assertTrue(overridden["supportMaterial"])
+        self.assertEqual(0x124943, overridden["defaultColor"])
         self.assertEqual(35.0, overridden["minimalPurgeOnWipeTower"])
         self.assertEqual(21.0, overridden["towerInterfacePreExtrusionDistance"])
         self.assertEqual(22.0, overridden["towerInterfacePreExtrusionLength"])
