@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import java.io.BufferedInputStream
 import java.io.DataInputStream
+import java.io.InputStream
 
 private const val CATALOG_ASSET = "profile_catalog_v101.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
@@ -23,15 +24,29 @@ internal const val BINARY_NULLABLE_STRING = 9
 
 internal data class BinaryField(val name: String, val kind: Int)
 
-class OrcaProfileCatalog(private val context: Context) {
-    fun load(): ProfileCatalog = runCatching {
-        context.assets.open(CATALOG_ASSET).use { asset ->
+internal data class ProfileCatalogLoadResult(
+    val catalog: ProfileCatalog,
+    val bundledCatalogUnavailable: Boolean,
+)
+
+class OrcaProfileCatalog internal constructor(
+    private val openCatalog: () -> InputStream,
+) {
+    constructor(context: Context) : this({ context.assets.open(CATALOG_ASSET) })
+
+    fun load(): ProfileCatalog = loadWithStatus().catalog
+
+    internal fun loadWithStatus(): ProfileCatalogLoadResult = runCatching {
+        openCatalog().use { asset ->
             DataInputStream(BufferedInputStream(asset, 64 * 1024)).use(::readCatalog)
         }
-    }.getOrElse { failure ->
-        Log.w("DuckyProfileCatalog", "Bundled profile catalog is invalid; using fallback", failure)
-        ProfileCatalog()
-    }
+    }.fold(
+        onSuccess = { ProfileCatalogLoadResult(it, bundledCatalogUnavailable = false) },
+        onFailure = { failure ->
+            Log.w("DuckyProfileCatalog", "Bundled profile catalog is invalid; using fallback", failure)
+            ProfileCatalogLoadResult(ProfileCatalog(), bundledCatalogUnavailable = true)
+        },
+    )
 
     private fun readCatalog(input: DataInputStream): ProfileCatalog {
         val magic = ByteArray(CATALOG_MAGIC.size)

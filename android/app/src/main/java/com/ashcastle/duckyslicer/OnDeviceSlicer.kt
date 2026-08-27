@@ -1381,9 +1381,14 @@ data class ProfileCatalog(
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
     val schemaVersion: Int = 110,
-    val sourceRevision: String = "ducky-fallback",
+    val sourceRevision: String = FALLBACK_PROFILE_CATALOG_REVISION,
     val rejectedCount: Int = 0,
 )
+
+internal const val FALLBACK_PROFILE_CATALOG_REVISION = "ducky-fallback"
+
+internal fun ProfileCatalog.usesBundledFallback(): Boolean =
+    sourceRevision == FALLBACK_PROFILE_CATALOG_REVISION
 
 data class MachineMotionSettings(
     val maxSpeedX: Float,

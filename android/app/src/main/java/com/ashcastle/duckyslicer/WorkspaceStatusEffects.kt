@@ -70,6 +70,17 @@ internal fun WorkspaceStatusEffects(
         onPresentation(null, resources.getString(resource))
         profileLibraryModel.consumeMessage(message)
     }
+    LaunchedEffect(
+        profileLibraryState.catalogLoaded,
+        profileLibraryState.bundledCatalogUnavailable,
+    ) {
+        if (
+            profileLibraryState.catalogLoaded &&
+            profileLibraryState.bundledCatalogUnavailable
+        ) {
+            onPresentation(null, resources.getString(R.string.profile_catalog_unavailable))
+        }
+    }
     LaunchedEffect(remoteProfilesLoaded, remoteStorageUnavailable) {
         if (remoteProfilesLoaded && remoteStorageUnavailable) {
             onPresentation(null, resources.getString(R.string.saved_data_unavailable))

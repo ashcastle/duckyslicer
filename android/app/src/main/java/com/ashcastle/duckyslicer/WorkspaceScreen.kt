@@ -1149,6 +1149,7 @@ internal fun WorkspaceScreen(
                     modelDimensions = modelDimensions,
                     options = sliceOptions,
                     catalog = profileCatalog,
+                    bundledCatalogUnavailable = profileCatalog.usesBundledFallback(),
                     recents = profileRecents,
                     profileBusy = profileBusy,
                     importing = importing || editingBusy,
@@ -6894,6 +6895,7 @@ private fun SliceSheet(
     modelDimensions: List<Float>?,
     options: SliceOptions,
     catalog: ProfileCatalog,
+    bundledCatalogUnavailable: Boolean,
     recents: ProfileRecents,
     profileBusy: Boolean,
     importing: Boolean,
@@ -6930,6 +6932,7 @@ private fun SliceSheet(
         ProfileSettings(
             options = options,
             catalog = catalog,
+            bundledCatalogUnavailable = bundledCatalogUnavailable,
             recents = recents,
             enabled = !profileBusy && !slicing && !importing && !previewLoading,
             onOptionsChanged = onOptionsChanged,

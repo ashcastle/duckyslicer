@@ -122,6 +122,7 @@ internal data class ProfileLibraryState(
     val busy: Boolean = true,
     val catalog: ProfileCatalog = ProfileCatalog(),
     val catalogLoaded: Boolean = false,
+    val bundledCatalogUnavailable: Boolean = false,
     val recents: ProfileRecents = ProfileRecents(),
     val recentsLoaded: Boolean = false,
     val recentsRevision: Long = 0,
@@ -507,21 +508,31 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
                         catalog,
                         recents,
                         profileUnavailable || recentStore.storageUnavailable,
+                        profileStore.bundledCatalogUnavailable,
                     )
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Exception) {
-                LoadedProfileLibrary(ProfileCatalog(), ProfileRecents(), true)
+                LoadedProfileLibrary(
+                    ProfileCatalog(),
+                    ProfileRecents(),
+                    storageUnavailable = true,
+                    bundledCatalogUnavailable = true,
+                )
             }
             if (loaded.storageUnavailable) {
                 supportEvents.record(SupportEvent.PROFILE_STORAGE_UNAVAILABLE)
+            }
+            if (loaded.bundledCatalogUnavailable) {
+                supportEvents.record(SupportEvent.PROFILE_CATALOG_UNAVAILABLE)
             }
             synchronized(this@ProfileLibraryViewModel) {
                 mutableState.value = ProfileLibraryState(
                     busy = false,
                     catalog = loaded.catalog,
                     catalogLoaded = true,
+                    bundledCatalogUnavailable = loaded.bundledCatalogUnavailable,
                     recents = loaded.recents,
                     recentsLoaded = true,
                     storageUnavailable = loaded.storageUnavailable,
@@ -877,6 +888,7 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
         val catalog: ProfileCatalog,
         val recents: ProfileRecents,
         val storageUnavailable: Boolean,
+        val bundledCatalogUnavailable: Boolean,
     )
 
     private data class ProfileSaveResult(

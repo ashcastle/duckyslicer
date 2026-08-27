@@ -2760,10 +2760,12 @@ class NativeEngineInstrumentedTest {
     fun bundledProfileCatalogIsVersionedValidatedAndBroad() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val loadStartedAt = SystemClock.elapsedRealtimeNanos()
-        val catalog = OrcaProfileCatalog(context).load()
+        val loadResult = OrcaProfileCatalog(context).loadWithStatus()
+        val catalog = loadResult.catalog
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
+        assertFalse(loadResult.bundledCatalogUnavailable)
         assertEquals(110, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
@@ -3486,6 +3488,19 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.map { it.wallGenerator }.toSet().containsAll(listOf("arachne", "classic")))
         assertTrue(catalog.slicing.map { it.wallSequence }.toSet().containsAll(listOf("inner-outer", "outer-inner")))
         assertTrue(catalog.printers.mapNotNull { it.brand }.containsAll(listOf("Creality", "Prusa", "Anycubic")))
+    }
+
+    @Test
+    fun corruptBundledProfileCatalogFallsBackAndReportsUnavailable() {
+        val loadResult = OrcaProfileCatalog {
+            ByteArrayInputStream("not-a-profile-catalog".toByteArray())
+        }.loadWithStatus()
+
+        assertTrue(loadResult.bundledCatalogUnavailable)
+        assertEquals("ducky-fallback", loadResult.catalog.sourceRevision)
+        assertEquals(PrinterProfile.builtIns, loadResult.catalog.printers)
+        assertEquals(FilamentProfile.builtIns, loadResult.catalog.filaments)
+        assertEquals(QualityProfile.builtIns, loadResult.catalog.slicing)
     }
 
     @Test

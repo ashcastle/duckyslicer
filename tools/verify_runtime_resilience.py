@@ -386,6 +386,9 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "override fun onCleared()",
         "hasDirtyRecents",
         "RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS",
+        "val bundledCatalogUnavailable: Boolean",
+        "profileStore.bundledCatalogUnavailable",
+        "SupportEvent.PROFILE_CATALOG_UNAVAILABLE",
     ):
         if marker not in profile_library:
             raise VerificationError(f"profile library lifecycle contract is missing: {marker}")
@@ -400,6 +403,24 @@ def verify_resilience(sources: dict[str, str]) -> None:
             raise VerificationError(f"profile library Activity-recreation contract is missing: {marker}")
     if "ProfileStore(" in main or "ProfileRecentStore(" in main:
         raise VerificationError("profile library persistence is still owned by the Activity composition")
+    profile_store = sources["ProfileStore.kt"]
+    for marker in (
+        "var bundledCatalogUnavailable: Boolean",
+        "val systemResult = systemCatalogProvider()",
+        "bundledCatalogUnavailable = systemResult.bundledCatalogUnavailable",
+    ):
+        if marker not in profile_store:
+            raise VerificationError(f"bundled profile catalog recovery contract is missing: {marker}")
+    for marker in (
+        "bundledCatalogUnavailable = profileCatalog.usesBundledFallback()",
+    ):
+        if marker not in workspace:
+            raise VerificationError(f"bundled profile catalog warning UI is missing: {marker}")
+    for resource_name in ("strings.xml", "strings-ko.xml"):
+        if "profile_catalog_unavailable" not in sources[resource_name]:
+            raise VerificationError(
+                f"bundled profile catalog warning text is missing: {resource_name}"
+            )
 
     profile_bundle = sources["ProfileBundle.kt"]
     for marker in (

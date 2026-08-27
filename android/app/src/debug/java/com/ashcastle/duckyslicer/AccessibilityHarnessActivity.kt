@@ -291,6 +291,7 @@ private fun ProfileSettingsAccessibilityHarness() {
         ProfileSettings(
             options = options,
             catalog = catalog,
+            bundledCatalogUnavailable = false,
             recents = ProfileRecents(),
             enabled = true,
             onOptionsChanged = { options = it },
@@ -580,7 +581,7 @@ private fun WorkspaceAccessibilityHarness(
         layerFilamentChanges = activePlate.layerFilamentChanges,
         layerCustomGCodeEvents = activePlate.layerCustomGCodeEvents,
         sliceOptions = SliceOptions(),
-        profileCatalog = ProfileCatalog(),
+        profileCatalog = ProfileCatalog(sourceRevision = "accessibility-harness"),
         profileRecents = ProfileRecents(),
         appSettings = AppSettings(),
         remoteDevices = emptyList(),

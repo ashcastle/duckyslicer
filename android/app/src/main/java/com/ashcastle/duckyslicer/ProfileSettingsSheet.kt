@@ -259,6 +259,7 @@ internal enum class SlicingSettingsSection(val titleResource: Int) {
 internal fun ProfileSettings(
     options: SliceOptions,
     catalog: ProfileCatalog,
+    bundledCatalogUnavailable: Boolean,
     recents: ProfileRecents,
     enabled: Boolean,
     onOptionsChanged: (SliceOptions) -> Unit,
@@ -320,6 +321,20 @@ internal fun ProfileSettings(
             Icon(
                 if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                 contentDescription = null,
+            )
+        }
+    }
+    if (bundledCatalogUnavailable) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = Color(0xFFF6C945).copy(alpha = 0.14f),
+            contentColor = Color(0xFFFFE48A),
+        ) {
+            Text(
+                stringResource(R.string.profile_catalog_unavailable),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                style = MaterialTheme.typography.bodySmall,
             )
         }
     }

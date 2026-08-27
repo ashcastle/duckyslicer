@@ -63,7 +63,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "ProfileStore.kt": (
             "DurableJsonFile( internal fun importBundle( mergeProfileBundle( "
-            "beforeCommit() writeRoot(merged.root) private fun append("
+            "beforeCommit() writeRoot(merged.root) private fun append( "
+            "var bundledCatalogUnavailable: Boolean val systemResult = systemCatalogProvider() "
+            "bundledCatalogUnavailable = systemResult.bundledCatalogUnavailable"
         ),
         "ProfileBundle.kt": (
             "MAX_PROFILE_BUNDLE_BYTES PROFILE_BUNDLE_KEYS PROFILE_ARRAY_KEYS "
@@ -127,6 +129,8 @@ def valid_sources() -> dict[str, str]:
             "optionsForSession val recentsRevision: Long "
             "val persistedRecentsRevision: Long fun flushRecentPersistence() "
             "override fun onCleared() hasDirtyRecents RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS "
+            "val bundledCatalogUnavailable: Boolean profileStore.bundledCatalogUnavailable "
+            "SupportEvent.PROFILE_CATALOG_UNAVAILABLE "
             "fun importBundle(uri: Uri) fun exportBundle(uri: Uri) "
             "DocumentTransferCancellation() cancellation.providerSignal "
             "application.contentResolver.acquireContentProviderClient(uri) "
@@ -245,7 +249,8 @@ def valid_sources() -> dict[str, str]:
             "onCancelProfileTransfer: () -> Unit R.string.cancel_profile_import "
             "R.string.cancel_profile_export R.string.slice_all_plates "
             "R.string.slicing_all_plates_progress "
-            "projectPlates.count { it.objects.isNotEmpty() } >= 2"
+            "projectPlates.count { it.objects.isNotEmpty() } >= 2 "
+            "bundledCatalogUnavailable = profileCatalog.usesBundledFallback()"
         ),
         "DeviceSheet.kt": (
             ".selectable( selected = true enabled = !busy ), "
@@ -439,14 +444,14 @@ def valid_sources() -> dict[str, str]:
             "Web, `file://`, unrelated JSON, and unrelated binary"
         ),
         "strings.xml": (
-            "saved_data_unavailable settings_save_error cancel_model_edit model_edit_canceled "
+            "saved_data_unavailable profile_catalog_unavailable settings_save_error cancel_model_edit model_edit_canceled "
             "cancel_upload canceling_upload upload_canceled stop_remote_request "
             "stopping_remote_request remote_request_canceled"
             " import_profiles export_profiles cancel_profile_import cancel_profile_export"
             " profile_import_error profile_export_error"
         ),
         "strings-ko.xml": (
-            "saved_data_unavailable settings_save_error cancel_model_edit model_edit_canceled "
+            "saved_data_unavailable profile_catalog_unavailable settings_save_error cancel_model_edit model_edit_canceled "
             "cancel_upload canceling_upload upload_canceled stop_remote_request "
             "stopping_remote_request remote_request_canceled"
             " import_profiles export_profiles cancel_profile_import cancel_profile_export"
@@ -658,6 +663,15 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         sources = valid_sources()
         sources["ProfileLibraryViewModel.kt"] = sources["ProfileLibraryViewModel.kt"].replace(
             "override fun onCleared()", "drop pending recents on clear"
+        )
+        with self.assertRaisesRegex(VerificationError, "profile library lifecycle"):
+            verify_resilience(sources)
+
+    def test_rejects_silent_bundled_profile_catalog_fallback(self) -> None:
+        sources = valid_sources()
+        sources["ProfileLibraryViewModel.kt"] = sources["ProfileLibraryViewModel.kt"].replace(
+            "SupportEvent.PROFILE_CATALOG_UNAVAILABLE",
+            "discard bundled profile catalog failure",
         )
         with self.assertRaisesRegex(VerificationError, "profile library lifecycle"):
             verify_resilience(sources)

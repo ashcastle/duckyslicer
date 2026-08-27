@@ -12,9 +12,9 @@ internal const val USER_PROFILE_SCHEMA_VERSION = 110
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
-class ProfileStore private constructor(
+class ProfileStore internal constructor(
     private val file: File,
-    private val systemCatalogProvider: () -> ProfileCatalog,
+    private val systemCatalogProvider: () -> ProfileCatalogLoadResult,
 ) {
     private val durableProfiles = DurableJsonFile(file, MAX_USER_PROFILE_BYTES)
 
@@ -22,16 +22,25 @@ class ProfileStore private constructor(
     var storageUnavailable: Boolean = false
         private set
 
-    constructor(file: File) : this(file, { ProfileCatalog() })
+    @Volatile
+    var bundledCatalogUnavailable: Boolean = false
+        private set
+
+    constructor(file: File) : this(
+        file,
+        { ProfileCatalogLoadResult(ProfileCatalog(), bundledCatalogUnavailable = false) },
+    )
     constructor(context: Context) : this(
         File(context.filesDir, "profiles/user_profiles.json"),
-        { OrcaProfileCatalog(context.applicationContext).load() },
+        { OrcaProfileCatalog(context.applicationContext).loadWithStatus() },
     )
 
     @Synchronized
     fun load(): ProfileCatalog {
         val root = readRoot()
-        val system = systemCatalogProvider()
+        val systemResult = systemCatalogProvider()
+        val system = systemResult.catalog
+        bundledCatalogUnavailable = systemResult.bundledCatalogUnavailable
         return ProfileCatalog(
             printers = (system.printers + root.optJSONArray("printers").toPrinterProfiles())
                 .filter(ProfileValidation::printer).distinctBy(PrinterProfile::id),

@@ -806,6 +806,7 @@
     <string name="remove_plate_title">Remove this plate?</string>
     <string name="remove_plate_message">The models and sliced result on this plate will be removed. You can use Undo to restore the plate.</string>
     <string name="saved_data_unavailable">Some saved items couldn’t be opened. They were left unchanged.</string>
+    <string name="profile_catalog_unavailable">The full profile list couldn’t be opened. You can keep using the available profiles.</string>
     <string name="settings_save_error">Couldn’t save settings.</string>
     <string name="add_device">Add</string>
     <string name="edit_device">Edit device</string>
