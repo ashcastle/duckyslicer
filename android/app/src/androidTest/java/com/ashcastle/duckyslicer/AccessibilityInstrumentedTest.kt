@@ -1310,6 +1310,7 @@ class AccessibilityInstrumentedTest {
         val secondColor = context.getString(R.string.filament_color_option, 2)
         val customColor = context.getString(R.string.custom_filament_color)
         val useColor = context.getString(R.string.use_filament_color)
+        val filamentNotes = context.getString(R.string.filament_notes)
         val revert = context.getString(R.string.revert_changes)
         val apply = context.getString(R.string.apply_changes)
         launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
@@ -1337,6 +1338,11 @@ class AccessibilityInstrumentedTest {
             assertTrue(waitForNode(useColor) { it.isClickable }.performAction(
                 AccessibilityNodeInfo.ACTION_CLICK,
             ))
+
+            assertTrue(
+                "Filament notes must be editable and discoverable by their setting name",
+                scrollUntilNode(filamentNotes) { it.isEditable }.isEditable,
+            )
 
             val actions = waitForNodes(setOf(revert, apply))
             assertTrue(actions.any { it.isClickable && it.effectiveLabel() == revert })

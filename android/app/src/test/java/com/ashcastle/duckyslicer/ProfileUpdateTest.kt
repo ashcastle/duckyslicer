@@ -20,6 +20,8 @@ class ProfileUpdateTest {
         assertTrue(ProfileValidation.filament(boundary))
         assertFalse(ProfileValidation.filament(boundary.copy(nozzleTemp = 501)))
         assertFalse(ProfileValidation.filament(boundary.copy(flowRatio = 0f)))
+        assertFalse(ProfileValidation.filament(boundary.copy(notes = "한".repeat(5_462))))
+        assertFalse(ProfileValidation.filament(boundary.copy(notes = "Unsafe\u0000note")))
     }
 
     @Test
@@ -29,6 +31,7 @@ class ProfileUpdateTest {
             "My filament",
             SliceOptions().selectFilament(
                 FilamentProfile.GENERIC_PLA.copy(
+                    notes = "Dry before printing.\nUse bed adhesive.",
                     compatiblePrinters = listOf(PrinterProfile.U1_04.name),
                     compatiblePrints = listOf(QualityProfile.STANDARD.name),
                 ),
@@ -70,6 +73,10 @@ class ProfileUpdateTest {
         assertEquals(420, restored.filaments.single { it.id == filament.id }.firstLayerNozzleTemp)
         assertEquals(0.48f, restored.filaments.single { it.id == filament.id }.flowRatio)
         assertEquals(0x124943, restored.filaments.single { it.id == filament.id }.defaultColor)
+        assertEquals(
+            "Dry before printing.\nUse bed adhesive.",
+            restored.filaments.single { it.id == filament.id }.notes,
+        )
         assertEquals(
             listOf(PrinterProfile.U1_04.name),
             restored.filaments.single { it.id == filament.id }.compatiblePrinters,

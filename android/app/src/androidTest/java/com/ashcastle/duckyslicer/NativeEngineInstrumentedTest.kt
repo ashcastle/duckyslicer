@@ -2823,7 +2823,7 @@ class NativeEngineInstrumentedTest {
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
         assertFalse(loadResult.bundledCatalogUnavailable)
-        assertEquals(116, catalog.schemaVersion)
+        assertEquals(117, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertEquals(789, catalog.printers.count { it.id.startsWith("orca-printer-") })
@@ -2851,6 +2851,10 @@ class NativeEngineInstrumentedTest {
         assertEquals(
             0.48f,
             catalog.filaments.single { it.name == "eSUN ePLA-LW @System" }.flowRatio,
+        )
+        assertEquals(
+            "brim width >= 20;",
+            catalog.filaments.single { it.name == "Eryone PA" }.notes,
         )
         assertEquals(3_316, catalog.filaments.count { it.id.startsWith("orca-filament-") })
         assertEquals(2_332, catalog.slicing.count { it.id.startsWith("orca-process-") })

@@ -53,7 +53,7 @@ class OrcaProfileCatalog internal constructor(
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 116) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 117) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -209,6 +209,7 @@ class OrcaProfileCatalog internal constructor(
         name = input.readCatalogString(),
         brand = input.readCatalogString(),
         nativeName = input.readCatalogString(),
+        notes = input.readCatalogString(),
         nozzleTemp = input.readInt(),
         firstLayerNozzleTemp = input.readInt(),
         idleTemperature = input.readInt(),
@@ -511,6 +512,7 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("name", BINARY_STRING),
     BinaryField("brand", BINARY_STRING),
     BinaryField("nativeName", BINARY_STRING),
+    BinaryField("notes", BINARY_STRING),
     BinaryField("nozzleTemp", BINARY_INT),
     BinaryField("firstLayerNozzleTemp", BINARY_INT),
     BinaryField("idleTemperature", BINARY_INT),

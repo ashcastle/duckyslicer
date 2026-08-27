@@ -68,6 +68,7 @@ class ProfileBundleTest {
                 "Portable filament",
                 SliceOptions().selectFilament(
                     FilamentProfile.GENERIC_PLA.copy(
+                        notes = "Keep dry before use.",
                         filamentStartGcode = "M117 BUNDLE_FILAMENT_START",
                         filamentEndGcode = "M117 BUNDLE_FILAMENT_END",
                         minimalPurgeOnWipeTower = 35f,
@@ -205,6 +206,7 @@ class ProfileBundleTest {
             }
             assertEquals("M117 BUNDLE_FILAMENT_START", importedFilament.filamentStartGcode)
             assertEquals("M117 BUNDLE_FILAMENT_END", importedFilament.filamentEndGcode)
+            assertEquals("Keep dry before use.", importedFilament.notes)
             assertEquals(35f, importedFilament.minimalPurgeOnWipeTower)
             assertEquals(21f, importedFilament.towerInterfacePreExtrusionDistance)
             assertEquals(22f, importedFilament.towerInterfacePreExtrusionLength)

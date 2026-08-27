@@ -514,6 +514,7 @@ data class AdaptivePressureAdvanceSettings(
 )
 
 internal const val DEFAULT_ADAPTIVE_PRESSURE_ADVANCE_MODEL = "0,0,0\n0,0,0"
+internal const val MAX_FILAMENT_NOTES_BYTES = 16 * 1024
 
 data class FilamentProfile(
     val id: String,
@@ -619,6 +620,7 @@ data class FilamentProfile(
     val duringPrintExhaustFanSpeed: Int = 60,
     val completePrintExhaustFanSpeed: Int = 80,
     val idleTemperature: Int = 0,
+    val notes: String = "",
 ) {
     companion object {
         // Curated from the included Snapmaker U1 filament catalog.

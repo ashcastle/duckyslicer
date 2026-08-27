@@ -135,6 +135,7 @@ internal object ProfileValidation {
             profile.name.isSafeLabel() &&
             profile.nativeName.isSafeLabel() &&
             profile.brand.isSafeOptionalLabel() &&
+            profile.notes.isSafeNotes() &&
             profile.nozzleTemp in
                 MIN_FILAMENT_NOZZLE_TEMPERATURE..MAX_FILAMENT_NOZZLE_TEMPERATURE &&
             profile.firstLayerNozzleTemp in
@@ -542,6 +543,10 @@ internal object ProfileValidation {
             profile.compatiblePrinters.isSafeCompatibilityList()
 
     private fun String.isSafeLabel(): Boolean = isNotBlank() && length <= MAX_LABEL_LENGTH
+
+    private fun String.isSafeNotes(): Boolean =
+        toByteArray(Charsets.UTF_8).size <= MAX_FILAMENT_NOTES_BYTES &&
+            all { character -> character.code >= 32 || character == '\n' || character == '\t' }
 
     private fun String?.isSafeOptionalLabel(): Boolean = this == null || isSafeLabel()
 

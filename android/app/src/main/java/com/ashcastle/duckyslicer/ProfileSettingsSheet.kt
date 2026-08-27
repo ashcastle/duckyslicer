@@ -2209,6 +2209,26 @@ private fun FilamentSettingsSheet(
                 onOptionsChanged(options.updateFilamentColor(selectedSlot, color))
             },
         )
+        val notesLabel = stringResource(R.string.filament_notes)
+        if (settingQueryMatches(settingsQuery, notesLabel)) {
+            OutlinedTextField(
+                value = activeProfile.notes,
+                onValueChange = { candidate ->
+                    if (candidate.toByteArray(Charsets.UTF_8).size <= MAX_FILAMENT_NOTES_BYTES) {
+                        onOptionsChanged(
+                            options.updateFilamentSlot(
+                                selectedSlot,
+                                activeProfile.copy(notes = candidate),
+                            ),
+                        )
+                    }
+                },
+                label = { Text(notesLabel) },
+                minLines = 3,
+                maxLines = 8,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         if (slots.size < options.printerProfile.extruderCount.coerceIn(1, MAX_FILAMENT_SLOTS)) {
             OutlinedButton(
                 onClick = {

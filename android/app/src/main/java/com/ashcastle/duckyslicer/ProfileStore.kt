@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 116
+internal const val USER_PROFILE_SCHEMA_VERSION = 117
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -287,6 +287,7 @@ class ProfileStore internal constructor(
             id = id,
             name = requireName(name),
             nativeName = effective.nativeName,
+            notes = effective.notes,
             nozzleTemp = effective.nozzleTemp,
             firstLayerNozzleTemp = effective.firstLayerNozzleTemp,
             idleTemperature = effective.idleTemperature,
@@ -932,6 +933,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
 
 internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("id", id).put("name", name).put("nativeName", nativeName)
+    .put("notes", notes)
     .put("nozzleTemp", nozzleTemp).put("firstLayerNozzleTemp", firstLayerNozzleTemp)
     .put("idleTemperature", idleTemperature)
     .put("bedTemp", bedTemp).put("firstLayerBedTemp", firstLayerBedTemp)
@@ -1557,6 +1559,7 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         idleTemperature = optInt("idleTemperature", 0),
         builtIn = optBoolean("builtIn"),
         brand = optionalString("brand"),
+        notes = optString("notes"),
         texturedPlateTemp = optInt("texturedPlateTemp", bedTemp),
         firstLayerTexturedPlateTemp = optInt("firstLayerTexturedPlateTemp", firstLayerBedTemp),
         engineeringPlateTemp = optInt("engineeringPlateTemp", bedTemp),

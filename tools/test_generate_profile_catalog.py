@@ -137,6 +137,42 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 },
             )
 
+    def test_preserves_bounded_filament_notes(self) -> None:
+        profile = build_filament(
+            "Example",
+            {
+                "name": "Material with guidance",
+                "filament_type": ["PA"],
+                "nozzle_temperature": ["270"],
+                "hot_plate_temp": ["80"],
+                "filament_notes": ["Dry before printing.\nUse bed adhesive."],
+            },
+        )
+
+        self.assertEqual("Dry before printing.\nUse bed adhesive.", profile["notes"])
+        with self.assertRaisesRegex(ValueError, "unsafe filament limits"):
+            build_filament(
+                "Example",
+                {
+                    "name": "Oversized guidance",
+                    "filament_type": ["PLA"],
+                    "nozzle_temperature": ["220"],
+                    "hot_plate_temp": ["60"],
+                    "filament_notes": ["한" * 5_462],
+                },
+            )
+        with self.assertRaisesRegex(ValueError, "unsafe filament limits"):
+            build_filament(
+                "Example",
+                {
+                    "name": "Control character guidance",
+                    "filament_type": ["PLA"],
+                    "nozzle_temperature": ["220"],
+                    "hot_plate_temp": ["60"],
+                    "filament_notes": ["Unsafe\u0000note"],
+                },
+            )
+
     def test_preserves_filament_print_profile_compatibility(self) -> None:
         profile = build_filament(
             "Example",

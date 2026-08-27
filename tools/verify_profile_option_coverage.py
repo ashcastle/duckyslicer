@@ -30,7 +30,6 @@ INTENTIONALLY_UNMAPPED_OPTIONS = {
     "bed_custom_model",
     "bed_custom_texture",
     "extruder_colour",
-    "filament_notes",
     "filament_settings_id",
     "notes",
     "print_settings_id",
