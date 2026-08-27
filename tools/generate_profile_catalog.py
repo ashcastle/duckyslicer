@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 103
+SCHEMA_VERSION = 104
 MAX_FILAMENT_SLOTS = 16
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
@@ -607,6 +607,9 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "maxJerkZ": motion("machine_max_jerk_z", 0.4),
         "maxJerkE": motion("machine_max_jerk_e", 5),
         "maxJunctionDeviation": number(raw.get("machine_max_junction_deviation"), 0),
+        "resonanceAvoidance": boolean(raw.get("resonance_avoidance")),
+        "minResonanceAvoidanceSpeed": number(raw.get("min_resonance_avoidance_speed"), 70),
+        "maxResonanceAvoidanceSpeed": number(raw.get("max_resonance_avoidance_speed"), 120),
         "retractLength": retract_length,
         "retractSpeed": number(raw.get("retraction_speed"), 30),
         "deretractSpeed": number(raw.get("deretraction_speed"), 0),
@@ -701,6 +704,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
             "bedMeshProbeDistanceX", "bedMeshProbeDistanceY", "adaptiveBedMeshMargin"
         ])
         and 0 <= profile["maxJunctionDeviation"] <= 10
+        and 0 <= profile["minResonanceAvoidanceSpeed"] <= profile["maxResonanceAvoidanceSpeed"] <= 2_000
         and 0.01 <= profile["minLayerHeight"] <= profile["maxLayerHeight"] <= 2
     ):
         raise ValueError("unsafe motion limits")

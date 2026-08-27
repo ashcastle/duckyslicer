@@ -2680,7 +2680,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(102, catalog.schemaVersion)
+        assertEquals(104, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2718,6 +2718,9 @@ class NativeEngineInstrumentedTest {
         assertEquals(0.02f, generatedU1.rammingPressureAdvance)
         assertEquals(5f, generatedU1.machineToolChangeTime)
         assertFalse(generatedU1.toolChangeTemperatureWait)
+        assertTrue(generatedU1.resonanceAvoidance)
+        assertEquals(40f, generatedU1.minResonanceAvoidanceSpeed)
+        assertEquals(90f, generatedU1.maxResonanceAvoidanceSpeed)
         assertEquals("M600", generatedU1.machinePauseGcode)
         assertEquals(2.5f, generatedU1.nozzleHeight)
         assertEquals(143f, generatedU1.nozzleVolume)
@@ -7161,6 +7164,54 @@ class NativeEngineInstrumentedTest {
         } finally {
             baseline.output.delete()
             inserted.output.delete()
+        }
+    }
+
+    @Test
+    fun resonanceAvoidanceClampsRealOuterWallMotion() {
+        val basePrinter = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            resonanceAvoidance = false,
+            minResonanceAvoidanceSpeed = 40f,
+            maxResonanceAvoidanceSpeed = 90f,
+        )
+        val base = SliceOptions()
+            .selectPrinter(basePrinter)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.DRAFT.copy(printSpeed = 80f))
+            .copy(skirtLoops = 0, brimWidth = 0f)
+        val baseline = OnDeviceSlicer.slice(fixtureModel(), base)
+        val avoided = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.selectPrinter(basePrinter.copy(resonanceAvoidance = true)),
+        )
+        try {
+            fun maximumOuterWallFeed(gcode: String): Float {
+                var outerWall = false
+                var feed = Float.NaN
+                var maximum = Float.NEGATIVE_INFINITY
+                val feedPattern = Regex("(?:^|\\s)F([0-9.]+)")
+                gcode.lineSequence().forEach { line ->
+                    if (line.startsWith(";TYPE:")) outerWall = line == ";TYPE:Outer wall"
+                    if (!line.startsWith("G1 ")) return@forEach
+                    feedPattern.find(line)?.groupValues?.get(1)?.toFloatOrNull()?.let { feed = it }
+                    if (outerWall && feed.isFinite() && line.contains(" E") &&
+                        (line.contains(" X") || line.contains(" Y"))) {
+                        maximum = maxOf(maximum, feed)
+                    }
+                }
+                return maximum
+            }
+
+            val baselineGcode = baseline.output.readText()
+            val avoidedGcode = avoided.output.readText()
+            assertTrue(avoidedGcode.contains("; resonance_avoidance = 1"))
+            assertTrue(avoidedGcode.contains("; min_resonance_avoidance_speed = 40"))
+            assertTrue(avoidedGcode.contains("; max_resonance_avoidance_speed = 90"))
+            assertTrue(maximumOuterWallFeed(baselineGcode) > 2_400f)
+            assertEquals(2_400f, maximumOuterWallFeed(avoidedGcode), 0.1f)
+        } finally {
+            baseline.output.delete()
+            avoided.output.delete()
         }
     }
 

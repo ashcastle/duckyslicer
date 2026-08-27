@@ -21,6 +21,35 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_preserves_and_validates_resonance_avoidance(self) -> None:
+        base = {
+            "name": "Resonance-aware printer",
+            "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+            "printable_height": "250",
+            "nozzle_diameter": ["0.4"],
+            "gcode_flavor": "marlin",
+        }
+        profile = build_printer(
+            "Example",
+            base | {
+                "resonance_avoidance": "1",
+                "min_resonance_avoidance_speed": "40",
+                "max_resonance_avoidance_speed": "90",
+            },
+        )
+        self.assertTrue(profile["resonanceAvoidance"])
+        self.assertEqual(40, profile["minResonanceAvoidanceSpeed"])
+        self.assertEqual(90, profile["maxResonanceAvoidanceSpeed"])
+
+        with self.assertRaises(ValueError):
+            build_printer(
+                "Example",
+                base | {
+                    "min_resonance_avoidance_speed": "100",
+                    "max_resonance_avoidance_speed": "90",
+                },
+            )
+
     def test_normalizes_extra_solid_infill_patterns(self) -> None:
         self.assertEqual("", extra_solid_infills(None))
         self.assertEqual("5#2", extra_solid_infills(" 5 # 2 "))

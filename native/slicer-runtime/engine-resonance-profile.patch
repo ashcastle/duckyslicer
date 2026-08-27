@@ -1,0 +1,16 @@
+diff --git "a/resources/profiles/Snapmaker/machine/Snapmaker U1 (0.4 nozzle).json" "b/resources/profiles/Snapmaker/machine/Snapmaker U1 (0.4 nozzle).json"
+--- "a/resources/profiles/Snapmaker/machine/Snapmaker U1 (0.4 nozzle).json"
++++ "b/resources/profiles/Snapmaker/machine/Snapmaker U1 (0.4 nozzle).json"
+@@ -198,7 +198,10 @@
+     "tool_change_temprature_wait": "0",
+     "printer_notes": "",
+     "machine_pause_gcode": "M600",
++    "resonance_avoidance": "1",
++    "min_resonance_avoidance_speed": "40",
++    "max_resonance_avoidance_speed": "90",
+     "default_bed_type": "Textured PEI Plate",
+     "layer_change_gcode": ";AFTER_LAYER_CHANGE\n;[layer_z]\nSET_PRINT_STATS_INFO TOTAL_LAYER={total_layer_count} CURRENT_LAYER={layer_num+1}",
+     "nozzle_volume": "143"
+-}
+\ No newline at end of file
++}

@@ -118,6 +118,9 @@ prepare_runtime_source() {
 
     # Normalize the generated worktree before applying the reviewed patch stack.
     # Reverse in the opposite order so repeated local builds stay reproducible.
+    if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/resonance-avoidance.patch" 2>/dev/null; then
+        git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/resonance-avoidance.patch"
+    fi
     if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/extra-solid-infills.patch" 2>/dev/null; then
         git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/extra-solid-infills.patch"
     fi
@@ -211,6 +214,9 @@ prepare_runtime_source() {
     git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/extra-solid-infills.patch" 2>/dev/null || \
         die "runtime extra-solid-infill bridge contains unreviewed changes"
     git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/extra-solid-infills.patch"
+    git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/resonance-avoidance.patch" 2>/dev/null || \
+        die "runtime resonance-avoidance bridge contains unreviewed changes"
+    git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/resonance-avoidance.patch"
 
     local engine_root="$SOURCE_ROOT/app/src/main/cpp/orcaslicer"
     local engine_patches=(
@@ -219,6 +225,7 @@ prepare_runtime_source() {
         "$SCRIPT_DIR/engine-branding.patch"
         "$SCRIPT_DIR/engine-support-flow-ratios.patch"
         "$SCRIPT_DIR/engine-initial-layer-travel-acceleration.patch"
+        "$SCRIPT_DIR/engine-resonance-profile.patch"
     )
     local engine_patches_applied=true
     local engine_patch

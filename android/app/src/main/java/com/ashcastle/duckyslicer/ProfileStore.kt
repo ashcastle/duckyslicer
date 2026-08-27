@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 103
+internal const val USER_PROFILE_SCHEMA_VERSION = 104
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -119,6 +119,9 @@ class ProfileStore private constructor(
             maxJerkZ = options.maxJerkZ,
             maxJerkE = options.maxJerkE,
             maxJunctionDeviation = options.maxJunctionDeviation,
+            resonanceAvoidance = options.printerProfile.resonanceAvoidance,
+            minResonanceAvoidanceSpeed = options.printerProfile.minResonanceAvoidanceSpeed,
+            maxResonanceAvoidanceSpeed = options.printerProfile.maxResonanceAvoidanceSpeed,
             retractLength = options.printerProfile.retractLength,
             retractSpeed = options.printerProfile.retractSpeed,
             deretractSpeed = options.printerProfile.deretractSpeed,
@@ -828,6 +831,9 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("maxJerkX", maxJerkX).put("maxJerkY", maxJerkY)
     .put("maxJerkZ", maxJerkZ).put("maxJerkE", maxJerkE)
     .put("maxJunctionDeviation", maxJunctionDeviation)
+    .put("resonanceAvoidance", resonanceAvoidance)
+    .put("minResonanceAvoidanceSpeed", minResonanceAvoidanceSpeed)
+    .put("maxResonanceAvoidanceSpeed", maxResonanceAvoidanceSpeed)
     .put("retractLength", retractLength).put("retractSpeed", retractSpeed)
     .put("deretractSpeed", deretractSpeed)
     .put("retractionMinimumTravel", retractionMinimumTravel)
@@ -1370,6 +1376,9 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         maxJerkZ = optDouble("maxJerkZ", 3.0).toFloat(),
         maxJerkE = optDouble("maxJerkE", 2.5).toFloat(),
         maxJunctionDeviation = optDouble("maxJunctionDeviation", 0.0).toFloat(),
+        resonanceAvoidance = optBoolean("resonanceAvoidance"),
+        minResonanceAvoidanceSpeed = optDouble("minResonanceAvoidanceSpeed", 70.0).toFloat(),
+        maxResonanceAvoidanceSpeed = optDouble("maxResonanceAvoidanceSpeed", 120.0).toFloat(),
         retractLength = retractLength,
         retractSpeed = optDouble("retractSpeed", 45.0).toFloat(),
         deretractSpeed = optDouble("deretractSpeed", 35.0).toFloat(),

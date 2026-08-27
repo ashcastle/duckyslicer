@@ -270,6 +270,9 @@ data class SliceConfig(
     @JvmField var supportFlowRatio: Float = 1f
     @JvmField var supportInterfaceFlowRatio: Float = 1f
     @JvmField var machineMaxJunctionDeviation: Float = 0f
+    @JvmField var resonanceAvoidance: Boolean = false
+    @JvmField var minResonanceAvoidanceSpeed: Float = 70f
+    @JvmField var maxResonanceAvoidanceSpeed: Float = 120f
     @JvmField var nozzleMaterial: Int = 0
     @JvmField var nozzleHrc: Int = 0
     @JvmField var nozzleHeight: Float = 2.5f

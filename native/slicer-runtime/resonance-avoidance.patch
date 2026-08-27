@@ -1,0 +1,62 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -527,6 +527,9 @@ struct SliceConfig {
+     float machine_max_jerk_z = 3.0f;
+     float machine_max_jerk_e = 2.5f;
+     float machine_max_junction_deviation = 0.0f;
++    bool resonance_avoidance = false;
++    float min_resonance_avoidance_speed = 70.0f;
++    float max_resonance_avoidance_speed = 120.0f;
+     int nozzle_material = 0;
+     int nozzle_hrc = 0;
+     float nozzle_height = 2.5f;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -560,6 +560,9 @@ SliceConfig readSliceConfig(JNIEnv* env, jobject configObj) {
+     config.machine_max_jerk_z = getFloat("machineMaxJerkZ");
+     config.machine_max_jerk_e = getFloat("machineMaxJerkE");
+     config.machine_max_junction_deviation = getFloat("machineMaxJunctionDeviation");
++    config.resonance_avoidance = getBool("resonanceAvoidance");
++    config.min_resonance_avoidance_speed = getFloat("minResonanceAvoidanceSpeed");
++    config.max_resonance_avoidance_speed = getFloat("maxResonanceAvoidanceSpeed");
+     config.nozzle_material = getInt("nozzleMaterial");
+     config.nozzle_hrc = getInt("nozzleHrc");
+     config.nozzle_height = getFloat("nozzleHeight");
+@@ -1195,6 +1198,9 @@ void writeSliceConfig(JNIEnv* env, jobject configObj, const SliceConfig& config) {
+     setFloat("machineMaxJerkZ", config.machine_max_jerk_z);
+     setFloat("machineMaxJerkE", config.machine_max_jerk_e);
+     setFloat("machineMaxJunctionDeviation", config.machine_max_junction_deviation);
++    setBool("resonanceAvoidance", config.resonance_avoidance);
++    setFloat("minResonanceAvoidanceSpeed", config.min_resonance_avoidance_speed);
++    setFloat("maxResonanceAvoidanceSpeed", config.max_resonance_avoidance_speed);
+     setInt("nozzleMaterial", config.nozzle_material);
+     setInt("nozzleHrc", config.nozzle_hrc);
+     setFloat("nozzleHeight", config.nozzle_height);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -607,6 +607,22 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfig& config) {
+     dpc.set_key_value(
+         "machine_max_junction_deviation",
+         machine_modes(config.machine_max_junction_deviation));
++    if (!std::isfinite(config.min_resonance_avoidance_speed) ||
++        !std::isfinite(config.max_resonance_avoidance_speed) ||
++        config.min_resonance_avoidance_speed < 0.0f ||
++        config.max_resonance_avoidance_speed < config.min_resonance_avoidance_speed ||
++        config.max_resonance_avoidance_speed > 2000.0f) {
++        throw std::invalid_argument("Invalid resonance avoidance speed range");
++    }
++    dpc.set_key_value(
++        "resonance_avoidance",
++        new Slic3r::ConfigOptionBool(config.resonance_avoidance));
++    dpc.set_key_value(
++        "min_resonance_avoidance_speed",
++        new Slic3r::ConfigOptionFloat(config.min_resonance_avoidance_speed));
++    dpc.set_key_value(
++        "max_resonance_avoidance_speed",
++        new Slic3r::ConfigOptionFloat(config.max_resonance_avoidance_speed));
+     if (config.nozzle_material < 0 || config.nozzle_material >= Slic3r::NozzleType::ntCount ||
+         config.nozzle_hrc < 0 || config.nozzle_hrc > 500) {
+         throw std::invalid_argument("Invalid nozzle hardness configuration");

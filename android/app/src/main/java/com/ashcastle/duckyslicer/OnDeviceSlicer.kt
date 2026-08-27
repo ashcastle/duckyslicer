@@ -260,6 +260,9 @@ data class PrinterProfile(
     val maxJerkZ: Float = 3f,
     val maxJerkE: Float = 2.5f,
     val maxJunctionDeviation: Float = 0f,
+    val resonanceAvoidance: Boolean = false,
+    val minResonanceAvoidanceSpeed: Float = 70f,
+    val maxResonanceAvoidanceSpeed: Float = 120f,
     val retractLength: Float = 0.8f,
     val retractSpeed: Float = 45f,
     val deretractSpeed: Float = 35f,
@@ -1316,7 +1319,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 101,
+    val schemaVersion: Int = 104,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2383,6 +2386,9 @@ data class SliceOptions(
             native.supportFlowRatio = supportFlowRatio
             native.supportInterfaceFlowRatio = supportInterfaceFlowRatio
             native.machineMaxJunctionDeviation = maxJunctionDeviation
+            native.resonanceAvoidance = printerProfile.resonanceAvoidance
+            native.minResonanceAvoidanceSpeed = printerProfile.minResonanceAvoidanceSpeed
+            native.maxResonanceAvoidanceSpeed = printerProfile.maxResonanceAvoidanceSpeed
             native.nozzleMaterial = printerProfile.nozzleMaterial.nativeValue
             native.nozzleHrc = printerProfile.nozzleHrc
             native.nozzleHeight = printerProfile.nozzleHeight

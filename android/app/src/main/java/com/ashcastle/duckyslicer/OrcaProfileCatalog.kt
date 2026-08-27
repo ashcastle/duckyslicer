@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 103) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 104) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -134,6 +134,9 @@ class OrcaProfileCatalog(private val context: Context) {
         maxJerkZ = input.readFloat(),
         maxJerkE = input.readFloat(),
         maxJunctionDeviation = input.readFloat(),
+        resonanceAvoidance = input.readCatalogBoolean(),
+        minResonanceAvoidanceSpeed = input.readFloat(),
+        maxResonanceAvoidanceSpeed = input.readFloat(),
         retractLength = input.readFloat(),
         retractSpeed = input.readFloat(),
         deretractSpeed = input.readFloat(),
@@ -414,6 +417,9 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("maxJerkZ", BINARY_FLOAT),
     BinaryField("maxJerkE", BINARY_FLOAT),
     BinaryField("maxJunctionDeviation", BINARY_FLOAT),
+    BinaryField("resonanceAvoidance", BINARY_BOOL),
+    BinaryField("minResonanceAvoidanceSpeed", BINARY_FLOAT),
+    BinaryField("maxResonanceAvoidanceSpeed", BINARY_FLOAT),
     BinaryField("retractLength", BINARY_FLOAT),
     BinaryField("retractSpeed", BINARY_FLOAT),
     BinaryField("deretractSpeed", BINARY_FLOAT),

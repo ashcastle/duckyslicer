@@ -971,6 +971,9 @@
     <string name="maximum_z_jerk">Maximum Z jerk</string>
     <string name="maximum_e_jerk">Maximum E jerk</string>
     <string name="maximum_junction_deviation">Maximum junction deviation</string>
+    <string name="resonance_avoidance">Avoid ringing speeds</string>
+    <string name="minimum_resonance_avoidance_speed">Minimum avoidance speed</string>
+    <string name="maximum_resonance_avoidance_speed">Maximum avoidance speed</string>
     <string name="acceleration_value">%1$.0f mm/s²</string>
     <string name="jerk_value">%1$.1f mm/s</string>
     <string name="junction_deviation_value">%1$.3f mm</string>

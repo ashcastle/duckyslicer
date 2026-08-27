@@ -58,6 +58,8 @@ internal object ProfileValidation {
             listOf(profile.maxJerkX, profile.maxJerkY, profile.maxJerkZ, profile.maxJerkE)
                 .all { it in 0f..100_000f } &&
             profile.maxJunctionDeviation in 0f..10f &&
+            profile.minResonanceAvoidanceSpeed in 0f..2_000f &&
+            profile.maxResonanceAvoidanceSpeed in profile.minResonanceAvoidanceSpeed..2_000f &&
             profile.retractLength in 0f..100f &&
             profile.retractSpeed in 0f..500f &&
             profile.deretractSpeed in 0f..500f &&

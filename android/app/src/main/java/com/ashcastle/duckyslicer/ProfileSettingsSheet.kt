@@ -1756,6 +1756,62 @@ private fun PrinterSettingsSheet(
             onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxJunctionDeviation = it)))
         },
     )
+    SettingsSwitch(
+        label = stringResource(R.string.resonance_avoidance),
+        checked = options.printerProfile.resonanceAvoidance,
+        onCheckedChange = { enabled ->
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(resonanceAvoidance = enabled),
+                ),
+            )
+        },
+    )
+    if (options.printerProfile.resonanceAvoidance || settingsQuery.isNotBlank()) {
+        QuantizedSettingSlider(
+            label = stringResource(R.string.minimum_resonance_avoidance_speed),
+            valueText = stringResource(
+                R.string.print_speed_value,
+                options.printerProfile.minResonanceAvoidanceSpeed,
+            ),
+            value = options.printerProfile.minResonanceAvoidanceSpeed,
+            minimum = 0f,
+            defaultMaximum = max(500f, options.printerProfile.maxResonanceAvoidanceSpeed),
+            increment = 1f,
+            onValueChange = { value ->
+                onOptionsChanged(
+                    options.copy(
+                        printerProfile = options.printerProfile.copy(
+                            minResonanceAvoidanceSpeed = min(
+                                value,
+                                options.printerProfile.maxResonanceAvoidanceSpeed,
+                            ),
+                        ),
+                    ),
+                )
+            },
+        )
+        QuantizedSettingSlider(
+            label = stringResource(R.string.maximum_resonance_avoidance_speed),
+            valueText = stringResource(
+                R.string.print_speed_value,
+                options.printerProfile.maxResonanceAvoidanceSpeed,
+            ),
+            value = options.printerProfile.maxResonanceAvoidanceSpeed,
+            minimum = options.printerProfile.minResonanceAvoidanceSpeed,
+            defaultMaximum = max(500f, options.printerProfile.maxResonanceAvoidanceSpeed),
+            increment = 1f,
+            onValueChange = { value ->
+                onOptionsChanged(
+                    options.copy(
+                        printerProfile = options.printerProfile.copy(
+                            maxResonanceAvoidanceSpeed = value,
+                        ),
+                    ),
+                )
+            },
+        )
+    }
     SaveProfileField(onSave = { name -> onSave(name, options) }, onDismiss = onDismiss)
     }
     if (profilesOpen) {
