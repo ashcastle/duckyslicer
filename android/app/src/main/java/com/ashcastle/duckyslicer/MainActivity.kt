@@ -908,6 +908,9 @@ private fun DuckySlicerScreen(
     val remoteMessage = remoteOperationMessageText(resources, remoteOperationMessage)
     val remoteMessageIsError = remoteOperationMessage?.isError ?: false
     val remoteBusy = remoteOperationState.busy
+    val documentExportEnabled =
+        projectRestored && !projectTransferBusy && !importing && !autoLaying &&
+            !arranging && !splitting && !cutting && !slicing && !previewLoading
 
     ReportDrawnWhen {
         initialWorkspaceReady(
@@ -946,9 +949,23 @@ private fun DuckySlicerScreen(
         remoteOperationModel.invalidateUpload()
     }
 
+    val projectShareActions = rememberProjectArchiveShareActions(
+        model = projectTransferModel,
+        completion = projectTransferState.completion,
+        snapshot = projectHistory.current,
+        plateOptions = projectTransferState.plateOptions,
+        busy = projectTransferState.busy,
+        enabled = documentExportEnabled,
+        onPresentation = { nextNotice, nextError ->
+            notice = nextNotice
+            error = nextError
+        },
+    )
+
     ProjectTransferCompletionEffect(
         completion = projectTransferState.completion,
         externalRequest = externalProjectRequest,
+        projectShareOperationId = projectShareActions.pendingOperationId,
         supportEvents = supportEvents,
         onExternalConsumed = onExternalProjectRequestConsumed,
         onConsumeCompletion = projectTransferModel::consumeCompletion,
@@ -1390,9 +1407,6 @@ private fun DuckySlicerScreen(
         onConfirmationRequired = { externalProjectConfirmation = it },
     )
 
-    val documentExportEnabled =
-        projectRestored && !projectTransferBusy && !importing && !autoLaying &&
-            !arranging && !splitting && !cutting && !slicing && !previewLoading
     val projectSavePicker = rememberProjectDocumentCreator(
         projectTransferModel = projectTransferModel,
         enabled = documentExportEnabled,
@@ -1654,6 +1668,7 @@ private fun DuckySlicerScreen(
         onOpenRecentProject = ::importRecentProject,
         onForgetRecentProject = ::forgetRecentProject,
         onSaveProject = projectSaveAction(projectTransferModel, projectSavePicker),
+        onShareProject = projectShareActions.start,
         onExportModel = {
             val sourceName = projectHistory.current.selectedObject
                 ?.primaryModelPart?.model?.fileName
@@ -2217,6 +2232,7 @@ internal fun profileTransferSuccessNotice(
 private fun ProjectTransferCompletionEffect(
     completion: ProjectTransferCompletion?,
     externalRequest: ExternalProjectRequest?,
+    projectShareOperationId: Long?,
     supportEvents: SupportEventJournal,
     onExternalConsumed: (Long, Long) -> Boolean,
     onConsumeCompletion: (Long) -> Unit,
@@ -2234,14 +2250,16 @@ private fun ProjectTransferCompletionEffect(
                 onPresentation(resources.getString(R.string.project_opened), null)
             }
             is ProjectTransferCompletion.Exported -> {
-                val notice = resources.getString(
-                    if (current.format != ProjectExportFormat.PROJECT_ARCHIVE) {
-                        R.string.model_exported
-                    } else {
-                        R.string.project_saved
-                    },
-                )
-                onPresentation(notice, null)
+                if (current.id != projectShareOperationId) {
+                    val notice = resources.getString(
+                        if (current.format != ProjectExportFormat.PROJECT_ARCHIVE) {
+                            R.string.model_exported
+                        } else {
+                            R.string.project_saved
+                        },
+                    )
+                    onPresentation(notice, null)
+                }
             }
             is ProjectTransferCompletion.Canceled -> {
                 val notice = if (current.direction == ProjectTransferDirection.IMPORT) {

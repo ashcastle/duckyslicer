@@ -240,6 +240,14 @@ def valid_manifest(*, debug: bool = False) -> str:
         E: meta-data (line=39)
           A: android:name(0x01010003)="android.support.FILE_PROVIDER_PATHS" (Raw: "android.support.FILE_PROVIDER_PATHS")
           A: android:resource(0x01010025)=@0x7f0b0004
+      E: provider (line=41)
+        A: android:name(0x01010003)="com.ashcastle.duckyslicer.ProjectArchiveShareProvider" (Raw: "com.ashcastle.duckyslicer.ProjectArchiveShareProvider")
+        A: android:authorities(0x01010018)="com.ashcastle.duckyslicer.project-share" (Raw: "com.ashcastle.duckyslicer.project-share")
+        A: android:exported(0x01010010)=(type 0x12)0x0
+        A: android:grantUriPermissions(0x0101001b)=(type 0x12)0xffffffff
+        E: meta-data (line=42)
+          A: android:name(0x01010003)="android.support.FILE_PROVIDER_PATHS" (Raw: "android.support.FILE_PROVIDER_PATHS")
+          A: android:resource(0x01010025)=@0x7f0b0005
       E: service (line=40)
         A: android:name(0x01010003)="com.ashcastle.duckyslicer.SlicerProcessService" (Raw: "com.ashcastle.duckyslicer.SlicerProcessService")
         A: android:exported(0x01010010)=(type 0x12)0x0
@@ -417,6 +425,30 @@ class VerifyArtifactManifestTest(unittest.TestCase):
             '(Raw: "com.ashcastle.duckyslicer.ProfileBundleShareProvider")\n'
             '        A: android:authorities(0x01010018)="com.ashcastle.duckyslicer.profile-share" '
             '(Raw: "com.ashcastle.duckyslicer.profile-share")\n'
+            '        A: android:exported(0x01010010)=(type 0x12)0xffffffff',
+        )
+        with self.assertRaisesRegex(VerificationError, "component allowlist"):
+            verify_aapt_output(source, "release")
+
+    def test_rejects_broad_project_archive_share_provider_authority(self) -> None:
+        source = valid_manifest().replace(
+            "com.ashcastle.duckyslicer.project-share",
+            "com.ashcastle.duckyslicer.files",
+        )
+        with self.assertRaisesRegex(VerificationError, "project archive share provider authority"):
+            verify_aapt_output(source, "release")
+
+    def test_rejects_exported_project_archive_share_provider(self) -> None:
+        source = valid_manifest().replace(
+            'A: android:name(0x01010003)="com.ashcastle.duckyslicer.ProjectArchiveShareProvider" '
+            '(Raw: "com.ashcastle.duckyslicer.ProjectArchiveShareProvider")\n'
+            '        A: android:authorities(0x01010018)="com.ashcastle.duckyslicer.project-share" '
+            '(Raw: "com.ashcastle.duckyslicer.project-share")\n'
+            '        A: android:exported(0x01010010)=(type 0x12)0x0',
+            'A: android:name(0x01010003)="com.ashcastle.duckyslicer.ProjectArchiveShareProvider" '
+            '(Raw: "com.ashcastle.duckyslicer.ProjectArchiveShareProvider")\n'
+            '        A: android:authorities(0x01010018)="com.ashcastle.duckyslicer.project-share" '
+            '(Raw: "com.ashcastle.duckyslicer.project-share")\n'
             '        A: android:exported(0x01010010)=(type 0x12)0xffffffff',
         )
         with self.assertRaisesRegex(VerificationError, "component allowlist"):

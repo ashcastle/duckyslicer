@@ -350,6 +350,91 @@ class CreatedDocumentLifecycleInstrumentedTest {
     }
 
     @Test
+    fun portableProjectSharePreservesLinkedDocumentAndUnsavedState() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val testContext = instrumentation.context
+        val resolver = context.contentResolver
+        val linkedUri = BlockingExportProvider.URI
+        val grantFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        testContext.grantUriPermission(context.packageName, linkedUri, grantFlags)
+        assertTrue(resolver.retainProjectDocumentWritePermission(linkedUri))
+        val shareRoot = File(context.filesDir, "project-shares")
+        shareRoot.deleteRecursively()
+        val store = ViewModelStore()
+        try {
+            resolver.call(linkedUri, BlockingExportProvider.METHOD_PREPARE, null, null)
+            releaseProvider()
+            val application = context.applicationContext as Application
+            val model = ViewModelProvider(
+                store,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[ProjectTransferViewModel::class.java]
+            waitUntil("project session did not restore") {
+                model.state.value.restored && !model.state.value.busy
+            }
+            assertTrue(
+                model.exportProject(
+                    linkedUri,
+                    model.state.value.history.current,
+                    model.state.value.plateOptions,
+                ),
+            )
+            waitUntil("linked project export did not complete") {
+                model.state.value.completion is ProjectTransferCompletion.Exported
+            }
+            assertEquals(linkedUri, model.state.value.linkedDocument?.contentUri)
+            model.consumeCompletion(checkNotNull(model.state.value.completion).id)
+
+            val beforeEdit = model.state.value
+            assertTrue(
+                model.updateSession(
+                    expectedHistory = beforeEdit.history,
+                    nextHistory = beforeEdit.history,
+                    expectedOptions = beforeEdit.sliceOptions,
+                    nextOptions = beforeEdit.sliceOptions.copy(fillDensity = 0.43f),
+                ),
+            )
+            assertTrue(model.state.value.linkedDocumentDirty)
+
+            val target = requireNotNull(prepareProjectArchiveShare(context))
+            val shareState = model.state.value
+            assertTrue(
+                model.exportProject(
+                    uri = target.uri,
+                    snapshot = shareState.history.current,
+                    plateOptions = shareState.plateOptions,
+                    updateLinkedDocument = false,
+                ),
+            )
+            waitUntil("portable project share did not complete") {
+                model.state.value.completion is ProjectTransferCompletion.Exported
+            }
+            val completion = model.state.value.completion as ProjectTransferCompletion.Exported
+            assertEquals(target.uri, completion.uri)
+            assertEquals(linkedUri, model.state.value.linkedDocument?.contentUri)
+            assertTrue("Sharing must not mark the linked project as saved", model.state.value.linkedDocumentDirty)
+            assertTrue(target.file.length() > 0L)
+        } finally {
+            store.clear()
+            shareRoot.deleteRecursively()
+            runCatching {
+                resolver.releasePersistableUriPermission(
+                    linkedUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            testContext.revokeUriPermission(
+                linkedUri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+            releaseProvider()
+        }
+    }
+
+    @Test
     fun projectExportCancellationSurvivesRecreationAndDeletesThePartialDocument() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val resolver = context.contentResolver

@@ -117,6 +117,10 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "ProjectState.kt",
         "ProjectTransfer.kt",
         "CreatedDocument.kt",
+        "ProjectArchiveShare.kt",
+        "ProjectArchiveShareActions.kt",
+        "ProjectArchiveShareProvider.kt",
+        "project_archive_share_paths.xml",
         "MainActivity.kt",
         "WorkspaceScreen.kt",
         "ObjectProcessSettingsSheet.kt",
@@ -129,10 +133,12 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "ProjectArchiveIntentInstrumentedTest.kt",
         "ModelOpenIntentInstrumentedTest.kt",
         "CreatedDocumentLifecycleInstrumentedTest.kt",
+        "ProjectArchiveShareInstrumentedTest.kt",
         "ProjectImportLifecycleInstrumentedTest.kt",
         "BlockingExportProvider.java",
         "BlockingImportProvider.java",
         "AccessibilityInstrumentedTest.kt",
+        "AccessibilityHarnessActivity.kt",
         "NativeEngineInstrumentedTest.kt",
         "OrcaVolumeSemanticsInstrumentedTest.kt",
         "OrcaHeightRangeModifiersInstrumentedTest.kt",
@@ -582,6 +588,42 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         raise VerificationError("MainActivity must receive a second project through onNewIntent")
     if main_activity.attrib.get(f"{ANDROID_NAMESPACE}intentMatchingFlags") != "enforceIntentFilter":
         raise VerificationError("MainActivity must enforce its external intent allowlist")
+    project_share_providers = [
+        provider
+        for provider in manifest.findall("./application/provider")
+        if provider.attrib.get(f"{ANDROID_NAMESPACE}name") == ".ProjectArchiveShareProvider"
+    ]
+    if len(project_share_providers) != 1:
+        raise VerificationError("project archive share provider declaration is missing or duplicated")
+    project_share_provider = project_share_providers[0]
+    project_share_metadata = project_share_provider.findall("meta-data")
+    if (
+        project_share_provider.attrib.get(f"{ANDROID_NAMESPACE}authorities") !=
+        "${applicationId}.project-share"
+        or project_share_provider.attrib.get(f"{ANDROID_NAMESPACE}exported") != "false"
+        or project_share_provider.attrib.get(f"{ANDROID_NAMESPACE}grantUriPermissions") != "true"
+        or len(project_share_metadata) != 1
+        or project_share_metadata[0].attrib.get(f"{ANDROID_NAMESPACE}name") !=
+        "android.support.FILE_PROVIDER_PATHS"
+        or project_share_metadata[0].attrib.get(f"{ANDROID_NAMESPACE}resource") !=
+        "@xml/project_archive_share_paths"
+    ):
+        raise VerificationError("project archive share provider is not private and narrowly granted")
+    try:
+        project_share_paths = ElementTree.fromstring(sources["project_archive_share_paths.xml"])
+    except ElementTree.ParseError as error:
+        raise VerificationError(f"project archive share path XML is invalid: {error}") from error
+    project_share_path_nodes = list(project_share_paths)
+    if (
+        project_share_paths.tag != "paths"
+        or len(project_share_path_nodes) != 1
+        or project_share_path_nodes[0].tag != "files-path"
+        or project_share_path_nodes[0].attrib != {
+            "name": "project-archives",
+            "path": "project-shares/",
+        }
+    ):
+        raise VerificationError("project archive share path must expose only project-shares/")
     view_filters: list[tuple[set[str], set[str], set[str], set[str], set[str]]] = []
     for intent_filter in main_activity.findall("intent-filter"):
         actions = {
@@ -852,6 +894,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "renameSelectedPlate(name)",
             "onMovePlate = { targetIndex ->",
             "moveSelectedPlateTo(targetIndex)",
+            "rememberProjectArchiveShareActions(",
+            "projectShareOperationId = projectShareActions.pendingOperationId",
+            "onShareProject = projectShareActions.start",
         ),
     )
     _require_markers(
@@ -896,6 +941,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "onForgetRecentProject(document)",
             "R.string.project_save_options",
             "R.string.save_project_as",
+            "onShareProject: () -> Unit",
+            "R.string.share_project",
+            "onShareProject()",
             "onPlateSelected",
             "onAddPlate",
             "onDuplicatePlate",
@@ -937,6 +985,54 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "onHeightRangeModifiersChanged",
         ),
     )
+    project_transfer = sources["ProjectTransfer.kt"]
+    _require_markers(
+        "ProjectTransfer.kt",
+        project_transfer,
+        (
+            "updateLinkedDocument: Boolean = true",
+            "if (updateLinkedDocument) {",
+            "completion is ProjectTransferCompletion.Exported && updateLinkedDocument",
+        ),
+    )
+    project_share = sources["ProjectArchiveShare.kt"]
+    _require_markers(
+        "ProjectArchiveShare.kt",
+        project_share,
+        (
+            "context.filesDir.canonicalFile",
+            "Files.createDirectories(shareRoot.toPath())",
+            "existing.forEach { stale -> if (!stale.delete()) return null }",
+            "Files.createTempFile(",
+            '"${context.packageName}.project-share"',
+            "PROJECT_ARCHIVE_MIME_TYPE",
+            "Intent(Intent.ACTION_SEND)",
+            "Intent.EXTRA_STREAM",
+            "Intent.EXTRA_TITLE",
+            "ClipData.newUri(",
+            "Intent.FLAG_GRANT_READ_URI_PERMISSION",
+            "discardProjectArchiveShare(context: Context, path: String?)",
+        ),
+    )
+    if "FLAG_GRANT_WRITE_URI_PERMISSION" in project_share:
+        raise VerificationError("project archive shares must grant read-only access")
+    _require_markers(
+        "ProjectArchiveShareActions.kt",
+        sources["ProjectArchiveShareActions.kt"],
+        (
+            "rememberSaveable { mutableStateOf<Long?>(null) }",
+            "completed.id != pendingOperationId",
+            "Intent.createChooser(shareIntent, shareTitle)",
+            "discardProjectArchiveShare(context, pendingPath)",
+            "model.exportProject(",
+            "updateLinkedDocument = false",
+            "pendingOperationId = model.state.value.activeTransferId",
+        ),
+    )
+    if "FileProvider(R.xml.project_archive_share_paths)" not in sources[
+        "ProjectArchiveShareProvider.kt"
+    ]:
+        raise VerificationError("project archive share provider must bind its dedicated path")
     _require_markers(
         "ObjectProcessSettingsSheet.kt",
         sources["ObjectProcessSettingsSheet.kt"],
@@ -1165,6 +1261,21 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "scenario.recreate()",
             "retained.cancelProjectExport()",
             "store.clear()",
+            "portableProjectSharePreservesLinkedDocumentAndUnsavedState",
+            "updateLinkedDocument = false",
+            "Sharing must not mark the linked project as saved",
+        ),
+    )
+    _require_markers(
+        "ProjectArchiveShareInstrumentedTest.kt",
+        sources["ProjectArchiveShareInstrumentedTest.kt"],
+        (
+            "preparedProjectArchiveSharesOneExactReadOnlyDocument",
+            "Intent.FLAG_GRANT_READ_URI_PERMISSION",
+            "Intent.FLAG_GRANT_WRITE_URI_PERMISSION",
+            "FileProvider.getUriForFile(",
+            "assertEquals(1,",
+            "assertArrayEquals(",
         ),
     )
     _require_markers(
@@ -1186,6 +1297,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "cancelProjectImportActionIsReachable",
             "cancelProjectExportActionIsReachable",
             "projectActionsAreVisibleAndOpeningConfirmsReplacement",
+            "projectShareActionIsReachableFromTheSaveMenu",
             "recentProjectIsFocusableAndUsesTheExistingReplacementWarning",
             "R.string.recent_projects",
             "R.string.recent_project_actions",
@@ -1194,6 +1306,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "R.string.project_save_options",
             "R.string.save_project_as",
             "Save project as must be reachable from the split action",
+            "R.string.share_project",
+            "Share project must be reachable from the split action",
+            "TEST_PROJECT_SHARE_REQUESTED_LABEL",
             "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions",
             "plateSwitcherDuplicatesTheSelectedPlateAndSelectsTheCopy",
             "plateSwitcherRenamesAndReordersTheSelectedPlate",
@@ -1205,6 +1320,20 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "heightRangeModifiersExposeRangeSettingsAndStickyActions",
         ),
     )
+    _require_markers(
+        "AccessibilityHarnessActivity.kt",
+        sources["AccessibilityHarnessActivity.kt"],
+        (
+            "onShareProject = { harnessNotice = TEST_PROJECT_SHARE_REQUESTED_LABEL }",
+            "Accessibility project share requested",
+        ),
+    )
+    for source_name in ("strings.xml", "strings-ko.xml"):
+        _require_markers(
+            source_name,
+            sources[source_name],
+            ('name="share_project"', 'name="project_share_error"'),
+        )
     _require_markers(
         "CONTRIBUTING.md",
         sources["CONTRIBUTING.md"],
@@ -1285,6 +1414,18 @@ def read_sources() -> dict[str, str]:
         "ProjectState.kt": (package / "ProjectState.kt").read_text(encoding="utf-8"),
         "ProjectTransfer.kt": (package / "ProjectTransfer.kt").read_text(encoding="utf-8"),
         "CreatedDocument.kt": (package / "CreatedDocument.kt").read_text(encoding="utf-8"),
+        "ProjectArchiveShare.kt": (package / "ProjectArchiveShare.kt").read_text(
+            encoding="utf-8"
+        ),
+        "ProjectArchiveShareActions.kt": (package / "ProjectArchiveShareActions.kt").read_text(
+            encoding="utf-8"
+        ),
+        "ProjectArchiveShareProvider.kt": (package / "ProjectArchiveShareProvider.kt").read_text(
+            encoding="utf-8"
+        ),
+        "project_archive_share_paths.xml": (
+            tests / "main/res/xml/project_archive_share_paths.xml"
+        ).read_text(encoding="utf-8"),
         "MainActivity.kt": (package / "MainActivity.kt").read_text(encoding="utf-8"),
         "ProjectEditCompletionEffect.kt": (
             package / "ProjectEditCompletionEffect.kt"
@@ -1320,6 +1461,10 @@ def read_sources() -> dict[str, str]:
             tests
             / "androidTest/java/com/ashcastle/duckyslicer/CreatedDocumentLifecycleInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
+        "ProjectArchiveShareInstrumentedTest.kt": (
+            tests
+            / "androidTest/java/com/ashcastle/duckyslicer/ProjectArchiveShareInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
         "ProjectImportLifecycleInstrumentedTest.kt": (
             tests
             / "androidTest/java/com/ashcastle/duckyslicer/ProjectImportLifecycleInstrumentedTest.kt"
@@ -1332,6 +1477,9 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "AccessibilityInstrumentedTest.kt": (
             tests / "androidTest/java/com/ashcastle/duckyslicer/AccessibilityInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "AccessibilityHarnessActivity.kt": (
+            tests / "debug/java/com/ashcastle/duckyslicer/AccessibilityHarnessActivity.kt"
         ).read_text(encoding="utf-8"),
         "NativeEngineInstrumentedTest.kt": (
             tests / "androidTest/java/com/ashcastle/duckyslicer/NativeEngineInstrumentedTest.kt"

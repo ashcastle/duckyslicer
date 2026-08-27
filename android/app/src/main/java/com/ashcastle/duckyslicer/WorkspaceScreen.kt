@@ -545,6 +545,7 @@ internal fun WorkspaceScreen(
     onOpenRecentProject: (LinkedProjectDocument) -> Unit,
     onForgetRecentProject: (LinkedProjectDocument) -> Unit,
     onSaveProject: (Boolean) -> Unit,
+    onShareProject: () -> Unit,
     onExportModel: () -> Unit,
     onExportSelectedStl: () -> Unit,
     onPlateSelected: (String) -> Unit,
@@ -1297,6 +1298,7 @@ internal fun WorkspaceScreen(
                     onOpenRecentProject = onOpenRecentProject,
                     onForgetRecentProject = onForgetRecentProject,
                     onSaveProject = onSaveProject,
+                    onShareProject = onShareProject,
                     onCancelProjectImport = onCancelProjectImport,
                     onCancelProjectExport = onCancelProjectExport,
                     modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
@@ -7918,6 +7920,7 @@ private fun ProjectSheet(
     onOpenRecentProject: (LinkedProjectDocument) -> Unit,
     onForgetRecentProject: (LinkedProjectDocument) -> Unit,
     onSaveProject: (Boolean) -> Unit,
+    onShareProject: () -> Unit,
     onCancelProjectImport: () -> Unit,
     onCancelProjectExport: () -> Unit,
     modifier: Modifier = Modifier,
@@ -8244,6 +8247,14 @@ private fun ProjectSheet(
                             onClick = {
                                 saveMenuExpanded = false
                                 onSaveProject(true)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.share_project)) },
+                            leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                            onClick = {
+                                saveMenuExpanded = false
+                                onShareProject()
                             },
                         )
                     }

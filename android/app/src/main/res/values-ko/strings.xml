@@ -764,6 +764,8 @@
     <string name="recent_project_remove_error">이 최근 프로젝트를 제거하지 못했습니다.</string>
     <string name="save_project">프로젝트 저장</string>
     <string name="save_project_as">다른 이름으로 프로젝트 저장…</string>
+    <string name="share_project">프로젝트 공유</string>
+    <string name="project_share_error">프로젝트를 공유하지 못했습니다.</string>
     <string name="project_save_options">프로젝트 저장 옵션</string>
     <string name="linked_project_file">파일: %1$s</string>
     <string name="linked_project_unsaved">저장하지 않은 변경사항</string>

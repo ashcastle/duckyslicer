@@ -7,6 +7,8 @@ from tools.verify_project_archive import REQUIRED_STRINGS, VerificationError, ve
 
 def string_resources() -> str:
     values = "".join(f'<string name="{name}">{name}</string>' for name in REQUIRED_STRINGS)
+    values += '<string name="share_project">Share project</string>'
+    values += '<string name="project_share_error">Could not share project.</string>'
     return f"<resources>{values}</resources>"
 
 
@@ -233,8 +235,30 @@ def valid_sources() -> dict[str, str]:
                 "catch (failure: CancellationException) consumeCompletion",
                 "fun createAuxiliaryPrimitive( createOrcaAuxiliaryPrimitive( "
                 "addAuxiliaryVolumeToSelected fun editAuxiliaryVolume( "
-                "editOrcaAuxiliaryVolume( replaceSelectedAuxiliaryVolume",
+                "editOrcaAuxiliaryVolume( replaceSelectedAuxiliaryVolume "
+                "updateLinkedDocument: Boolean = true if (updateLinkedDocument) { "
+                "completion is ProjectTransferCompletion.Exported && updateLinkedDocument",
             )
+        ),
+        "ProjectArchiveShare.kt": (
+            "context.filesDir.canonicalFile Files.createDirectories(shareRoot.toPath()) "
+            "existing.forEach { stale -> if (!stale.delete()) return null } Files.createTempFile( "
+            '"${context.packageName}.project-share" PROJECT_ARCHIVE_MIME_TYPE '
+            "Intent(Intent.ACTION_SEND) Intent.EXTRA_STREAM Intent.EXTRA_TITLE ClipData.newUri( "
+            "Intent.FLAG_GRANT_READ_URI_PERMISSION "
+            "discardProjectArchiveShare(context: Context, path: String?)"
+        ),
+        "ProjectArchiveShareActions.kt": (
+            "rememberSaveable { mutableStateOf<Long?>(null) } completed.id != pendingOperationId "
+            "Intent.createChooser(shareIntent, shareTitle) "
+            "discardProjectArchiveShare(context, pendingPath) model.exportProject( "
+            "updateLinkedDocument = false pendingOperationId = model.state.value.activeTransferId"
+        ),
+        "ProjectArchiveShareProvider.kt": (
+            "class ProjectArchiveShareProvider FileProvider(R.xml.project_archive_share_paths)"
+        ),
+        "project_archive_share_paths.xml": (
+            '<paths><files-path name="project-archives" path="project-shares/" /></paths>'
         ),
         "CreatedDocument.kt": (
             "fun deleteFailedCreatedDocument(context: Context, uri: Uri) "
@@ -284,7 +308,10 @@ def valid_sources() -> dict[str, str]:
                 "onDuplicatePlate = { val sourceVolumeCount = source.objects.sumOf { it.volumes.size } "
                 "duplicateSelectedPlate( notice = resources.getString(R.string.plate_duplicated) "
                 "onRenamePlate = { name -> renameSelectedPlate(name) "
-                "onMovePlate = { targetIndex -> moveSelectedPlateTo(targetIndex)",
+                "onMovePlate = { targetIndex -> moveSelectedPlateTo(targetIndex) "
+                "rememberProjectArchiveShareActions( "
+                "projectShareOperationId = projectShareActions.pendingOperationId "
+                "onShareProject = projectShareActions.start",
             )
             ),
             "ProjectEditCompletionEffect.kt": (
@@ -301,6 +328,7 @@ def valid_sources() -> dict[str, str]:
             "R.string.recent_projects onOpenRecentProject(document) "
             "R.string.remove_recent_project onForgetRecentProject(document) "
             "R.string.project_save_options R.string.save_project_as "
+            "onShareProject: () -> Unit R.string.share_project onShareProject() "
             "onPlateSelected onAddPlate "
             "onDuplicatePlate onRemovePlate PlateSwitcher( canDuplicateSelectedPlate "
             "onRenamePlate onMovePlate R.string.duplicate_plate R.string.rename_plate "
@@ -390,7 +418,14 @@ def valid_sources() -> dict[str, str]:
             "finalProjectOwnerClearStopsItsExportAndDeletesThePartialDocument "
             "BlockingExportProvider.METHOD_PREPARE "
             "BlockingExportProvider.METHOD_PREPARE_OPEN_BLOCK scenario.recreate() "
-            "retained.cancelProjectExport() store.clear()"
+            "retained.cancelProjectExport() store.clear() "
+            "portableProjectSharePreservesLinkedDocumentAndUnsavedState "
+            "updateLinkedDocument = false Sharing must not mark the linked project as saved"
+        ),
+        "ProjectArchiveShareInstrumentedTest.kt": (
+            "preparedProjectArchiveSharesOneExactReadOnlyDocument "
+            "Intent.FLAG_GRANT_READ_URI_PERMISSION Intent.FLAG_GRANT_WRITE_URI_PERMISSION "
+            "FileProvider.getUriForFile( assertEquals(1, assertArrayEquals("
         ),
         "ProjectImportLifecycleInstrumentedTest.kt": (
             "projectImportCancellationSurvivesRecreationAndPreservesTheCurrentProject "
@@ -419,11 +454,14 @@ def valid_sources() -> dict[str, str]:
         "AccessibilityInstrumentedTest.kt": (
             "cancelProjectImportActionIsReachable cancelProjectExportActionIsReachable "
             "projectActionsAreVisibleAndOpeningConfirmsReplacement R.string.project_save_options "
+            "projectShareActionIsReachableFromTheSaveMenu "
             "recentProjectIsFocusableAndUsesTheExistingReplacementWarning R.string.recent_projects "
             "R.string.recent_project_actions R.string.remove_recent_project "
             "dirtyEmptyLinkedProjectRequiresConfirmationBeforeOpenOrNew "
             "R.string.linked_project_unsaved R.string.replace_project_unsaved_body "
             "R.string.save_project_as Save project as must be reachable from the split action "
+            "R.string.share_project Share project must be reachable from the split action "
+            "TEST_PROJECT_SHARE_REQUESTED_LABEL "
             "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions "
             "plateSwitcherDuplicatesTheSelectedPlateAndSelectsTheCopy R.string.duplicate_plate "
             "plateSwitcherRenamesAndReordersTheSelectedPlate R.string.rename_plate "
@@ -431,6 +469,10 @@ def valid_sources() -> dict[str, str]:
             "auxiliaryVolumeManagerExposesExistingRegionsRemovalAndAdd "
             "auxiliaryVolumeEditorExposesScalePlacementDensityAndApply "
             "heightRangeModifiersExposeRangeSettingsAndStickyActions"
+        ),
+        "AccessibilityHarnessActivity.kt": (
+            "onShareProject = { harnessNotice = TEST_PROJECT_SHARE_REQUESTED_LABEL } "
+            "Accessibility project share requested"
         ),
         "NativeEngineInstrumentedTest.kt": (
             "projectArchiveRoundTripReinspectsAndSlicesOnArm64 "
@@ -455,7 +497,12 @@ def valid_sources() -> dict[str, str]:
         "strings-ko.xml": string_resources(),
         "AndroidManifest.xml": (
             '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
-            '<application><activity android:name=".MainActivity" '
+            '<application><provider android:name=".ProjectArchiveShareProvider" '
+            'android:authorities="${applicationId}.project-share" '
+            'android:exported="false" android:grantUriPermissions="true">'
+            '<meta-data android:name="android.support.FILE_PROVIDER_PATHS" '
+            'android:resource="@xml/project_archive_share_paths" /></provider>'
+            '<activity android:name=".MainActivity" '
             'android:launchMode="singleTop" '
             'android:intentMatchingFlags="enforceIntentFilter">'
             '<intent-filter><action android:name="android.intent.action.VIEW" />'
@@ -649,6 +696,37 @@ class VerifyProjectArchiveTest(unittest.TestCase):
         sources = valid_sources()
         sources["MainActivity.kt"] += " ACTION_SEND"
         with self.assertRaisesRegex(VerificationError, "user-chosen"):
+            verify_project_archive(sources)
+
+    def test_rejects_broad_project_share_path(self) -> None:
+        sources = valid_sources()
+        sources["project_archive_share_paths.xml"] = sources[
+            "project_archive_share_paths.xml"
+        ].replace('path="project-shares/"', 'path="."')
+        with self.assertRaisesRegex(VerificationError, "expose only project-shares"):
+            verify_project_archive(sources)
+
+    def test_rejects_exported_project_share_provider(self) -> None:
+        sources = valid_sources()
+        sources["AndroidManifest.xml"] = sources["AndroidManifest.xml"].replace(
+            'android:exported="false" android:grantUriPermissions="true"',
+            'android:exported="true" android:grantUriPermissions="true"',
+        )
+        with self.assertRaisesRegex(VerificationError, "private and narrowly granted"):
+            verify_project_archive(sources)
+
+    def test_rejects_writable_project_share_grant(self) -> None:
+        sources = valid_sources()
+        sources["ProjectArchiveShare.kt"] += " FLAG_GRANT_WRITE_URI_PERMISSION"
+        with self.assertRaisesRegex(VerificationError, "read-only"):
+            verify_project_archive(sources)
+
+    def test_rejects_project_share_that_relinks_the_document(self) -> None:
+        sources = valid_sources()
+        sources["ProjectArchiveShareActions.kt"] = sources[
+            "ProjectArchiveShareActions.kt"
+        ].replace("updateLinkedDocument = false", "updateLinkedDocument = true")
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
             verify_project_archive(sources)
 
     def test_rejects_missing_privacy_disclosure(self) -> None:

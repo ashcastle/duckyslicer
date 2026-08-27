@@ -360,6 +360,7 @@ def _expected_components(variant: str) -> set[tuple[str, str, bool, str | None]]
         ("service", f"{PACKAGE_NAME}.SlicerProcessService", False, None),
         ("provider", f"{PACKAGE_NAME}.GcodeShareProvider", False, None),
         ("provider", f"{PACKAGE_NAME}.ProfileBundleShareProvider", False, None),
+        ("provider", f"{PACKAGE_NAME}.ProjectArchiveShareProvider", False, None),
         ("provider", "androidx.startup.InitializationProvider", False, None),
         (
             "receiver",
@@ -452,6 +453,7 @@ def verify_manifest(root: ManifestNode, variant: str) -> None:
     for provider_name, authority, label in (
         ("GcodeShareProvider", "slice-share", "G-code"),
         ("ProfileBundleShareProvider", "profile-share", "profile bundle"),
+        ("ProjectArchiveShareProvider", "project-share", "project archive"),
     ):
         share_provider = next(
             node

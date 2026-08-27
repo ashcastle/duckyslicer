@@ -1145,6 +1145,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         snapshot: ProjectSnapshot,
         plateOptions: Map<String, SliceOptions>,
         deleteFailedDocument: Boolean = true,
+        updateLinkedDocument: Boolean = true,
     ): Boolean {
         if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
         val operation = ActiveProjectTransfer(
@@ -1183,9 +1184,11 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                         }
                     }
                 }
-                linkedDocument = application.contentResolver
-                    .takeIf { resolver -> resolver.retainProjectDocumentWritePermission(uri) }
-                    ?.linkedProjectDocument(uri)
+                if (updateLinkedDocument) {
+                    linkedDocument = application.contentResolver
+                        .takeIf { resolver -> resolver.retainProjectDocumentWritePermission(uri) }
+                        ?.linkedProjectDocument(uri)
+                }
                 ProjectTransferCompletion.Exported(operation.id, uri)
             } catch (_: CancellationException) {
                 cancellation.cancel()
@@ -1216,7 +1219,9 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 }
                 val settled = mutableState.value.withCompletedTransfer(operation, completion)
                     ?: return@synchronized
-                val updated = if (completion is ProjectTransferCompletion.Exported) {
+                val updated = if (
+                    completion is ProjectTransferCompletion.Exported && updateLinkedDocument
+                ) {
                     settled.withLinkedDocument(linkedDocument)
                 } else {
                     settled

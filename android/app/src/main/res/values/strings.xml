@@ -764,6 +764,8 @@
     <string name="recent_project_remove_error">Couldn’t remove this recent project.</string>
     <string name="save_project">Save project</string>
     <string name="save_project_as">Save project as…</string>
+    <string name="share_project">Share project</string>
+    <string name="project_share_error">Couldn’t share the project.</string>
     <string name="project_save_options">Project save options</string>
     <string name="linked_project_file">File: %1$s</string>
     <string name="linked_project_unsaved">Unsaved changes</string>

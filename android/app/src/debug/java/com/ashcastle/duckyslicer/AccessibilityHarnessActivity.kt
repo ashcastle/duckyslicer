@@ -648,6 +648,7 @@ private fun WorkspaceAccessibilityHarness(
             harnessNotice = recentProjectRemoved
         },
         onSaveProject = {},
+        onShareProject = { harnessNotice = TEST_PROJECT_SHARE_REQUESTED_LABEL },
         onExportModel = {},
         onExportSelectedStl = {},
         onPlateSelected = { selectedPlateId = it },
@@ -933,3 +934,4 @@ internal const val TEST_SLICE_ALL_REQUESTED_LABEL = "Accessibility all plates re
 internal const val TEST_EXPORT_ALL_REQUESTED_LABEL = "Accessibility all G-code requested"
 internal const val TEST_GCODE_SHARE_REQUESTED_LABEL = "Accessibility G-code share requested"
 internal const val TEST_PROFILE_SHARE_REQUESTED_LABEL = "Accessibility profile share requested"
+internal const val TEST_PROJECT_SHARE_REQUESTED_LABEL = "Accessibility project share requested"

@@ -610,6 +610,7 @@ class AccessibilityInstrumentedTest {
         val saveLabel = context.getString(R.string.save_project)
         val saveOptionsLabel = context.getString(R.string.project_save_options)
         val saveAsLabel = context.getString(R.string.save_project_as)
+        val shareLabel = context.getString(R.string.share_project)
         val unsavedLabel = context.getString(R.string.linked_project_unsaved)
         val confirmation = context.getString(R.string.replace_project_title)
         val unsavedWarning = context.getString(
@@ -641,12 +642,17 @@ class AccessibilityInstrumentedTest {
             assertTrue(checkNotNull(save).isFocusable)
             assertTrue(checkNotNull(saveOptions).isFocusable)
             assertTrue(saveOptions.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-            assertTrue(
-                "Save project as must be reachable from the split action",
-                waitForNodes(setOf(saveAsLabel)).any {
-                    it.isClickable && it.effectiveLabel().contains(saveAsLabel)
-                },
-            )
+            val splitActions = waitForNodes(setOf(saveAsLabel, shareLabel))
+            val saveAs = splitActions.firstOrNull {
+                it.isClickable && it.effectiveLabel().contains(saveAsLabel)
+            }
+            val share = splitActions.firstOrNull {
+                it.isClickable && it.effectiveLabel().contains(shareLabel)
+            }
+            assertNotNull("Save project as must be reachable from the split action", saveAs)
+            assertNotNull("Share project must be reachable from the split action", share)
+            assertTrue(checkNotNull(saveAs).isFocusable)
+            assertTrue(checkNotNull(share).isFocusable)
             assertTrue(
                 InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(
                     AccessibilityService.GLOBAL_ACTION_BACK,
@@ -661,6 +667,27 @@ class AccessibilityInstrumentedTest {
                         warningNodes.any { it.effectiveLabel().contains(unsavedWarning) }
                 },
             )
+        }
+    }
+
+    @Test
+    fun projectShareActionIsReachableFromTheSaveMenu() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val saveOptionsLabel = context.getString(R.string.project_save_options)
+        val shareLabel = context.getString(R.string.share_project)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PROJECT).use {
+            val saveOptions = waitForNode(saveOptionsLabel) {
+                it.isClickable && it.effectiveLabel() == saveOptionsLabel
+            }
+            assertTrue(saveOptions.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val share = waitForNode(shareLabel) {
+                it.isClickable && it.effectiveLabel().contains(shareLabel)
+            }
+            assertTrue("Share project must be keyboard and switch-access focusable", share.isFocusable)
+            assertTrue(share.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNode(TEST_PROJECT_SHARE_REQUESTED_LABEL) {
+                it.effectiveLabel() == TEST_PROJECT_SHARE_REQUESTED_LABEL
+            }
         }
     }
 
