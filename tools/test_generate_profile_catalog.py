@@ -1065,6 +1065,11 @@ class GenerateProfileCatalogTest(unittest.TestCase):
             polygon,
         )
 
+        self.assertEqual(
+            (400.0, 400.0, 0.0, 0.0, [0.0, 0.0, 400.0, 0.0, 400.0, 400.0, 0.0, 400.0]),
+            printable_geometry("0x0,400x0,400x400,0x400"),
+        )
+
     def test_rejects_degenerate_or_unbounded_printable_polygon(self) -> None:
         for area in (
             ["0x0", "100x0", "200x0"],

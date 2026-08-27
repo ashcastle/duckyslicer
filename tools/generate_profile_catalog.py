@@ -605,11 +605,14 @@ class Resolver:
 def printable_geometry(area: Any) -> tuple[float, float, float, float, list[float]]:
     points: list[tuple[float, float]] = []
     for item in values(area):
-        try:
-            x_text, y_text = item.lower().split("x", 1)
-            points.append((float(x_text), float(y_text)))
-        except ValueError:
-            continue
+        # ConfigOptionPoints is normally serialized as a JSON string array, but
+        # Orca also accepts the complete comma-separated vector in one string.
+        for point_text in item.split(","):
+            try:
+                x_text, y_text = point_text.strip().lower().split("x", 1)
+                points.append((float(x_text), float(y_text)))
+            except ValueError:
+                continue
     if len(points) < 3:
         raise ValueError("invalid printable area")
     if points[-1] == points[0]:

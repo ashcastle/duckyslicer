@@ -2840,7 +2840,12 @@ class NativeEngineInstrumentedTest {
         assertEquals(118, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
-        assertEquals(789, catalog.printers.count { it.id.startsWith("orca-printer-") })
+        assertEquals(790, catalog.printers.count { it.id.startsWith("orca-printer-") })
+        catalog.printers.single { it.name == "Creality Ender-5 Max 0.4 nozzle" }.let { printer ->
+            assertEquals(400f, printer.bedSizeX, 0.01f)
+            assertEquals(400f, printer.bedSizeY, 0.01f)
+            assertEquals(listOf(0f, 0f, 400f, 0f, 400f, 400f, 0f, 400f), printer.bedPolygon)
+        }
         assertEquals(
             ";FILAMENT_CHANGE\nM600",
             catalog.printers.single { it.name == "FLSun Super Racer 0.4 nozzle" }
@@ -2878,7 +2883,7 @@ class NativeEngineInstrumentedTest {
                 it.name == "0.20mm Standard @iQ TiQ8 P1 - ABS Natur Material4Print (0.4 Nozzle)"
             }.notes,
         )
-        assertEquals(42, catalog.rejectedCount)
+        assertEquals(41, catalog.rejectedCount)
         catalog.slicing.single { it.name == "0.55mm DRAFT @CORE One 0.8" }.let { process ->
             assertEquals(0.8f, process.nozzleDiameter)
             assertEquals(listOf("Prusa CORE One 0.8 nozzle"), process.compatiblePrinters)
@@ -3031,12 +3036,12 @@ class NativeEngineInstrumentedTest {
                 NozzleMaterial.UNDEFINED to 347,
                 NozzleMaterial.HARDENED_STEEL to 267,
                 NozzleMaterial.STAINLESS_STEEL to 40,
-                NozzleMaterial.BRASS to 140,
+                NozzleMaterial.BRASS to 141,
             ),
             catalog.printers.groupingBy(PrinterProfile::nozzleMaterial).eachCount(),
         )
         assertEquals(
-            mapOf(2.5f to 718, 4f to 44, 4.2f to 20, 4.76f to 12),
+            mapOf(2.5f to 719, 4f to 44, 4.2f to 20, 4.76f to 12),
             catalog.printers.groupingBy(PrinterProfile::nozzleHeight).eachCount(),
         )
         assertEquals(
