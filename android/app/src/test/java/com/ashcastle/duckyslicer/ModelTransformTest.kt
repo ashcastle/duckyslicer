@@ -429,6 +429,22 @@ class ModelTransformTest {
                     floatArrayOf(Float.NaN, 0f),
                 )
             },
+            {
+                OrcaArrangement(
+                    floatArrayOf(0f, 0f),
+                    floatArrayOf(1f, 1f, 1f),
+                    floatArrayOf(0f, 0f),
+                    floatArrayOf(),
+                )
+            },
+            {
+                OrcaArrangement(
+                    floatArrayOf(0f, 0f),
+                    floatArrayOf(1f, 1f, 1f),
+                    floatArrayOf(0f, 0f),
+                    floatArrayOf(Float.NaN),
+                )
+            },
         )
 
         malformed.forEach { create -> assertTrue(runCatching(create).isFailure) }

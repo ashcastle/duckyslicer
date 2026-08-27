@@ -69,7 +69,7 @@ internal fun ModelTransform.placementOrientation(): ModelPlacementOrientation =
         mirrorZ = mirrorZ,
     )
 
-private fun Double.toCanonicalDegreeFloat(): Float {
+internal fun Double.toCanonicalDegreeFloat(): Float {
     val degrees = Math.toDegrees(this)
     val normalized = ((degrees + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
     return if (abs(normalized) < ORIENTATION_ZERO_TOLERANCE_DEGREES) {
@@ -254,6 +254,7 @@ data class OrcaArrangement(
     val lowerLeftMm: FloatArray,
     val sizesMm: FloatArray,
     val centersMm: FloatArray,
+    val rotationZRadians: FloatArray = FloatArray(lowerLeftMm.size / 2),
 ) {
     init {
         require(lowerLeftMm.size >= 2 && lowerLeftMm.size % 2 == 0) {
@@ -265,10 +266,14 @@ data class OrcaArrangement(
         require(centersMm.size == lowerLeftMm.size) {
             "Orca arrangement centers are invalid"
         }
+        require(rotationZRadians.size == lowerLeftMm.size / 2) {
+            "Orca arrangement rotations are invalid"
+        }
         require(
             lowerLeftMm.all { it.isFinite() } &&
                 sizesMm.all { it.isFinite() && it > 0f } &&
-                centersMm.all { it.isFinite() },
+                centersMm.all { it.isFinite() } &&
+                rotationZRadians.all { it.isFinite() },
         ) {
             "Orca arrangement geometry is invalid"
         }
@@ -279,11 +284,14 @@ data class OrcaArrangement(
     override fun equals(other: Any?): Boolean = other is OrcaArrangement &&
         lowerLeftMm.contentEquals(other.lowerLeftMm) &&
         sizesMm.contentEquals(other.sizesMm) &&
-        centersMm.contentEquals(other.centersMm)
+        centersMm.contentEquals(other.centersMm) &&
+        rotationZRadians.contentEquals(other.rotationZRadians)
 
     override fun hashCode(): Int = 31 * (
-        31 * lowerLeftMm.contentHashCode() + sizesMm.contentHashCode()
-    ) + centersMm.contentHashCode()
+        31 * (
+            31 * lowerLeftMm.contentHashCode() + sizesMm.contentHashCode()
+        ) + centersMm.contentHashCode()
+    ) + rotationZRadians.contentHashCode()
 }
 
 internal fun ModelTransform.rotate(point: FloatArray): FloatArray {

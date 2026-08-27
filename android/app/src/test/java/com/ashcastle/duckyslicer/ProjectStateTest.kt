@@ -141,15 +141,22 @@ class ProjectStateTest {
                 lowerLeftMm = floatArrayOf(10f, 10f, 20f, 10f),
                 sizesMm = floatArrayOf(1f, 1f, 1f, 1f, 1f, 1f),
                 centersMm = floatArrayOf(55f, 56f, 43f, 42f),
+                rotationZRadians = floatArrayOf(
+                    Math.toRadians(90.0).toFloat(),
+                    Math.toRadians(-90.0).toFloat(),
+                ),
             ),
             bedSizeX = 100f,
             bedSizeY = 100f,
         )
         assertEquals(5f, state.current.objects.first().transform.offsetXmm)
+        assertEquals(90f, state.current.objects.first().transform.rotationZdeg, 0.001f)
         assertEquals(-7f, state.current.selectedObject!!.transform.offsetXmm)
         assertEquals(-8f, state.current.selectedObject!!.transform.offsetYmm)
+        assertEquals(-90f, state.current.selectedObject!!.transform.rotationZdeg, 0.001f)
         state = state.undo()
         assertEquals(12f, state.current.selectedObject!!.transform.offsetXmm)
+        assertEquals(0f, state.current.selectedObject!!.transform.rotationZdeg, 0.001f)
     }
 
     @Test

@@ -1,0 +1,58 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -708,8 +708,9 @@ public:
+     bool setObjectPositions(const std::vector<std::pair<float, float>>& positions);
+ 
+     // Pack every loaded object on a rectangular bed with Orca's arrangement engine.
+-    // Existing object rotations are preserved. Returns world-space lower-left XY
+-    // pairs in object order, or std::nullopt when the objects cannot fit safely.
++    // Existing baked object orientation is preserved and Orca may add a Z rotation.
++    // Returns world-space center X/Y and added Z radians for each object, or
++    // std::nullopt when the objects cannot fit safely.
+     std::optional<std::vector<float>> autoArrangeObjects(
+         const std::vector<float>& bedPolygon,
+         const std::vector<float>& bedExcludeArea,
+diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil_arrange.cpp
+--- a/app/src/main/cpp/src/sapil_arrange.cpp
++++ b/app/src/main/cpp/src/sapil_arrange.cpp
+@@ -564,9 +564,10 @@ std::optional<std::vector<float>> SlicerEngine::autoArrangeObjects(
+         minimumGap < 0.0f) {
+         return std::nullopt;
+     }
++    std::vector<float> placements;
+     try {
+         Slic3r::arrangement::ArrangeParams params{Slic3r::scaled(minimumGap)};
+-        params.allow_rotations = false;
++        params.allow_rotations = true;
+         params.progressind = [](unsigned, std::string) {};
+         params.stopcondition = []() { return false; };
+         Slic3r::Points bedPoints;
+@@ -616,6 +617,18 @@ std::optional<std::vector<float>> SlicerEngine::autoArrangeObjects(
+         if (!Slic3r::apply_arrange_polys(polygons, instances, nullptr)) {
+             return std::nullopt;
+         }
++        placements.reserve(instances.size() * 3);
++        for (const auto* instance : instances) {
++            const auto offset = instance->get_offset();
++            const double rotation = instance->get_rotation(Slic3r::Z);
++            if (!std::isfinite(offset.x()) || !std::isfinite(offset.y()) ||
++                !std::isfinite(rotation)) {
++                return std::nullopt;
++            }
++            placements.push_back(static_cast<float>(offset.x()));
++            placements.push_back(static_cast<float>(offset.y()));
++            placements.push_back(static_cast<float>(rotation));
++        }
+     } catch (...) {
+         SAPIL_LOGE("autoArrangeObjects: Orca arrangement failed");
+         return std::nullopt;
+@@ -625,7 +639,7 @@ std::optional<std::vector<float>> SlicerEngine::autoArrangeObjects(
+         object->invalidate_bounding_box();
+     }
+     invalidatePreviewMeshCache();
+-    return getObjectWorldAABBMins();
++    return placements;
+ }
+ 
+ // =============================================================================

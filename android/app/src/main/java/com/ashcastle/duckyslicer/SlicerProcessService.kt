@@ -825,6 +825,9 @@ internal object SlicerProcessClient {
                 centersMm = requireNotNull(
                     response.getFloatArray(SlicerProcessContract.KEY_OBJECT_CENTERS),
                 ) { "Slicer returned no object centers" },
+                rotationZRadians = requireNotNull(
+                    response.getFloatArray(SlicerProcessContract.KEY_ARRANGED_ROTATIONS),
+                ) { "Slicer returned no object rotations" },
             )
         } catch (failure: Exception) {
             if (projectRequestCancellationRequested(requestId)) {
@@ -3146,27 +3149,13 @@ class SlicerProcessService : Service() {
         val runtime = createNativeRuntime()
         try {
             loadNativeObjects(runtime, models, objectVolumeCounts)
-            val sizes = runtime.getObjectBoundingBoxes()
-            require(
-                sizes.size == objectVolumeCounts.size * 3 &&
-                    sizes.all { it.isFinite() && it > 0f },
-            ) {
-                "Slicer returned invalid object sizes"
-            }
-            val originalLowerLeft = runtime.nativeGetObjectWorldAABBMins()
-            require(
-                originalLowerLeft.size == objectVolumeCounts.size * 2 &&
-                    originalLowerLeft.all(Float::isFinite),
-            ) {
-                "Slicer returned invalid source positions"
-            }
             val machinePolygon = machineBedPolygon(bedPolygon, bedOriginX, bedOriginY)
             val machineExcludeArea = machineBedExcludeArea(
                 bedExcludeArea,
                 bedOriginX,
                 bedOriginY,
             )
-            val machineLowerLeft = requireNotNull(
+            val machinePlacements = requireNotNull(
                 runtime.nativeAutoArrangeObjects(
                     machinePolygon.toFloatArray(),
                     machineExcludeArea.toFloatArray(),
@@ -3174,10 +3163,24 @@ class SlicerProcessService : Service() {
                 ),
             ) { "The objects do not fit on this bed" }
             require(
+                machinePlacements.size == objectVolumeCounts.size * 3 &&
+                    machinePlacements.all { it.isFinite() },
+            ) {
+                "Slicer returned invalid arrangement transforms"
+            }
+            val machineLowerLeft = runtime.nativeGetObjectWorldAABBMins()
+            require(
                 machineLowerLeft.size == objectVolumeCounts.size * 2 &&
                     machineLowerLeft.all { it.isFinite() },
             ) {
                 "Slicer returned an invalid arrangement"
+            }
+            val sizes = runtime.getObjectBoundingBoxes()
+            require(
+                sizes.size == objectVolumeCounts.size * 3 &&
+                    sizes.all { it.isFinite() && it > 0f },
+            ) {
+                "Slicer returned invalid arranged object sizes"
             }
             repeat(objectVolumeCounts.size) { index ->
                 val x = machineLowerLeft[index * 2]
@@ -3195,8 +3198,12 @@ class SlicerProcessService : Service() {
                 machineLowerLeft[index] - if (index % 2 == 0) bedOriginX else bedOriginY
             }
             val centers = FloatArray(machineLowerLeft.size) { index ->
-                machineLowerLeft[index] - originalLowerLeft[index] -
+                val objectIndex = index / 2
+                machinePlacements[objectIndex * 3 + index % 2] -
                     (if (index % 2 == 0) bedOriginX else bedOriginY)
+            }
+            val rotations = FloatArray(objectVolumeCounts.size) { index ->
+                machinePlacements[index * 3 + 2]
             }
             Bundle().apply {
                 putBoolean(SlicerProcessContract.KEY_OK, true)
@@ -3204,6 +3211,7 @@ class SlicerProcessService : Service() {
                 putFloatArray(SlicerProcessContract.KEY_ARRANGED_LOWER_LEFT, lowerLeft)
                 putFloatArray(SlicerProcessContract.KEY_OBJECT_SIZES, sizes)
                 putFloatArray(SlicerProcessContract.KEY_OBJECT_CENTERS, centers)
+                putFloatArray(SlicerProcessContract.KEY_ARRANGED_ROTATIONS, rotations)
             }
         } finally {
             runtime.clearModel()
@@ -4013,6 +4021,7 @@ private object SlicerProcessContract {
     const val KEY_ARRANGED_LOWER_LEFT = "arrangedLowerLeft"
     const val KEY_OBJECT_SIZES = "objectSizes"
     const val KEY_OBJECT_CENTERS = "objectCenters"
+    const val KEY_ARRANGED_ROTATIONS = "arrangedRotations"
     const val OUTPUT_DIRECTORY = SliceArtifactStore.OUTPUT_DIRECTORY
     const val MAX_OPTIONS_BYTES = 384 * 1_024
     const val MAX_REQUEST_BYTES = 640 * 1_024

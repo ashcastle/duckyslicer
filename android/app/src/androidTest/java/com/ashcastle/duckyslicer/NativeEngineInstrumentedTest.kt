@@ -3845,6 +3845,70 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun automaticArrangementReturnsAndAppliesRotationsRequiredToFitTheBed() {
+        val model = inspectModel(fixtureModel().absolutePath)
+        val elongated = ModelTransform(scale = 4f, scaleY = 1f, scaleZ = 1f)
+        val objects = listOf(
+            ProjectObject("rotated-arrange-first", model, elongated),
+            ProjectObject("rotated-arrange-second", model, elongated),
+        )
+        val options = SliceOptions().copy(
+            bedSizeX = 50f,
+            bedSizeY = 100f,
+            bedPolygon = rectangularBedPolygon(50f, 100f),
+        )
+
+        val arrangement = OnDeviceSlicer.arrange(objects, options, minimumGap = 2f)
+
+        assertEquals(2, arrangement.objectCount)
+        assertTrue(
+            "Both elongated objects must be rotated to fit side by side",
+            arrangement.rotationZRadians.all { rotation -> abs(sin(rotation)) > 0.9f },
+        )
+        repeat(arrangement.objectCount) { index ->
+            assertTrue(arrangement.sizesMm[index * 3] < 25f)
+            assertTrue(arrangement.sizesMm[index * 3 + 1] > 75f)
+        }
+
+        val applied = ProjectHistoryState()
+            .add(objects[0])
+            .add(objects[1])
+            .applyOrcaArrangement(arrangement, options.bedSizeX, options.bedSizeY)
+        assertTrue(
+            "The project must retain every rotation returned by Orca",
+            applied.current.objects.all { projectObject ->
+                abs(sin(Math.toRadians(projectObject.transform.rotationZdeg.toDouble()))) > 0.9
+            },
+        )
+        val sliced = OnDeviceSlicer.slice(
+            applied.current.objects,
+            options
+                .selectQuality(QualityProfile.DRAFT)
+                .copy(brimType = "no_brim", brimWidth = 0f, skirtLoops = 0),
+        )
+        try {
+            val preview = loadGcodePreview(sliced.output.absolutePath, 0, Int.MAX_VALUE)
+            var minimumX = Float.POSITIVE_INFINITY
+            var minimumY = Float.POSITIVE_INFINITY
+            var maximumX = Float.NEGATIVE_INFINITY
+            var maximumY = Float.NEGATIVE_INFINITY
+            preview.segments.indices.step(GcodeLayerPreview.SEGMENT_STRIDE).forEach { offset ->
+                minimumX = minOf(minimumX, preview.segments[offset], preview.segments[offset + 2])
+                minimumY = minOf(minimumY, preview.segments[offset + 1], preview.segments[offset + 3])
+                maximumX = maxOf(maximumX, preview.segments[offset], preview.segments[offset + 2])
+                maximumY = maxOf(maximumY, preview.segments[offset + 1], preview.segments[offset + 3])
+            }
+            assertTrue(minimumX >= -0.1f && minimumY >= -0.1f)
+            assertTrue(maximumX <= options.bedSizeX + 0.1f)
+            assertTrue(maximumY <= options.bedSizeY + 0.1f)
+        } finally {
+            sliced.output.delete()
+        }
+        val restored = applied.undo()
+        assertTrue(restored.current.objects.all { it.transform.rotationZdeg == 0f })
+    }
+
+    @Test
     fun supportPaintReachesOrcaAndCreatesSupportToolpaths() {
         val modelFile = supportPaintOverhangModel()
         val model = inspectModel(modelFile.absolutePath)

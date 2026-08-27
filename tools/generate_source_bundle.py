@@ -64,6 +64,7 @@ BUILD_INPUTS = (
     "native/slicer-runtime/overlay/sapil_gcode_thumbnail.h",
     "native/slicer-runtime/adaptive-pressure-advance.patch",
     "native/slicer-runtime/adaptive-layer-height.patch",
+    "native/slicer-runtime/auto-arrange-rotations.patch",
     "native/slicer-runtime/engine-profile-options.patch",
     "native/slicer-runtime/engine-nozzle-volume.patch",
     "native/slicer-runtime/engine-branding.patch",

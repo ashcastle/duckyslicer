@@ -745,6 +745,10 @@ data class ProjectHistoryState(
                 transform = projectObject.transform.copy(
                     offsetXmm = arrangement.centersMm[index * 2] - bedSizeX / 2f,
                     offsetYmm = arrangement.centersMm[index * 2 + 1] - bedSizeY / 2f,
+                    rotationZdeg = (
+                        Math.toRadians(projectObject.transform.rotationZdeg.toDouble()) +
+                            arrangement.rotationZRadians[index]
+                    ).toCanonicalDegreeFloat(),
                 ),
             )
         }
