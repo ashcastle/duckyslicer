@@ -53,7 +53,7 @@ class OrcaProfileCatalog internal constructor(
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 114) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 115) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -195,6 +195,10 @@ class OrcaProfileCatalog internal constructor(
         extruderClearanceRadius = input.readFloat(),
         extruderClearanceHeightToRod = input.readFloat(),
         extruderClearanceHeightToLid = input.readFloat(),
+        supportMultiBedTypes = input.readCatalogBoolean(),
+        defaultBuildPlate = checkNotNull(
+            BuildPlateType.fromStorage(input.readCatalogString()),
+        ) { "Unsupported default build plate" },
         defaultPrintProfile = input.readCatalogString(),
         defaultFilamentProfiles = input.readCatalogStringList(),
         builtIn = true,
@@ -493,6 +497,8 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("extruderClearanceRadius", BINARY_FLOAT),
     BinaryField("extruderClearanceHeightToRod", BINARY_FLOAT),
     BinaryField("extruderClearanceHeightToLid", BINARY_FLOAT),
+    BinaryField("supportMultiBedTypes", BINARY_BOOL),
+    BinaryField("defaultBuildPlate", BINARY_STRING),
     BinaryField("defaultPrintProfile", BINARY_STRING),
     BinaryField("defaultFilamentProfiles", BINARY_STRING_LIST),
 )

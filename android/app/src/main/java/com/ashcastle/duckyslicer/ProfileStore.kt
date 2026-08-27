@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 114
+internal const val USER_PROFILE_SCHEMA_VERSION = 115
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -118,6 +118,8 @@ class ProfileStore internal constructor(
             printerStructure = options.printerStructure,
             bestObjectPositionX = options.printerProfile.bestObjectPositionX,
             bestObjectPositionY = options.printerProfile.bestObjectPositionY,
+            supportMultiBedTypes = options.printerProfile.supportMultiBedTypes,
+            defaultBuildPlate = options.printerProfile.defaultBuildPlate,
             maxSpeedX = options.maxSpeedX,
             maxSpeedY = options.maxSpeedY,
             maxSpeedZ = options.maxSpeedZ,
@@ -851,6 +853,8 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("printerStructure", printerStructure)
     .put("bestObjectPositionX", bestObjectPositionX)
     .put("bestObjectPositionY", bestObjectPositionY)
+    .put("supportMultiBedTypes", supportMultiBedTypes)
+    .put("defaultBuildPlate", defaultBuildPlate.storageValue)
     .put("maxSpeedX", maxSpeedX).put("maxSpeedY", maxSpeedY)
     .put("maxSpeedZ", maxSpeedZ).put("maxSpeedE", maxSpeedE)
     .put("maxAccelerationX", maxAccelerationX).put("maxAccelerationY", maxAccelerationY)
@@ -1422,6 +1426,10 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         printerStructure = optString("printerStructure", "undefine"),
         bestObjectPositionX = optDouble("bestObjectPositionX", 0.5).toFloat(),
         bestObjectPositionY = optDouble("bestObjectPositionY", 0.5).toFloat(),
+        supportMultiBedTypes = optBoolean("supportMultiBedTypes"),
+        defaultBuildPlate = BuildPlateType.fromStorage(
+            optString("defaultBuildPlate", BuildPlateType.TEXTURED_PEI.storageValue),
+        ) ?: error("Unsupported default build plate"),
         maxSpeedX = motionLimits.maxSpeedX,
         maxSpeedY = motionLimits.maxSpeedY,
         maxSpeedZ = motionLimits.maxSpeedZ,

@@ -1168,6 +1168,7 @@
     <string name="filament_multitool_ramming_volume">램밍 용적</string>
     <string name="filament_multitool_ramming_flow">램밍 유량</string>
     <string name="printer_environment_capabilities">환경 기능</string>
+    <string name="multiple_build_plate_types">여러 빌드 플레이트 유형</string>
     <string name="supports_chamber_temperature_control">가열 챔버</string>
     <string name="supports_air_filtration">배기 필터</string>
     <string name="adaptive_bed_mesh">적응형 베드 메시</string>

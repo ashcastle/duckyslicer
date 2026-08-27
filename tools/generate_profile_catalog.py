@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 114
+SCHEMA_VERSION = 115
 MAX_FILAMENT_SLOTS = 16
 NO_FILAMENT_COLOR = -1
 MAX_GCODE_THUMBNAILS = 8
@@ -107,6 +107,33 @@ def filament_color(value: Any) -> int:
 def boolean(value: Any, default: bool = False) -> bool:
     candidate = str(scalar(value, "1" if default else "0")).strip().lower()
     return candidate in {"1", "true", "yes", "on"}
+
+
+def build_plate_type(value: Any) -> str:
+    candidate = str(scalar(value, "4")).strip().casefold()
+    aliases = {
+        "1": "cool",
+        "cool plate": "cool",
+        "2": "engineering",
+        "engineering plate": "engineering",
+        "3": "high_temp",
+        "high temp plate": "high_temp",
+        "high temperature plate": "high_temp",
+        "smooth pei plate": "high_temp",
+        "4": "textured_pei",
+        "textured pei plate": "textured_pei",
+        "5": "textured_cool",
+        "textured cool plate": "textured_cool",
+        "6": "graphic_effect",
+        "epoxy resin plate": "graphic_effect",
+        "graphic effect plate": "graphic_effect",
+        "7": "super_tack",
+        "supertack plate": "super_tack",
+        "super tack plate": "super_tack",
+    }
+    if candidate not in aliases:
+        raise ValueError("unsupported default build plate")
+    return aliases[candidate]
 
 
 def filename_format(value: Any) -> str:
@@ -754,6 +781,8 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "extruderClearanceRadius": number(raw.get("extruder_clearance_radius"), 40),
         "extruderClearanceHeightToRod": number(raw.get("extruder_clearance_height_to_rod"), 40),
         "extruderClearanceHeightToLid": number(raw.get("extruder_clearance_height_to_lid"), 120),
+        "supportMultiBedTypes": boolean(raw.get("support_multi_bed_types")),
+        "defaultBuildPlate": build_plate_type(raw.get("default_bed_type")),
         "defaultPrintProfile": next(iter(default_profile_names(raw.get("default_print_profile"))), ""),
         "defaultFilamentProfiles": default_profile_names(raw.get("default_filament_profile")),
     }

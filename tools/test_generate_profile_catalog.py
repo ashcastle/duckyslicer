@@ -12,6 +12,7 @@ from tools.generate_profile_catalog import (
     Resolver,
     adaptive_pressure_advance_model,
     bed_exclude_geometry,
+    build_plate_type,
     build_filament,
     build_printer,
     build_process,
@@ -32,6 +33,32 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_normalizes_printer_build_plate_capabilities(self) -> None:
+        base = {
+            "name": "Build plate printer",
+            "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+            "printable_height": "250",
+            "nozzle_diameter": ["0.4"],
+            "gcode_flavor": "marlin",
+        }
+
+        default = build_printer("Example", base)
+        configured = build_printer(
+            "Example",
+            base | {
+                "support_multi_bed_types": "1",
+                "default_bed_type": "High Temp Plate",
+            },
+        )
+
+        self.assertFalse(default["supportMultiBedTypes"])
+        self.assertEqual("textured_pei", default["defaultBuildPlate"])
+        self.assertTrue(configured["supportMultiBedTypes"])
+        self.assertEqual("high_temp", configured["defaultBuildPlate"])
+        self.assertEqual("graphic_effect", build_plate_type("6"))
+        with self.assertRaises(ValueError):
+            build_plate_type("unknown plate")
+
     def test_empty_binary_lists_take_the_type_of_populated_records(self) -> None:
         self.assertEqual(
             BINARY_FLOAT_LIST,

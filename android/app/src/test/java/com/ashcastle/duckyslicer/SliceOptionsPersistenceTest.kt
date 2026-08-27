@@ -543,6 +543,33 @@ class SliceOptionsPersistenceTest {
     }
 
     @Test
+    fun selectingPrinterCoercesUnsupportedBuildPlateToItsDefault() {
+        val filament = FilamentProfile.GENERIC_PLA.copy(
+            texturedPlateTemp = 61,
+            firstLayerTexturedPlateTemp = 62,
+        )
+        val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            supportMultiBedTypes = false,
+            defaultBuildPlate = BuildPlateType.TEXTURED_PEI,
+        )
+
+        val updated = SliceOptions()
+            .selectFilament(filament)
+            .selectBuildPlate(BuildPlateType.COOL)
+            .selectPrinter(printer)
+
+        assertEquals(listOf(BuildPlateType.TEXTURED_PEI), printer.availableBuildPlateTypes())
+        assertEquals(BuildPlateType.TEXTURED_PEI, updated.buildPlate.type)
+        assertEquals(61, updated.bedTemp)
+        assertEquals(62, updated.firstLayerBedTemp)
+        assertFalse(BuildPlateType.GRAPHIC_EFFECT in PrinterProfile.CUSTOM_CARTESIAN.copy(
+            brand = "Bambu Lab",
+            supportMultiBedTypes = true,
+        ).availableBuildPlateTypes())
+        assertEquals(3, PrinterProfile.U1_04.availableBuildPlateTypes().size)
+    }
+
+    @Test
     fun mixedFilamentDiametersAreRejectedBeforeNativeSlicing() {
         val primary = FilamentProfile.GENERIC_PLA.copy(diameter = 1.75f)
         val secondary = FilamentProfile.PETG.copy(diameter = 2.85f)

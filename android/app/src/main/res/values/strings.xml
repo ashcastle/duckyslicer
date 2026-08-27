@@ -1168,6 +1168,7 @@
     <string name="filament_multitool_ramming_volume">Ramming volume</string>
     <string name="filament_multitool_ramming_flow">Ramming flow</string>
     <string name="printer_environment_capabilities">Environment capabilities</string>
+    <string name="multiple_build_plate_types">Multiple build plate types</string>
     <string name="supports_chamber_temperature_control">Heated chamber</string>
     <string name="supports_air_filtration">Exhaust filtration</string>
     <string name="adaptive_bed_mesh">Adaptive bed mesh</string>

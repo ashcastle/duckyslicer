@@ -2823,7 +2823,7 @@ class NativeEngineInstrumentedTest {
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
         assertFalse(loadResult.bundledCatalogUnavailable)
-        assertEquals(114, catalog.schemaVersion)
+        assertEquals(115, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertEquals(789, catalog.printers.count { it.id.startsWith("orca-printer-") })
@@ -2850,6 +2850,13 @@ class NativeEngineInstrumentedTest {
         catalog.printers.single { it.name == "Bambu Lab A1 mini 0.4 nozzle" }.let { printer ->
             assertEquals(0.7f, printer.bestObjectPositionX)
             assertEquals(0.5f, printer.bestObjectPositionY)
+            assertFalse(printer.supportMultiBedTypes)
+            assertEquals(BuildPlateType.TEXTURED_PEI, printer.defaultBuildPlate)
+            assertFalse(BuildPlateType.GRAPHIC_EFFECT in printer.availableBuildPlateTypes())
+        }
+        catalog.printers.single { it.name == "Artillery M1 Pro 0.4 nozzle" }.let { printer ->
+            assertTrue(printer.supportMultiBedTypes)
+            assertEquals(BUILD_PLATE_TYPES, printer.availableBuildPlateTypes())
         }
         val restoredBreakawayProfiles = mapOf(
             "Snapmaker Breakaway Support" to (220 to 230),

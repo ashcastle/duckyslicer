@@ -31,7 +31,6 @@ INTENTIONALLY_UNMAPPED_OPTIONS = {
     "bed_custom_texture",
     "compatible_printers_condition",
     "compatible_prints",
-    "default_bed_type",
     "extruder_colour",
     "filament_notes",
     "filament_settings_id",
@@ -42,7 +41,6 @@ INTENTIONALLY_UNMAPPED_OPTIONS = {
     "printer_settings_id",
     "printer_technology",
     "printer_variant",
-    "support_multi_bed_types",
     "upward_compatible_machine",
     "wiping_volumes_extruders",
     # Desktop connection state and external post-processing are not imported into

@@ -386,6 +386,8 @@ data class PrinterProfile(
     val bedMeshProbeDistanceY: Float = 50f,
     val adaptiveBedMeshMargin: Float = 0f,
     val gcodeThumbnails: String = "",
+    val supportMultiBedTypes: Boolean = false,
+    val defaultBuildPlate: BuildPlateType = BuildPlateType.TEXTURED_PEI,
     val defaultPrintProfile: String = "",
     val defaultFilamentProfiles: List<String> = emptyList(),
 ) {
@@ -482,6 +484,27 @@ internal val BUILD_PLATE_TYPES = listOf(
     BuildPlateType.SUPER_TACK,
     BuildPlateType.GRAPHIC_EFFECT,
 )
+
+internal fun PrinterProfile.availableBuildPlateTypes(): List<BuildPlateType> = when {
+    brand.equals("Bambu Lab", ignoreCase = true) ||
+        brand.equals("BBL", ignoreCase = true) ||
+        name.startsWith("Bambu Lab", ignoreCase = true) -> BUILD_PLATE_TYPES.filterNot {
+        it == BuildPlateType.GRAPHIC_EFFECT
+    }
+    brand.equals("Snapmaker", ignoreCase = true) && name.startsWith("U1") -> if (
+        supportMultiBedTypes
+    ) {
+        BUILD_PLATE_TYPES
+    } else {
+        listOf(
+            BuildPlateType.TEXTURED_PEI,
+            BuildPlateType.HIGH_TEMP,
+            BuildPlateType.GRAPHIC_EFFECT,
+        )
+    }
+    supportMultiBedTypes -> BUILD_PLATE_TYPES
+    else -> listOf(defaultBuildPlate)
+}
 
 data class AdaptivePressureAdvanceSettings(
     val enabled: Boolean = false,
@@ -1397,7 +1420,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 114,
+    val schemaVersion: Int = 115,
     val sourceRevision: String = FALLBACK_PROFILE_CATALOG_REVISION,
     val rejectedCount: Int = 0,
 )
@@ -1761,6 +1784,10 @@ data class SliceOptions(
         val nozzleMatches = abs(quality.nozzleDiameter - profile.nozzleDiameter) < 0.05f
         val retainedFilaments = resolvedFilamentSlots().take(profile.extruderCount.coerceAtLeast(1))
         val retainedColors = resolvedFilamentColors().take(retainedFilaments.size)
+        val availableBuildPlates = profile.availableBuildPlateTypes()
+        val selectedBuildPlate = buildPlate.type.takeIf { it in availableBuildPlates }
+            ?: profile.defaultBuildPlate.takeIf { it in availableBuildPlates }
+            ?: availableBuildPlates.first()
         val updated = copy(
             printerProfile = profile,
             filamentSlots = retainedFilaments,
@@ -1779,6 +1806,7 @@ data class SliceOptions(
             extruderClearanceRadius = profile.extruderClearanceRadius,
             extruderClearanceHeightToRod = profile.extruderClearanceHeightToRod,
             extruderClearanceHeightToLid = profile.extruderClearanceHeightToLid,
+            buildPlate = buildPlate.withProfile(retainedFilaments.first(), selectedBuildPlate),
         ).boundedToFilamentSlots(retainedFilaments.size)
         return if (nozzleMatches) {
             updated

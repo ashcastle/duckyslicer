@@ -312,6 +312,8 @@ class ProfileStoreMigrationTest {
                     printerStructure = "delta",
                     bestObjectPositionX = 0.7f,
                     bestObjectPositionY = 0.45f,
+                    supportMultiBedTypes = true,
+                    defaultBuildPlate = BuildPlateType.HIGH_TEMP,
                 ),
             )
             val saved = ProfileStore(file).savePrinter("Delta bed", options)
@@ -335,6 +337,8 @@ class ProfileStoreMigrationTest {
             assertEquals("delta", restored.printerStructure)
             assertEquals(0.7f, restored.bestObjectPositionX)
             assertEquals(0.45f, restored.bestObjectPositionY)
+            assertTrue(restored.supportMultiBedTypes)
+            assertEquals(BuildPlateType.HIGH_TEMP, restored.defaultBuildPlate)
             assertTrue(restored.singleExtruderMultiMaterial)
             assertEquals(2, restored.extruderCount)
             assertTrue(restored.auxiliaryFan)

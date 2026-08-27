@@ -992,6 +992,14 @@ private fun PrinterSettingsSheet(
     )
     SettingsGroupTitle(stringResource(R.string.printer_environment_capabilities))
     SettingsSwitch(
+        label = stringResource(R.string.multiple_build_plate_types),
+        checked = options.printerProfile.supportMultiBedTypes,
+        onCheckedChange = {
+            val printer = options.printerProfile.copy(supportMultiBedTypes = it)
+            onOptionsChanged(options.selectPrinter(printer))
+        },
+    )
+    SettingsSwitch(
         label = stringResource(R.string.supports_chamber_temperature_control),
         checked = options.printerProfile.supportsChamberTemperatureControl,
         onCheckedChange = {
@@ -2262,7 +2270,7 @@ private fun FilamentSettingsSheet(
         )
         SettingChoices(
             settingLabel = stringResource(R.string.build_plate),
-            entries = BUILD_PLATE_TYPES,
+            entries = options.printerProfile.availableBuildPlateTypes(),
             selected = options.buildPlate.type,
             optionLabel = { stringResource(it.labelResource()) },
             onSelected = { onOptionsChanged(options.selectBuildPlate(it)) },
