@@ -480,6 +480,7 @@ data class FilamentProfile(
     val overhangFanThreshold: String = "95%",
     val internalBridgeFanSpeed: Int = -1,
     val supportInterfaceFanSpeed: Int = -1,
+    val ironingFanSpeed: Int = -1,
     val slowDownLayerTime: Float = 8f,
     val slowDownMinSpeed: Float = 10f,
     val closeFanFirstLayers: Int = 1,
@@ -1320,7 +1321,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 105,
+    val schemaVersion: Int = 106,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2524,6 +2525,9 @@ data class SliceOptions(
                 .toIntArray()
             native.filamentSupportInterfaceFanSpeeds = nativeFilaments
                 .map(FilamentProfile::supportInterfaceFanSpeed)
+                .toIntArray()
+            native.filamentIroningFanSpeeds = nativeFilaments
+                .map(FilamentProfile::ironingFanSpeed)
                 .toIntArray()
             native.filamentLoadingSpeeds = nativeFilaments.map(FilamentProfile::loadingSpeed).toFloatArray()
             native.filamentLoadingSpeedStarts = nativeFilaments

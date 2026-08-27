@@ -145,6 +145,7 @@ internal object ProfileValidation {
             profile.overhangFanThreshold in OVERHANG_FAN_THRESHOLDS &&
             profile.internalBridgeFanSpeed in -1..100 &&
             profile.supportInterfaceFanSpeed in -1..100 &&
+            profile.ironingFanSpeed in -1..100 &&
             profile.minimalPurgeOnWipeTower in MIN_PURGE_VOLUME..MAX_PURGE_VOLUME &&
             profile.towerInterfacePreExtrusionDistance in 0f..1_000f &&
             profile.towerInterfacePreExtrusionLength in 0f..1_000f &&

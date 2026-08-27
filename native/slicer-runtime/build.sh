@@ -118,6 +118,9 @@ prepare_runtime_source() {
 
     # Normalize the generated worktree before applying the reviewed patch stack.
     # Reverse in the opposite order so repeated local builds stay reproducible.
+    if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/ironing-fan-speed.patch" 2>/dev/null; then
+        git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/ironing-fan-speed.patch"
+    fi
     if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/gcode-line-numbers.patch" 2>/dev/null; then
         git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/gcode-line-numbers.patch"
     fi
@@ -223,6 +226,9 @@ prepare_runtime_source() {
     git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/gcode-line-numbers.patch" 2>/dev/null || \
         die "runtime G-code line-number bridge contains unreviewed changes"
     git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/gcode-line-numbers.patch"
+    git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/ironing-fan-speed.patch" 2>/dev/null || \
+        die "runtime ironing-fan bridge contains unreviewed changes"
+    git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/ironing-fan-speed.patch"
 
     local engine_root="$SOURCE_ROOT/app/src/main/cpp/orcaslicer"
     local engine_patches=(

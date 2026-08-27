@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 105
+internal const val USER_PROFILE_SCHEMA_VERSION = 106
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -312,6 +312,7 @@ class ProfileStore private constructor(
             overhangFanThreshold = effective.overhangFanThreshold,
             internalBridgeFanSpeed = effective.internalBridgeFanSpeed,
             supportInterfaceFanSpeed = effective.supportInterfaceFanSpeed,
+            ironingFanSpeed = effective.ironingFanSpeed,
             slowDownLayerTime = effective.slowDownLayerTime,
             slowDownMinSpeed = effective.slowDownMinSpeed,
             closeFanFirstLayers = effective.closeFanFirstLayers,
@@ -932,6 +933,7 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("overhangFanThreshold", overhangFanThreshold)
     .put("internalBridgeFanSpeed", internalBridgeFanSpeed)
     .put("supportInterfaceFanSpeed", supportInterfaceFanSpeed)
+    .put("ironingFanSpeed", ironingFanSpeed)
     .put("slowDownLayerTime", slowDownLayerTime).put("slowDownMinSpeed", slowDownMinSpeed)
     .put("closeFanFirstLayers", closeFanFirstLayers).put("fullFanSpeedLayer", fullFanSpeedLayer)
     .put("pressureAdvanceEnabled", pressureAdvanceEnabled).put("pressureAdvance", pressureAdvance)
@@ -1506,6 +1508,7 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         overhangFanThreshold = optString("overhangFanThreshold", "95%"),
         internalBridgeFanSpeed = optInt("internalBridgeFanSpeed", -1),
         supportInterfaceFanSpeed = optInt("supportInterfaceFanSpeed", -1),
+        ironingFanSpeed = optInt("ironingFanSpeed", -1),
         slowDownLayerTime = optDouble("slowDownLayerTime", 8.0).toFloat(),
         slowDownMinSpeed = optDouble("slowDownMinSpeed", 10.0).toFloat(),
         closeFanFirstLayers = optInt("closeFanFirstLayers", 1),

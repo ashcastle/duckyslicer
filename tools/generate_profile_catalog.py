@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 105
+SCHEMA_VERSION = 106
 MAX_FILAMENT_SLOTS = 16
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
@@ -1009,6 +1009,7 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "supportInterfaceFanSpeed": integer(
             raw.get("support_material_interface_fan_speed"), -1
         ),
+        "ironingFanSpeed": integer(raw.get("ironing_fan_speed"), -1),
         "slowDownLayerTime": number(raw.get("slow_down_layer_time"), 8),
         "slowDownMinSpeed": number(raw.get("slow_down_min_speed"), 10),
         "closeFanFirstLayers": integer(raw.get("close_fan_the_first_x_layers"), 1),
@@ -1090,6 +1091,7 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and profile["overhangFanThreshold"] in {"0%", "10%", "25%", "50%", "75%", "95%"}
         and -1 <= profile["internalBridgeFanSpeed"] <= 100
         and -1 <= profile["supportInterfaceFanSpeed"] <= 100
+        and -1 <= profile["ironingFanSpeed"] <= 100
         and (profile["retractLength"] is None or 0 <= profile["retractLength"] <= 100)
         and (profile["retractSpeed"] is None or 0 <= profile["retractSpeed"] <= 500)
         and (profile["deretractSpeed"] is None or 0 <= profile["deretractSpeed"] <= 500)

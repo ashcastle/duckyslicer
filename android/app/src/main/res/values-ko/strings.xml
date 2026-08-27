@@ -362,6 +362,7 @@
     <string name="overhang_fan_threshold">오버행 냉각 기준</string>
     <string name="internal_bridge_fan_speed">내부 브리지 팬 속도</string>
     <string name="support_interface_fan_speed">서포트 접촉면 팬 속도</string>
+    <string name="ironing_fan_speed">다림질 팬 속도</string>
     <string name="fan_override_disabled">끄기</string>
     <string name="seconds_suffix">초</string>
     <string name="slow_down_layer_time">레이어 시간 감속 기준</string>

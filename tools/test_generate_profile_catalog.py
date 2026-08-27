@@ -1293,6 +1293,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "overhang_fan_threshold": ["25%"],
                 "internal_bridge_fan_speed": ["45"],
                 "support_material_interface_fan_speed": ["85"],
+                "ironing_fan_speed": ["37"],
                 "filament_z_hop_types": ["Normal Lift"],
                 "filament_retract_lift_above": ["0.8"],
                 "filament_retract_lift_below": ["150"],
@@ -1397,6 +1398,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual("25%", overridden["overhangFanThreshold"])
         self.assertEqual(45, overridden["internalBridgeFanSpeed"])
         self.assertEqual(85, overridden["supportInterfaceFanSpeed"])
+        self.assertEqual(37, overridden["ironingFanSpeed"])
         self.assertEqual("normal", overridden["zHopType"])
         self.assertEqual(0.8, overridden["retractLiftAbove"])
         self.assertEqual(150.0, overridden["retractLiftBelow"])

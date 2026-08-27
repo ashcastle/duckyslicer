@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 105) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 106) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -258,6 +258,7 @@ class OrcaProfileCatalog(private val context: Context) {
         overhangFanThreshold = input.readCatalogString(),
         internalBridgeFanSpeed = input.readInt(),
         supportInterfaceFanSpeed = input.readInt(),
+        ironingFanSpeed = input.readInt(),
         slowDownLayerTime = input.readFloat(),
         slowDownMinSpeed = input.readFloat(),
         closeFanFirstLayers = input.readInt(),
@@ -542,6 +543,7 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("overhangFanThreshold", BINARY_STRING),
     BinaryField("internalBridgeFanSpeed", BINARY_INT),
     BinaryField("supportInterfaceFanSpeed", BINARY_INT),
+    BinaryField("ironingFanSpeed", BINARY_INT),
     BinaryField("slowDownLayerTime", BINARY_FLOAT),
     BinaryField("slowDownMinSpeed", BINARY_FLOAT),
     BinaryField("closeFanFirstLayers", BINARY_INT),

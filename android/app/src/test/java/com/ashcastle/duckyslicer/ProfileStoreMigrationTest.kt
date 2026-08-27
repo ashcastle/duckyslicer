@@ -71,6 +71,7 @@ class ProfileStoreMigrationTest {
                 remove("overhangFanThreshold")
                 remove("internalBridgeFanSpeed")
                 remove("supportInterfaceFanSpeed")
+                remove("ironingFanSpeed")
                 remove("texturedPlateTemp")
                 remove("firstLayerTexturedPlateTemp")
                 remove("engineeringPlateTemp")
@@ -196,6 +197,7 @@ class ProfileStoreMigrationTest {
             assertEquals("95%", restoredFilament.overhangFanThreshold)
             assertEquals(-1, restoredFilament.internalBridgeFanSpeed)
             assertEquals(-1, restoredFilament.supportInterfaceFanSpeed)
+            assertEquals(-1, restoredFilament.ironingFanSpeed)
             BUILD_PLATE_TYPES.forEach { plate ->
                 assertEquals(restoredFilament.bedTemp, restoredFilament.bedTemperature(plate))
                 assertEquals(
@@ -555,6 +557,7 @@ class ProfileStoreMigrationTest {
                         overhangFanThreshold = "25%",
                         internalBridgeFanSpeed = 45,
                         supportInterfaceFanSpeed = 85,
+                        ironingFanSpeed = 37,
                     ),
                 )
 
@@ -621,6 +624,7 @@ class ProfileStoreMigrationTest {
             assertEquals("25%", restored.overhangFanThreshold)
             assertEquals(45, restored.internalBridgeFanSpeed)
             assertEquals(85, restored.supportInterfaceFanSpeed)
+            assertEquals(37, restored.ironingFanSpeed)
         } finally {
             directory.deleteRecursively()
         }

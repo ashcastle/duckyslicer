@@ -2706,7 +2706,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(104, catalog.schemaVersion)
+        assertEquals(106, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -5524,13 +5524,18 @@ class NativeEngineInstrumentedTest {
             overhangFanThreshold = "25%",
             internalBridgeFanSpeed = 45,
             supportInterfaceFanSpeed = 85,
+            ironingFanSpeed = 37,
             slowDownLayerTime = 120f,
             slowDownMinSpeed = 5f,
             closeFanFirstLayers = 0,
         )
         val disabledOptions = SliceOptions()
             .selectFilament(baseFilament)
-            .selectQuality(QualityProfile.DRAFT)
+            .selectQuality(
+                QualityProfile.DRAFT.copy(
+                    ironing = IroningSettings(type = "top"),
+                ),
+            )
         val enabledOptions = disabledOptions.selectFilament(
             baseFilament.copy(slowDownForLayerCooling = true),
         )
@@ -5547,6 +5552,12 @@ class NativeEngineInstrumentedTest {
             assertTrue(gcode.contains("; overhang_fan_threshold = 25%"))
             assertTrue(gcode.contains("; internal_bridge_fan_speed = 45"))
             assertTrue(gcode.contains("; support_material_interface_fan_speed = 85"))
+            assertTrue(gcode.contains("; ironing_fan_speed = 37"))
+            assertTrue(gcode.contains("; ironing_type = top"))
+            assertTrue(
+                "Ironing must emit the configured 37% part-cooling command",
+                gcode.lineSequence().any { it.startsWith("M106 S94") },
+            )
             assertTrue(
                 "Layer-cooling slowdown must change Orca's real print-time estimate",
                 enabled.estimatedSeconds > disabled.estimatedSeconds + 1f,

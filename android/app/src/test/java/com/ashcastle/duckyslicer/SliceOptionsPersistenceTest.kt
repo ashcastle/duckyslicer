@@ -57,6 +57,7 @@ class SliceOptionsPersistenceTest {
             overhangFanThreshold = "25%",
             internalBridgeFanSpeed = 45,
             supportInterfaceFanSpeed = 85,
+            ironingFanSpeed = 37,
             bedTemp = 71,
             firstLayerBedTemp = 72,
             texturedPlateTemp = 53,
@@ -110,6 +111,7 @@ class SliceOptionsPersistenceTest {
             overhangFanThreshold = "75%",
             internalBridgeFanSpeed = -1,
             supportInterfaceFanSpeed = 65,
+            ironingFanSpeed = 72,
             bedTemp = 81,
             firstLayerBedTemp = 82,
             texturedPlateTemp = 63,
@@ -369,6 +371,7 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf(2, 4), native.filamentOverhangFanThresholds.toList())
         assertEquals(listOf(45, -1), native.filamentInternalBridgeFanSpeeds.toList())
         assertEquals(listOf(85, 65), native.filamentSupportInterfaceFanSpeeds.toList())
+        assertEquals(listOf(37, 72), native.filamentIroningFanSpeeds.toList())
         assertEquals(BuildPlateType.TEXTURED_PEI.nativeValue, native.bedType)
         assertEquals(listOf(53, 63), native.filamentBedTemps.toList())
         assertEquals(listOf(54, 64), native.filamentBedTempInitialLayers.toList())
@@ -1187,6 +1190,7 @@ class SliceOptionsPersistenceTest {
         assertEquals("95%", restored.filamentProfile.overhangFanThreshold)
         assertEquals(-1, restored.filamentProfile.internalBridgeFanSpeed)
         assertEquals(-1, restored.filamentProfile.supportInterfaceFanSpeed)
+        assertEquals(-1, restored.filamentProfile.ironingFanSpeed)
         assertEquals(false, restored.printerProfile.auxiliaryFan)
         assertEquals(0f, restored.printerProfile.fanSpeedupTime)
         assertEquals(true, restored.printerProfile.fanSpeedupOverhangs)
@@ -1227,6 +1231,7 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf(5), restored.toNativeConfig().filamentOverhangFanThresholds.toList())
         assertEquals(listOf(-1), restored.toNativeConfig().filamentInternalBridgeFanSpeeds.toList())
         assertEquals(listOf(-1), restored.toNativeConfig().filamentSupportInterfaceFanSpeeds.toList())
+        assertEquals(listOf(-1), restored.toNativeConfig().filamentIroningFanSpeeds.toList())
         assertEquals(listOf(100f), restored.toNativeConfig().filamentShrinkages.toList())
         assertEquals(
             listOf(100f),
@@ -1400,6 +1405,7 @@ private fun JSONObject.removeCoolingParityFields() {
     remove("overhangFanThreshold")
     remove("internalBridgeFanSpeed")
     remove("supportInterfaceFanSpeed")
+    remove("ironingFanSpeed")
 }
 
 private fun JSONObject.removePrimeTowerInterfaceFields() {

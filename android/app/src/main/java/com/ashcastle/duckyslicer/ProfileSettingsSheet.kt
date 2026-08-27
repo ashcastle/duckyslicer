@@ -2861,6 +2861,22 @@ private fun FilamentSettingsSheet(
             },
         )
         SettingSlider(
+            label = stringResource(R.string.ironing_fan_speed),
+            valueText = if (activeProfile.ironingFanSpeed < 0) {
+                stringResource(R.string.filament_automatic)
+            } else {
+                stringResource(R.string.percent_value, activeProfile.ironingFanSpeed)
+            },
+            value = activeProfile.ironingFanSpeed.toFloat(),
+            range = -1f..100f,
+            steps = 100,
+            onValueChange = {
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(ironingFanSpeed = it.roundToInt()),
+                ))
+            },
+        )
+        SettingSlider(
             label = stringResource(R.string.slow_down_layer_time),
             valueText = stringResource(R.string.seconds_value, activeProfile.slowDownLayerTime),
             value = activeProfile.slowDownLayerTime,

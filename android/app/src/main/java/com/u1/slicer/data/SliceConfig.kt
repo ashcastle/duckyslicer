@@ -338,6 +338,7 @@ data class SliceConfig(
     @JvmField var filamentOverhangFanThresholds: IntArray = intArrayOf()
     @JvmField var filamentInternalBridgeFanSpeeds: IntArray = intArrayOf()
     @JvmField var filamentSupportInterfaceFanSpeeds: IntArray = intArrayOf()
+    @JvmField var filamentIroningFanSpeeds: IntArray = intArrayOf()
     @JvmField var filamentLoadingSpeeds: FloatArray = floatArrayOf()
     @JvmField var filamentLoadingSpeedStarts: FloatArray = floatArrayOf()
     @JvmField var filamentUnloadingSpeeds: FloatArray = floatArrayOf()

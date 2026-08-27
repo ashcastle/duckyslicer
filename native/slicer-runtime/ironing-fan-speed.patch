@@ -1,0 +1,33 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -567,6 +567,7 @@ struct SliceConfig {
+     std::vector<int>   filament_overhang_fan_speeds;
+     std::vector<int>   filament_overhang_fan_thresholds;
+     std::vector<int>   filament_internal_bridge_fan_speeds;
+     std::vector<int>   filament_support_interface_fan_speeds;
++    std::vector<int>   filament_ironing_fan_speeds;
+     std::vector<float> filament_loading_speeds;
+     std::vector<float> filament_loading_speed_starts;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -590,6 +590,7 @@ SliceConfig readSliceConfig(JNIEnv* env, jobject configObj) {
+     config.filament_overhang_fan_speeds = getIntArray("filamentOverhangFanSpeeds");
+     config.filament_overhang_fan_thresholds = getIntArray("filamentOverhangFanThresholds");
+     config.filament_internal_bridge_fan_speeds = getIntArray("filamentInternalBridgeFanSpeeds");
+     config.filament_support_interface_fan_speeds = getIntArray("filamentSupportInterfaceFanSpeeds");
++    config.filament_ironing_fan_speeds = getIntArray("filamentIroningFanSpeeds");
+     config.filament_loading_speeds = getFloatArray("filamentLoadingSpeeds");
+     config.filament_loading_speed_starts = getFloatArray("filamentLoadingSpeedStarts");
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -1379,6 +1379,7 @@ Slic3r::DynamicPrintConfig applyConfigToPrusa(const SliceConfig& config) {
+     applyPerExtInts  ("overhang_fan_speed",      config.filament_overhang_fan_speeds, 100);
+     applyPerExtInts  ("internal_bridge_fan_speed", config.filament_internal_bridge_fan_speeds, -1);
+     applyPerExtInts  ("support_material_interface_fan_speed", config.filament_support_interface_fan_speeds, -1);
++    applyPerExtInts  ("ironing_fan_speed", config.filament_ironing_fan_speeds, -1);
+     if (!config.filament_overhang_fan_thresholds.empty()) {
+         auto* option = dpc.option<Slic3r::ConfigOptionEnumsGeneric>("overhang_fan_threshold");
+         if (option != nullptr) {

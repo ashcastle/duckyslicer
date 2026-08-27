@@ -362,6 +362,7 @@
     <string name="overhang_fan_threshold">Overhang cooling threshold</string>
     <string name="internal_bridge_fan_speed">Internal bridge fan</string>
     <string name="support_interface_fan_speed">Support interface fan</string>
+    <string name="ironing_fan_speed">Ironing fan</string>
     <string name="fan_override_disabled">Off</string>
     <string name="seconds_suffix">s</string>
     <string name="slow_down_layer_time">Slow down for layer time</string>
