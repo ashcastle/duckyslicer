@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 108) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 109) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -137,6 +137,10 @@ class OrcaProfileCatalog(private val context: Context) {
         silentMode = input.readCatalogBoolean(),
         silentMotionLimits = MachineMotionLimits.fromFloatList(input.readCatalogFloatList()),
         maxJunctionDeviation = input.readFloat(),
+        minimumExtrudingRate = input.readFloat(),
+        minimumTravelRate = input.readFloat(),
+        silentMinimumExtrudingRate = input.readFloat(),
+        silentMinimumTravelRate = input.readFloat(),
         resonanceAvoidance = input.readCatalogBoolean(),
         minResonanceAvoidanceSpeed = input.readFloat(),
         maxResonanceAvoidanceSpeed = input.readFloat(),
@@ -424,6 +428,10 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("silentMode", BINARY_BOOL),
     BinaryField("silentMotionLimits", BINARY_FLOAT_LIST),
     BinaryField("maxJunctionDeviation", BINARY_FLOAT),
+    BinaryField("minimumExtrudingRate", BINARY_FLOAT),
+    BinaryField("minimumTravelRate", BINARY_FLOAT),
+    BinaryField("silentMinimumExtrudingRate", BINARY_FLOAT),
+    BinaryField("silentMinimumTravelRate", BINARY_FLOAT),
     BinaryField("resonanceAvoidance", BINARY_BOOL),
     BinaryField("minResonanceAvoidanceSpeed", BINARY_FLOAT),
     BinaryField("maxResonanceAvoidanceSpeed", BINARY_FLOAT),

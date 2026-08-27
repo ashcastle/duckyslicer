@@ -479,6 +479,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
             "bed_mesh_max": ["290", "291"],
             "bed_mesh_probe_distance": "40x41",
             "adaptive_bed_mesh_margin": "5",
+            "machine_min_extruding_rate": ["2.5", "1.5"],
+            "machine_min_travel_rate": ["3.5", "2.5"],
             "machine_max_junction_deviation": ["0.032", "0"],
         }
 
@@ -491,6 +493,10 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(40.0, profile["bedMeshProbeDistanceX"])
         self.assertEqual(41.0, profile["bedMeshProbeDistanceY"])
         self.assertEqual(5.0, profile["adaptiveBedMeshMargin"])
+        self.assertEqual(2.5, profile["minimumExtrudingRate"])
+        self.assertEqual(3.5, profile["minimumTravelRate"])
+        self.assertEqual(1.5, profile["silentMinimumExtrudingRate"])
+        self.assertEqual(2.5, profile["silentMinimumTravelRate"])
         self.assertEqual(0.032, profile["maxJunctionDeviation"])
         with self.assertRaises(ValueError):
             build_printer("Example", base | {"bed_mesh_min": "295,11"})

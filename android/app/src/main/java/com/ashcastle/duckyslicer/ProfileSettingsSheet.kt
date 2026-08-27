@@ -1868,6 +1868,28 @@ private fun PrinterSettingsSheet(
         increment = 0.1f,
         onValueChange = { onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxJerkE = it))) },
     )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.minimum_extruding_rate),
+        valueText = stringResource(R.string.print_speed_value, options.minimumExtrudingRate),
+        value = options.minimumExtrudingRate,
+        minimum = 0f,
+        defaultMaximum = 100f,
+        increment = 0.1f,
+        onValueChange = {
+            onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(minimumExtrudingRate = it)))
+        },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.minimum_travel_rate),
+        valueText = stringResource(R.string.print_speed_value, options.minimumTravelRate),
+        value = options.minimumTravelRate,
+        minimum = 0f,
+        defaultMaximum = 100f,
+        increment = 0.1f,
+        onValueChange = {
+            onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(minimumTravelRate = it)))
+        },
+    )
     SettingsSwitch(
         label = stringResource(R.string.silent_mode),
         checked = options.machineMotion.silentMode,
@@ -1885,6 +1907,36 @@ private fun PrinterSettingsSheet(
                 onOptionsChanged(
                     options.copy(
                         machineMotion = options.machineMotion.copy(silentMotionLimits = limits),
+                    ),
+                )
+            },
+        )
+        QuantizedSettingSlider(
+            label = stringResource(R.string.minimum_extruding_rate),
+            valueText = stringResource(R.string.print_speed_value, options.silentMinimumExtrudingRate),
+            value = options.silentMinimumExtrudingRate,
+            minimum = 0f,
+            defaultMaximum = 100f,
+            increment = 0.1f,
+            onValueChange = {
+                onOptionsChanged(
+                    options.copy(
+                        machineMotion = options.machineMotion.copy(silentMinimumExtrudingRate = it),
+                    ),
+                )
+            },
+        )
+        QuantizedSettingSlider(
+            label = stringResource(R.string.minimum_travel_rate),
+            valueText = stringResource(R.string.print_speed_value, options.silentMinimumTravelRate),
+            value = options.silentMinimumTravelRate,
+            minimum = 0f,
+            defaultMaximum = 100f,
+            increment = 0.1f,
+            onValueChange = {
+                onOptionsChanged(
+                    options.copy(
+                        machineMotion = options.machineMotion.copy(silentMinimumTravelRate = it),
                     ),
                 )
             },

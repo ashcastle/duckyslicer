@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 108
+SCHEMA_VERSION = 109
 MAX_FILAMENT_SLOTS = 16
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
@@ -573,6 +573,8 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         key: motion_pair(key, default)
         for key, default in motion_defaults
     }
+    minimum_extruding_rates = motion_pair("machine_min_extruding_rate", 0)
+    minimum_travel_rates = motion_pair("machine_min_travel_rate", 0)
 
     def motion(key: str) -> float:
         return motion_pairs[key][0]
@@ -668,6 +670,10 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "silentMode": boolean(raw.get("silent_mode")),
         "silentMotionLimits": [motion_pairs[key][1] for key, _ in motion_defaults],
         "maxJunctionDeviation": number(raw.get("machine_max_junction_deviation"), 0),
+        "minimumExtrudingRate": minimum_extruding_rates[0],
+        "minimumTravelRate": minimum_travel_rates[0],
+        "silentMinimumExtrudingRate": minimum_extruding_rates[1],
+        "silentMinimumTravelRate": minimum_travel_rates[1],
         "resonanceAvoidance": boolean(raw.get("resonance_avoidance")),
         "minResonanceAvoidanceSpeed": number(raw.get("min_resonance_avoidance_speed"), 70),
         "maxResonanceAvoidanceSpeed": number(raw.get("max_resonance_avoidance_speed"), 120),
@@ -765,6 +771,15 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
             "bedMeshProbeDistanceX", "bedMeshProbeDistanceY", "adaptiveBedMeshMargin"
         ])
         and 0 <= profile["maxJunctionDeviation"] <= 10
+        and all(
+            0 <= profile[key] <= 2_000
+            for key in [
+                "minimumExtrudingRate",
+                "minimumTravelRate",
+                "silentMinimumExtrudingRate",
+                "silentMinimumTravelRate",
+            ]
+        )
         and 0 <= profile["minResonanceAvoidanceSpeed"] <= profile["maxResonanceAvoidanceSpeed"] <= 2_000
         and 0.01 <= profile["minLayerHeight"] <= profile["maxLayerHeight"] <= 2
     ):

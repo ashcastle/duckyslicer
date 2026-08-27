@@ -1,0 +1,74 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -532,6 +532,8 @@ struct SliceConfig {
+     bool machine_silent_mode = false;
+     std::vector<float> machine_silent_motion_limits;
+     float machine_max_junction_deviation = 0.0f;
++    std::vector<float> machine_minimum_extruding_rates;
++    std::vector<float> machine_minimum_travel_rates;
+     bool resonance_avoidance = false;
+     float min_resonance_avoidance_speed = 70.0f;
+     float max_resonance_avoidance_speed = 120.0f;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -565,6 +565,8 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.machine_silent_mode = getBool("machineSilentMode");
+     config.machine_silent_motion_limits = getFloatArray("machineSilentMotionLimits");
+     config.machine_max_junction_deviation = getFloat("machineMaxJunctionDeviation");
++    config.machine_minimum_extruding_rates = getFloatArray("machineMinimumExtrudingRates");
++    config.machine_minimum_travel_rates = getFloatArray("machineMinimumTravelRates");
+     config.resonance_avoidance = getBool("resonanceAvoidance");
+     config.min_resonance_avoidance_speed = getFloat("minResonanceAvoidanceSpeed");
+     config.max_resonance_avoidance_speed = getFloat("maxResonanceAvoidanceSpeed");
+@@ -1208,6 +1210,8 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setBool("machineSilentMode", config.machine_silent_mode);
+     setFloatArray("machineSilentMotionLimits", config.machine_silent_motion_limits);
+     setFloat("machineMaxJunctionDeviation", config.machine_max_junction_deviation);
++    setFloatArray("machineMinimumExtrudingRates", config.machine_minimum_extruding_rates);
++    setFloatArray("machineMinimumTravelRates", config.machine_minimum_travel_rates);
+     setBool("resonanceAvoidance", config.resonance_avoidance);
+     setFloat("minResonanceAvoidanceSpeed", config.min_resonance_avoidance_speed);
+     setFloat("maxResonanceAvoidanceSpeed", config.max_resonance_avoidance_speed);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -655,6 +655,28 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     dpc.set_key_value(
+         "machine_max_junction_deviation",
+         new Slic3r::ConfigOptionFloats({config.machine_max_junction_deviation, config.machine_max_junction_deviation}));
++    const auto validate_minimum_rates = [](const std::vector<float>& rates, const char* name) {
++        if (rates.size() != 2) {
++            throw std::invalid_argument(std::string("Invalid ") + name + " mode count");
++        }
++        for (float rate : rates) {
++            if (!std::isfinite(rate) || rate < 0.0f || rate > 2000.0f) {
++                throw std::invalid_argument(std::string("Invalid ") + name);
++            }
++        }
++    };
++    validate_minimum_rates(config.machine_minimum_extruding_rates, "minimum extrusion rate");
++    validate_minimum_rates(config.machine_minimum_travel_rates, "minimum travel rate");
++    dpc.set_key_value(
++        "machine_min_extruding_rate",
++        new Slic3r::ConfigOptionFloats({
++            config.machine_minimum_extruding_rates[0],
++            config.machine_minimum_extruding_rates[1]}));
++    dpc.set_key_value(
++        "machine_min_travel_rate",
++        new Slic3r::ConfigOptionFloats({
++            config.machine_minimum_travel_rates[0],
++            config.machine_minimum_travel_rates[1]}));
+     if (!std::isfinite(config.min_resonance_avoidance_speed) ||
+         !std::isfinite(config.max_resonance_avoidance_speed) ||
+         config.min_resonance_avoidance_speed < 0.0f ||
+@@ -2288,6 +2310,8 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                     "machine_max_jerk_z",
+                     "machine_max_jerk_e",
+                     "machine_max_junction_deviation",
++                    "machine_min_extruding_rate",
++                    "machine_min_travel_rate",
+                     "nozzle_type",
+                     "nozzle_hrc",
+                     "nozzle_height",

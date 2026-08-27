@@ -7866,6 +7866,10 @@ class NativeEngineInstrumentedTest {
             maxJerkZ = 0.6f,
             maxJerkE = 4.4f,
             maxJunctionDeviation = 0.037f,
+            minimumExtrudingRate = 2.5f,
+            minimumTravelRate = 3.5f,
+            silentMinimumExtrudingRate = 1.5f,
+            silentMinimumTravelRate = 2.5f,
             extruderClearanceRadius = 71f,
             extruderClearanceHeightToRod = 29f,
             extruderClearanceHeightToLid = 119f,
@@ -7921,6 +7925,14 @@ class NativeEngineInstrumentedTest {
             gcode.contains("; machine_max_junction_deviation = 0.037,0.037"),
         )
         assertTrue(
+            "Normal and silent minimum extrusion rates must reach Orca",
+            gcode.contains("; machine_min_extruding_rate = 2.5,1.5"),
+        )
+        assertTrue(
+            "Normal and silent minimum travel rates must reach Orca",
+            gcode.contains("; machine_min_travel_rate = 3.5,2.5"),
+        )
+        assertTrue(
             "Marlin 2 must receive the configured junction deviation",
             gcode.lineSequence().any { it.startsWith("M205 J0.037") },
         )
@@ -7943,6 +7955,33 @@ class NativeEngineInstrumentedTest {
         assertTrue("Centered-machine G-code must retain positive X coordinates", bounds.maxX > 1f)
         assertTrue("Centered-machine G-code must retain negative Y coordinates", bounds.minY < -1f)
         assertTrue("Centered-machine G-code must retain positive Y coordinates", bounds.maxY > 1f)
+    }
+
+    @Test
+    fun minimumMachineRatesChangeOrcaTimeEstimate() {
+        val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(gcodeFlavor = "marlin2")
+        val baseline = OnDeviceSlicer.slice(
+            fixtureModel(),
+            SliceOptions().selectPrinter(printer),
+        )
+        val clamped = OnDeviceSlicer.slice(
+            fixtureModel(),
+            SliceOptions().selectPrinter(
+                printer.copy(
+                    minimumExtrudingRate = 200f,
+                    minimumTravelRate = 200f,
+                ),
+            ),
+        )
+        try {
+            assertTrue(
+                "Minimum machine rates must affect Orca's real G-code time processor",
+                clamped.estimatedSeconds < baseline.estimatedSeconds,
+            )
+        } finally {
+            baseline.output.delete()
+            clamped.output.delete()
+        }
     }
 
     @Test

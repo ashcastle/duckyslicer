@@ -66,6 +66,7 @@ BUILD_INPUTS = (
     "native/slicer-runtime/adaptive-layer-height.patch",
     "native/slicer-runtime/auto-arrange-rotations.patch",
     "native/slicer-runtime/silent-mode-machine-limits.patch",
+    "native/slicer-runtime/machine-minimum-rates.patch",
     "native/slicer-runtime/engine-profile-options.patch",
     "native/slicer-runtime/engine-nozzle-volume.patch",
     "native/slicer-runtime/engine-branding.patch",

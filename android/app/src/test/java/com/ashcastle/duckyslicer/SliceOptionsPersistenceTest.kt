@@ -665,6 +665,20 @@ class SliceOptionsPersistenceTest {
             options.printerProfile.maxJunctionDeviation,
             restored.printerProfile.maxJunctionDeviation,
         )
+        assertEquals(options.minimumExtrudingRate, restored.minimumExtrudingRate)
+        assertEquals(options.minimumTravelRate, restored.minimumTravelRate)
+        assertEquals(options.silentMinimumExtrudingRate, restored.silentMinimumExtrudingRate)
+        assertEquals(options.silentMinimumTravelRate, restored.silentMinimumTravelRate)
+        assertArrayEquals(
+            floatArrayOf(options.minimumExtrudingRate, options.silentMinimumExtrudingRate),
+            restored.toNativeConfig().machineMinimumExtrudingRates,
+            0f,
+        )
+        assertArrayEquals(
+            floatArrayOf(options.minimumTravelRate, options.silentMinimumTravelRate),
+            restored.toNativeConfig().machineMinimumTravelRates,
+            0f,
+        )
         assertEquals(options.printerProfile.nozzleHeight, restored.printerProfile.nozzleHeight)
         assertEquals(options.printerProfile.nozzleHeight, restored.toNativeConfig().nozzleHeight)
         assertEquals(options.printerProfile.nozzleVolume, restored.printerProfile.nozzleVolume)
@@ -1286,7 +1300,7 @@ class SliceOptionsPersistenceTest {
         assertNull(unsafe.toProjectSliceOptionsOrNull())
 
         val unknown = JSONObject(restoredSettingsFixture().toProjectJson().toString())
-            .put("formatVersion", 100)
+            .put("formatVersion", 101)
         assertNull(unknown.toProjectSliceOptionsOrNull())
     }
 
@@ -1471,6 +1485,10 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             bedMeshProbeDistanceY = 41f,
             adaptiveBedMeshMargin = 5f,
             maxJunctionDeviation = 0.032f,
+            minimumExtrudingRate = 2.5f,
+            minimumTravelRate = 3.5f,
+            silentMinimumExtrudingRate = 1.5f,
+            silentMinimumTravelRate = 2.5f,
             nozzleHeight = 4.76f,
             nozzleVolume = 143f,
             gcodeThumbnails = "64x64/PNG,400x300/QOI",
@@ -1930,5 +1948,9 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
                 maxAccelerationY = 1_250f,
             ),
             maxJunctionDeviation = 0.032f,
+            minimumExtrudingRate = 2.5f,
+            minimumTravelRate = 3.5f,
+            silentMinimumExtrudingRate = 1.5f,
+            silentMinimumTravelRate = 2.5f,
         ),
     )

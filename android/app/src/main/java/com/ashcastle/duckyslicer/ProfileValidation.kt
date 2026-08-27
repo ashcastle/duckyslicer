@@ -60,6 +60,12 @@ internal object ProfileValidation {
                 .all { it in 0f..100_000f } &&
             machineMotionLimitsAreValid(profile.silentMotionLimits) &&
             profile.maxJunctionDeviation in 0f..10f &&
+            listOf(
+                profile.minimumExtrudingRate,
+                profile.minimumTravelRate,
+                profile.silentMinimumExtrudingRate,
+                profile.silentMinimumTravelRate,
+            ).all { it in 0f..2_000f } &&
             profile.minResonanceAvoidanceSpeed in 0f..2_000f &&
             profile.maxResonanceAvoidanceSpeed in profile.minResonanceAvoidanceSpeed..2_000f &&
             profile.retractLength in 0f..100f &&

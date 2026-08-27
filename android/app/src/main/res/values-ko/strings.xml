@@ -979,6 +979,8 @@
     <string name="maximum_z_jerk">최대 Z 저크</string>
     <string name="maximum_e_jerk">최대 E 저크</string>
     <string name="maximum_junction_deviation">최대 정션 편차</string>
+    <string name="minimum_extruding_rate">최소 압출 속도</string>
+    <string name="minimum_travel_rate">최소 이동 속도</string>
     <string name="resonance_avoidance">공진 속도 회피</string>
     <string name="minimum_resonance_avoidance_speed">최소 회피 속도</string>
     <string name="maximum_resonance_avoidance_speed">최대 회피 속도</string>

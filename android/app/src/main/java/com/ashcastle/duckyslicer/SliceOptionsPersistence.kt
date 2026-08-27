@@ -32,6 +32,10 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         maxJerkZ = maxJerkZ,
         maxJerkE = maxJerkE,
         maxJunctionDeviation = maxJunctionDeviation,
+        minimumExtrudingRate = minimumExtrudingRate,
+        minimumTravelRate = minimumTravelRate,
+        silentMinimumExtrudingRate = silentMinimumExtrudingRate,
+        silentMinimumTravelRate = silentMinimumTravelRate,
         extruderClearanceRadius = extruderClearanceRadius,
         extruderClearanceHeightToRod = extruderClearanceHeightToRod,
         extruderClearanceHeightToLid = extruderClearanceHeightToLid,
@@ -365,7 +369,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 99
+private const val SLICE_OPTIONS_FORMAT_VERSION = 100
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

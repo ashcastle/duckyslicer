@@ -35,6 +35,8 @@ class ProfileSettingsSearchTest {
         assertTrue(settingQueryMatches("썸네일", "G-code 썸네일"))
         assertTrue(settingQueryMatches("silent speed", "Silent · Maximum X speed"))
         assertTrue(settingQueryMatches("저소음 가속도", "저소음 · 최대 출력 가속도"))
+        assertTrue(settingQueryMatches("speed extruding", "Minimum speed for extruding"))
+        assertTrue(settingQueryMatches("minimum travel", "Minimum travel speed"))
         assertFalse(settingQueryMatches("Z distance", "0.20 mm Standard"))
     }
 

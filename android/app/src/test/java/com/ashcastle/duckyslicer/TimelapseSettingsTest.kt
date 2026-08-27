@@ -22,7 +22,7 @@ class TimelapseSettingsTest {
         assertEquals("smooth", options.toNativeConfig().timelapseType)
 
         val stored = options.toProjectJson()
-        assertEquals(99, stored.getInt("formatVersion"))
+        assertEquals(100, stored.getInt("formatVersion"))
         assertEquals(
             "smooth",
             stored.getJSONObject("slicing").getString("timelapseType"),

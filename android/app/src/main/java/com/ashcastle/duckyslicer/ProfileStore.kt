@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 108
+internal const val USER_PROFILE_SCHEMA_VERSION = 109
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -122,6 +122,10 @@ class ProfileStore private constructor(
             silentMode = options.machineMotion.silentMode,
             silentMotionLimits = options.machineMotion.silentMotionLimits,
             maxJunctionDeviation = options.maxJunctionDeviation,
+            minimumExtrudingRate = options.minimumExtrudingRate,
+            minimumTravelRate = options.minimumTravelRate,
+            silentMinimumExtrudingRate = options.silentMinimumExtrudingRate,
+            silentMinimumTravelRate = options.silentMinimumTravelRate,
             resonanceAvoidance = options.printerProfile.resonanceAvoidance,
             minResonanceAvoidanceSpeed = options.printerProfile.minResonanceAvoidanceSpeed,
             maxResonanceAvoidanceSpeed = options.printerProfile.maxResonanceAvoidanceSpeed,
@@ -838,6 +842,10 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("silentMode", silentMode)
     .put("silentMotionLimits", JSONArray(silentMotionLimits.toFloatList()))
     .put("maxJunctionDeviation", maxJunctionDeviation)
+    .put("minimumExtrudingRate", minimumExtrudingRate)
+    .put("minimumTravelRate", minimumTravelRate)
+    .put("silentMinimumExtrudingRate", silentMinimumExtrudingRate)
+    .put("silentMinimumTravelRate", silentMinimumTravelRate)
     .put("resonanceAvoidance", resonanceAvoidance)
     .put("minResonanceAvoidanceSpeed", minResonanceAvoidanceSpeed)
     .put("maxResonanceAvoidanceSpeed", maxResonanceAvoidanceSpeed)
@@ -1405,6 +1413,16 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         silentMode = optBoolean("silentMode"),
         silentMotionLimits = machineMotionLimits("silentMotionLimits") ?: motionLimits,
         maxJunctionDeviation = optDouble("maxJunctionDeviation", 0.0).toFloat(),
+        minimumExtrudingRate = optDouble("minimumExtrudingRate", 0.0).toFloat(),
+        minimumTravelRate = optDouble("minimumTravelRate", 0.0).toFloat(),
+        silentMinimumExtrudingRate = optDouble(
+            "silentMinimumExtrudingRate",
+            optDouble("minimumExtrudingRate", 0.0),
+        ).toFloat(),
+        silentMinimumTravelRate = optDouble(
+            "silentMinimumTravelRate",
+            optDouble("minimumTravelRate", 0.0),
+        ).toFloat(),
         resonanceAvoidance = optBoolean("resonanceAvoidance"),
         minResonanceAvoidanceSpeed = optDouble("minResonanceAvoidanceSpeed", 70.0).toFloat(),
         maxResonanceAvoidanceSpeed = optDouble("maxResonanceAvoidanceSpeed", 120.0).toFloat(),

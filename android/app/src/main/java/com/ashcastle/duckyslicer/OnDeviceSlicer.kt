@@ -314,6 +314,10 @@ data class PrinterProfile(
         maxJerkX, maxJerkY, maxJerkZ, maxJerkE,
     ),
     val maxJunctionDeviation: Float = 0f,
+    val minimumExtrudingRate: Float = 0f,
+    val minimumTravelRate: Float = 0f,
+    val silentMinimumExtrudingRate: Float = minimumExtrudingRate,
+    val silentMinimumTravelRate: Float = minimumTravelRate,
     val resonanceAvoidance: Boolean = false,
     val minResonanceAvoidanceSpeed: Float = 70f,
     val maxResonanceAvoidanceSpeed: Float = 120f,
@@ -1375,7 +1379,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 108,
+    val schemaVersion: Int = 109,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1399,6 +1403,10 @@ data class MachineMotionSettings(
     val silentMode: Boolean,
     val silentMotionLimits: MachineMotionLimits,
     val maxJunctionDeviation: Float,
+    val minimumExtrudingRate: Float,
+    val minimumTravelRate: Float,
+    val silentMinimumExtrudingRate: Float,
+    val silentMinimumTravelRate: Float,
 ) {
     companion object {
         fun fromProfile(profile: PrinterProfile) = MachineMotionSettings(
@@ -1420,6 +1428,10 @@ data class MachineMotionSettings(
             silentMode = profile.silentMode,
             silentMotionLimits = profile.silentMotionLimits,
             maxJunctionDeviation = profile.maxJunctionDeviation,
+            minimumExtrudingRate = profile.minimumExtrudingRate,
+            minimumTravelRate = profile.minimumTravelRate,
+            silentMinimumExtrudingRate = profile.silentMinimumExtrudingRate,
+            silentMinimumTravelRate = profile.silentMinimumTravelRate,
         )
     }
 }
@@ -1693,6 +1705,10 @@ data class SliceOptions(
     val maxJerkZ: Float get() = machineMotion.maxJerkZ
     val maxJerkE: Float get() = machineMotion.maxJerkE
     val maxJunctionDeviation: Float get() = machineMotion.maxJunctionDeviation
+    val minimumExtrudingRate: Float get() = machineMotion.minimumExtrudingRate
+    val minimumTravelRate: Float get() = machineMotion.minimumTravelRate
+    val silentMinimumExtrudingRate: Float get() = machineMotion.silentMinimumExtrudingRate
+    val silentMinimumTravelRate: Float get() = machineMotion.silentMinimumTravelRate
 
     val printableOverhangs: PrintableOverhangSettings
         get() = precision.printableOverhangs
@@ -2451,6 +2467,14 @@ data class SliceOptions(
             native.machineMaxJunctionDeviation = maxJunctionDeviation
             native.machineSilentMode = machineMotion.silentMode
             native.machineSilentMotionLimits = machineMotion.silentMotionLimits.toFloatList().toFloatArray()
+            native.machineMinimumExtrudingRates = floatArrayOf(
+                minimumExtrudingRate,
+                silentMinimumExtrudingRate,
+            )
+            native.machineMinimumTravelRates = floatArrayOf(
+                minimumTravelRate,
+                silentMinimumTravelRate,
+            )
             native.resonanceAvoidance = printerProfile.resonanceAvoidance
             native.minResonanceAvoidanceSpeed = printerProfile.minResonanceAvoidanceSpeed
             native.maxResonanceAvoidanceSpeed = printerProfile.maxResonanceAvoidanceSpeed
