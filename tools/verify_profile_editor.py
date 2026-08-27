@@ -371,6 +371,12 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "R.string.maximum_y_jerk",
         "R.string.maximum_z_jerk",
         "R.string.maximum_e_jerk",
+        "R.string.silent_mode",
+        "R.string.silent_motion_limits",
+        "R.string.silent_setting_label",
+        "SILENT_MOTION_LIMIT_CONTROLS",
+        "silentMode = enabled",
+        "silentMotionLimits = limits",
         "QuantizedSettingSlider(",
         "R.string.feature_jerk",
         "options.jerk.copy(defaultJerk",
@@ -486,6 +492,15 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
             if resource not in strings:
                 raise VerificationError(
                     f"localized separated profile/settings search label is missing from {source_name}: {resource}"
+                )
+        for resource in (
+            'name="silent_mode"',
+            'name="silent_motion_limits"',
+            'name="silent_setting_label"',
+        ):
+            if resource not in strings:
+                raise VerificationError(
+                    f"localized silent motion setting is missing from {source_name}: {resource}"
                 )
         for resource in (
             'name="prime_tower_brim_chamfer"',
@@ -665,6 +680,7 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "blankSettingSearchKeepsTheWholeEditorVisible",
         "coordinatePairEditorParsesOnlyTwoFiniteCoordinates",
         'settingQueryMatches("mesh min", "Bed mesh min")',
+        'settingQueryMatches("silent speed", "Silent · Maximum X speed")',
     ):
         if marker not in search_test:
             raise VerificationError(f"profile setting-search regression is missing: {marker}")

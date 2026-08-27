@@ -33,6 +33,8 @@ class ProfileSettingsSearchTest {
         assertTrue(settingQueryMatches("프로브 간격", "프로브 지점 간격"))
         assertTrue(settingQueryMatches("thumbnail", "G-code thumbnails"))
         assertTrue(settingQueryMatches("썸네일", "G-code 썸네일"))
+        assertTrue(settingQueryMatches("silent speed", "Silent · Maximum X speed"))
+        assertTrue(settingQueryMatches("저소음 가속도", "저소음 · 최대 출력 가속도"))
         assertFalse(settingQueryMatches("Z distance", "0.20 mm Standard"))
     }
 

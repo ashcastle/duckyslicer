@@ -82,6 +82,116 @@ private enum class ProfileSettingsKind {
 private val LocalSettingsQuery = compositionLocalOf { "" }
 private const val MAX_GCODE_TEMPLATE_BYTES = 262_144
 
+private enum class MotionLimitUnit {
+    SPEED,
+    ACCELERATION,
+    JERK,
+}
+
+private data class MotionLimitControl(
+    val labelResource: Int,
+    val unit: MotionLimitUnit,
+    val minimum: Float,
+    val defaultMaximum: Float,
+    val increment: Float,
+    val value: (MachineMotionLimits) -> Float,
+    val update: (MachineMotionLimits, Float) -> MachineMotionLimits,
+)
+
+private val SILENT_MOTION_LIMIT_CONTROLS = listOf(
+    MotionLimitControl(
+        R.string.maximum_x_speed, MotionLimitUnit.SPEED, 1f, 700f, 1f,
+        MachineMotionLimits::maxSpeedX,
+        { limits, value -> limits.copy(maxSpeedX = value) },
+    ),
+    MotionLimitControl(
+        R.string.maximum_y_speed, MotionLimitUnit.SPEED, 1f, 700f, 1f,
+        MachineMotionLimits::maxSpeedY,
+        { limits, value -> limits.copy(maxSpeedY = value) },
+    ),
+    MotionLimitControl(
+        R.string.maximum_z_speed, MotionLimitUnit.SPEED, 0.1f, 100f, 0.1f,
+        MachineMotionLimits::maxSpeedZ,
+        { limits, value -> limits.copy(maxSpeedZ = value) },
+    ),
+    MotionLimitControl(
+        R.string.maximum_e_speed, MotionLimitUnit.SPEED, 1f, 500f, 1f,
+        MachineMotionLimits::maxSpeedE,
+        { limits, value -> limits.copy(maxSpeedE = value) },
+    ),
+    MotionLimitControl(
+        R.string.maximum_x_acceleration, MotionLimitUnit.ACCELERATION, 1f, 50_000f, 100f,
+        MachineMotionLimits::maxAccelerationX,
+        { limits, value -> limits.copy(maxAccelerationX = value) },
+    ),
+    MotionLimitControl(
+        R.string.maximum_y_acceleration, MotionLimitUnit.ACCELERATION, 1f, 50_000f, 100f,
+        MachineMotionLimits::maxAccelerationY,
+        { limits, value -> limits.copy(maxAccelerationY = value) },
+    ),
+    MotionLimitControl(
+        R.string.maximum_z_acceleration, MotionLimitUnit.ACCELERATION, 1f, 50_000f, 50f,
+        MachineMotionLimits::maxAccelerationZ,
+        { limits, value -> limits.copy(maxAccelerationZ = value) },
+    ),
+    MotionLimitControl(
+        R.string.maximum_e_acceleration, MotionLimitUnit.ACCELERATION, 1f, 50_000f, 50f,
+        MachineMotionLimits::maxAccelerationE,
+        { limits, value -> limits.copy(maxAccelerationE = value) },
+    ),
+    MotionLimitControl(
+        R.string.maximum_print_acceleration, MotionLimitUnit.ACCELERATION, 1f, 50_000f, 100f,
+        MachineMotionLimits::maxAccelerationExtruding,
+        { limits, value ->
+            limits.copy(
+                maxAccelerationExtruding = value,
+                maxAccelerationX = max(limits.maxAccelerationX, value),
+                maxAccelerationY = max(limits.maxAccelerationY, value),
+            )
+        },
+    ),
+    MotionLimitControl(
+        R.string.maximum_retracting_acceleration,
+        MotionLimitUnit.ACCELERATION,
+        1f,
+        50_000f,
+        100f,
+        MachineMotionLimits::maxAccelerationRetracting,
+        { limits, value -> limits.copy(maxAccelerationRetracting = value) },
+    ),
+    MotionLimitControl(
+        R.string.maximum_travel_acceleration, MotionLimitUnit.ACCELERATION, 1f, 50_000f, 100f,
+        MachineMotionLimits::maxAccelerationTravel,
+        { limits, value ->
+            limits.copy(
+                maxAccelerationTravel = value,
+                maxAccelerationX = max(limits.maxAccelerationX, value),
+                maxAccelerationY = max(limits.maxAccelerationY, value),
+            )
+        },
+    ),
+    MotionLimitControl(
+        R.string.maximum_x_jerk, MotionLimitUnit.JERK, 0f, 100f, 0.1f,
+        MachineMotionLimits::maxJerkX,
+        { limits, value -> limits.copy(maxJerkX = value) },
+    ),
+    MotionLimitControl(
+        R.string.maximum_y_jerk, MotionLimitUnit.JERK, 0f, 100f, 0.1f,
+        MachineMotionLimits::maxJerkY,
+        { limits, value -> limits.copy(maxJerkY = value) },
+    ),
+    MotionLimitControl(
+        R.string.maximum_z_jerk, MotionLimitUnit.JERK, 0f, 20f, 0.1f,
+        MachineMotionLimits::maxJerkZ,
+        { limits, value -> limits.copy(maxJerkZ = value) },
+    ),
+    MotionLimitControl(
+        R.string.maximum_e_jerk, MotionLimitUnit.JERK, 0f, 100f, 0.1f,
+        MachineMotionLimits::maxJerkE,
+        { limits, value -> limits.copy(maxJerkE = value) },
+    ),
+)
+
 @Composable
 private fun settingMatchesQuery(label: String): Boolean {
     return settingQueryMatches(LocalSettingsQuery.current, label)
@@ -1758,6 +1868,28 @@ private fun PrinterSettingsSheet(
         increment = 0.1f,
         onValueChange = { onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxJerkE = it))) },
     )
+    SettingsSwitch(
+        label = stringResource(R.string.silent_mode),
+        checked = options.machineMotion.silentMode,
+        onCheckedChange = { enabled ->
+            onOptionsChanged(
+                options.copy(machineMotion = options.machineMotion.copy(silentMode = enabled)),
+            )
+        },
+    )
+    if (options.machineMotion.silentMode || settingsQuery.isNotBlank()) {
+        SettingsGroupTitle(stringResource(R.string.silent_motion_limits))
+        SilentMotionLimitSettings(
+            limits = options.machineMotion.silentMotionLimits,
+            onLimitsChanged = { limits ->
+                onOptionsChanged(
+                    options.copy(
+                        machineMotion = options.machineMotion.copy(silentMotionLimits = limits),
+                    ),
+                )
+            },
+        )
+    }
     QuantizedSettingSlider(
         label = stringResource(R.string.maximum_junction_deviation),
         valueText = stringResource(
@@ -1850,6 +1982,33 @@ private fun PrinterSettingsSheet(
             onDelete = { onDelete(it.id) },
             onRename = onRename,
             onDismiss = { profilesOpen = false },
+        )
+    }
+}
+
+@Composable
+private fun SilentMotionLimitSettings(
+    limits: MachineMotionLimits,
+    onLimitsChanged: (MachineMotionLimits) -> Unit,
+) {
+    SILENT_MOTION_LIMIT_CONTROLS.forEach { control ->
+        val value = control.value(limits)
+        val valueText = when (control.unit) {
+            MotionLimitUnit.SPEED -> stringResource(R.string.print_speed_value, value)
+            MotionLimitUnit.ACCELERATION -> stringResource(R.string.acceleration_value, value)
+            MotionLimitUnit.JERK -> stringResource(R.string.jerk_value, value)
+        }
+        QuantizedSettingSlider(
+            label = stringResource(
+                R.string.silent_setting_label,
+                stringResource(control.labelResource),
+            ),
+            valueText = valueText,
+            value = value,
+            minimum = control.minimum,
+            defaultMaximum = control.defaultMaximum,
+            increment = control.increment,
+            onValueChange = { onLimitsChanged(control.update(limits, it)) },
         )
     }
 }

@@ -960,6 +960,9 @@
     <string name="filament_start_gcode">필라멘트 시작 G-code</string>
     <string name="filament_end_gcode">필라멘트 종료 G-code</string>
     <string name="motion_limits">동작 한계</string>
+    <string name="silent_mode">저소음 모드</string>
+    <string name="silent_motion_limits">저소음 모드 한계</string>
+    <string name="silent_setting_label">저소음 · %1$s</string>
     <string name="maximum_x_speed">최대 X 속도</string>
     <string name="maximum_y_speed">최대 Y 속도</string>
     <string name="maximum_z_speed">최대 Z 속도</string>

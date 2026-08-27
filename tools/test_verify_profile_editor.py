@@ -192,6 +192,8 @@ def valid_sources() -> dict[str, str]:
             " R.string.maximum_retracting_acceleration"
             " R.string.maximum_x_jerk R.string.maximum_y_jerk"
             " R.string.maximum_z_jerk R.string.maximum_e_jerk"
+            " R.string.silent_mode R.string.silent_motion_limits R.string.silent_setting_label"
+            " SILENT_MOTION_LIMIT_CONTROLS silentMode = enabled silentMotionLimits = limits"
             " QuantizedSettingSlider("
             " R.string.feature_jerk"
             " options.jerk.copy(defaultJerk options.jerk.copy(outerWallJerk"
@@ -222,7 +224,8 @@ def valid_sources() -> dict[str, str]:
             'settingQueryMatches("Z distance", "Top Z distance") '
             "blankSettingSearchKeepsTheWholeEditorVisible "
             "coordinatePairEditorParsesOnlyTwoFiniteCoordinates "
-            'settingQueryMatches("mesh min", "Bed mesh min")'
+            'settingQueryMatches("mesh min", "Bed mesh min") '
+            'settingQueryMatches("silent speed", "Silent · Maximum X speed")'
         ),
         "SlicingSettingsSectionTest.kt": (
             "processEditorUsesExpectedSectionOrder "
@@ -305,6 +308,7 @@ def valid_sources() -> dict[str, str]:
             ' name="filament_minimal_purge_on_wipe_tower"'
             ' name="auxiliary_part_cooling_fan" name="cubic_millimeters_suffix"'
             ' name="maximum_z_speed" name="maximum_e_speed"'
+            ' name="silent_mode" name="silent_motion_limits" name="silent_setting_label"'
             ' name="maximum_x_acceleration" name="maximum_y_acceleration"'
             ' name="maximum_z_acceleration" name="maximum_e_acceleration"'
             ' name="maximum_retracting_acceleration"'
@@ -374,6 +378,7 @@ def valid_sources() -> dict[str, str]:
             ' name="filament_minimal_purge_on_wipe_tower"'
             ' name="auxiliary_part_cooling_fan" name="cubic_millimeters_suffix"'
             ' name="maximum_z_speed" name="maximum_e_speed"'
+            ' name="silent_mode" name="silent_motion_limits" name="silent_setting_label"'
             ' name="maximum_x_acceleration" name="maximum_y_acceleration"'
             ' name="maximum_z_acceleration" name="maximum_e_acceleration"'
             ' name="maximum_retracting_acceleration"'

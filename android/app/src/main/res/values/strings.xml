@@ -960,6 +960,9 @@
     <string name="filament_start_gcode">Filament start G-code</string>
     <string name="filament_end_gcode">Filament end G-code</string>
     <string name="motion_limits">Motion limits</string>
+    <string name="silent_mode">Silent mode</string>
+    <string name="silent_motion_limits">Silent mode limits</string>
+    <string name="silent_setting_label">Silent · %1$s</string>
     <string name="maximum_x_speed">Maximum X speed</string>
     <string name="maximum_y_speed">Maximum Y speed</string>
     <string name="maximum_z_speed">Maximum Z speed</string>
