@@ -32,6 +32,8 @@ class NativeLibrary(
         bedPolygon: FloatArray,
         bedExcludeArea: FloatArray,
         minimumGap: Float,
+        bestObjectPositionX: Float,
+        bestObjectPositionY: Float,
     ): FloatArray?
     external fun nativeSplitObject(objectIndex: Int): IntArray?
     external fun nativeIsVolumeSplittable(objectIndex: Int, volumeIndex: Int): Boolean

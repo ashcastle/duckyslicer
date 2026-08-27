@@ -103,6 +103,8 @@ def valid_sources() -> dict[str, str]:
             " R.string.printing_by_object_gcode R.string.use_relative_e_distances"
             " R.string.emit_machine_limits_to_gcode R.string.manual_filament_change"
             " R.string.disable_m73 R.string.scan_first_layer"
+            " R.string.preferred_arrangement_position"
+            " bestObjectPositionX = x / 100f bestObjectPositionY = y / 100f"
             " machineStartGcode = machineEndGcode = beforeLayerChangeGcode ="
             " layerChangeGcode = changeFilamentGcode = printingByObjectGcode ="
             " useRelativeEDistances = emitMachineLimitsToGcode ="
@@ -302,6 +304,7 @@ def valid_sources() -> dict[str, str]:
             ' name="change_pressure_when_wiping" name="ramming_pressure_advance"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
+            ' name="preferred_arrangement_position"'
             ' name="template_custom_gcode"'
             ' name="printing_by_object_gcode" name="use_relative_e_distances"'
             ' name="emit_machine_limits_to_gcode" name="manual_filament_change"'
@@ -377,6 +380,7 @@ def valid_sources() -> dict[str, str]:
             ' name="change_pressure_when_wiping" name="ramming_pressure_advance"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
+            ' name="preferred_arrangement_position"'
             ' name="template_custom_gcode"'
             ' name="pellet_extruder" name="pellet_flow_coefficient"'
             ' name="minimum_layer_height" name="maximum_layer_height"'

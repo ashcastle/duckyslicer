@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 113
+SCHEMA_VERSION = 114
 MAX_FILAMENT_SLOTS = 16
 NO_FILAMENT_COLOR = -1
 MAX_GCODE_THUMBNAILS = 8
@@ -567,6 +567,11 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     )
     flavor = str(scalar(raw.get("gcode_flavor"), "")).lower()
     printer_structure = str(scalar(raw.get("printer_structure"), "undefine")).strip().lower()
+    best_object_position_x, best_object_position_y = coordinate_pair(
+        raw.get("best_object_pos"),
+        0.5,
+        0.5,
+    )
     if not (
         50 <= height <= 1_500 and
         0.1 <= nozzle <= 2.0 and
@@ -578,6 +583,11 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"unsupported G-code flavor: {flavor}")
     if printer_structure not in SUPPORTED_PRINTER_STRUCTURES:
         raise ValueError(f"unsupported printer structure: {printer_structure}")
+    if not (
+        0 <= best_object_position_x <= 1 and
+        0 <= best_object_position_y <= 1
+    ):
+        raise ValueError("unsafe best object position")
 
     def motion_pair(key: str, default: float) -> tuple[float, float]:
         parsed = number_values(raw.get(key), default)
@@ -688,6 +698,8 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "toolChangeTemperatureWait": boolean(raw.get("tool_change_temprature_wait"), True),
         "gcodeFlavor": flavor,
         "printerStructure": printer_structure,
+        "bestObjectPositionX": best_object_position_x,
+        "bestObjectPositionY": best_object_position_y,
         "maxSpeedX": motion("machine_max_speed_x"),
         "maxSpeedY": motion("machine_max_speed_y"),
         "maxSpeedZ": motion("machine_max_speed_z"),

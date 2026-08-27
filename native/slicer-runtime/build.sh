@@ -127,6 +127,9 @@ prepare_runtime_source() {
     if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/silent-mode-machine-limits.patch" 2>/dev/null; then
         git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/silent-mode-machine-limits.patch"
     fi
+    if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/arrange-preferred-position.patch" 2>/dev/null; then
+        git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/arrange-preferred-position.patch"
+    fi
     if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/auto-arrange-rotations.patch" 2>/dev/null; then
         git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/auto-arrange-rotations.patch"
     fi
@@ -250,6 +253,9 @@ prepare_runtime_source() {
     git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/auto-arrange-rotations.patch" 2>/dev/null || \
         die "runtime automatic-arrangement rotation bridge contains unreviewed changes"
     git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/auto-arrange-rotations.patch"
+    git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/arrange-preferred-position.patch" 2>/dev/null || \
+        die "runtime automatic-arrangement preferred-position bridge contains unreviewed changes"
+    git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/arrange-preferred-position.patch"
     git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/silent-mode-machine-limits.patch" 2>/dev/null || \
         die "runtime silent-mode machine-limit bridge contains unreviewed changes"
     git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/silent-mode-machine-limits.patch"

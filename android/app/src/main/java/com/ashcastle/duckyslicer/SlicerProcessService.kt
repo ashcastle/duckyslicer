@@ -819,6 +819,8 @@ internal object SlicerProcessClient {
         bedOriginY: Float,
         bedPolygon: List<Float>,
         bedExcludeArea: List<Float>,
+        bestObjectPositionX: Float = 0.5f,
+        bestObjectPositionY: Float = 0.5f,
         objectVolumeCounts: IntArray = IntArray(transformedModels.size) { 1 },
         minimumGap: Float = 6f,
         requestId: String = UUID.randomUUID().toString(),
@@ -861,6 +863,14 @@ internal object SlicerProcessClient {
                         putFloatArray(
                             SlicerProcessContract.KEY_BED_EXCLUDE_AREA,
                             bedExcludeArea.toFloatArray(),
+                        )
+                        putFloat(
+                            SlicerProcessContract.KEY_BEST_OBJECT_POSITION_X,
+                            bestObjectPositionX,
+                        )
+                        putFloat(
+                            SlicerProcessContract.KEY_BEST_OBJECT_POSITION_Y,
+                            bestObjectPositionY,
                         )
                         putFloat(SlicerProcessContract.KEY_MINIMUM_GAP, minimumGap)
                     },
@@ -3267,6 +3277,14 @@ class SlicerProcessService : Service() {
             extras.getFloatArray(SlicerProcessContract.KEY_BED_EXCLUDE_AREA),
         ) { "Bed exclusion geometry is unavailable" }.toList()
         val minimumGap = extras.getFloat(SlicerProcessContract.KEY_MINIMUM_GAP)
+        val bestObjectPositionX = extras.getFloat(
+            SlicerProcessContract.KEY_BEST_OBJECT_POSITION_X,
+            0.5f,
+        )
+        val bestObjectPositionY = extras.getFloat(
+            SlicerProcessContract.KEY_BEST_OBJECT_POSITION_Y,
+            0.5f,
+        )
         require(
             bedSizeX.isFinite() && bedSizeX in MINIMUM_BED_SIZE_MM..MAXIMUM_BED_SIZE_MM &&
                 bedSizeY.isFinite() && bedSizeY in MINIMUM_BED_SIZE_MM..MAXIMUM_BED_SIZE_MM &&
@@ -3274,6 +3292,8 @@ class SlicerProcessService : Service() {
                 bedOriginY.isFinite() && bedOriginY in -MAXIMUM_BED_SIZE_MM..MAXIMUM_BED_SIZE_MM &&
                 bedPolygonIsValid(bedPolygon, bedSizeX, bedSizeY) &&
                 bedExcludeAreaIsValid(bedExcludeArea, bedSizeX, bedSizeY) &&
+                bestObjectPositionX in 0f..1f &&
+                bestObjectPositionY in 0f..1f &&
                 minimumGap.isFinite() && minimumGap in 0f..MAXIMUM_ARRANGE_GAP_MM,
         ) { "Arrange settings are invalid" }
 
@@ -3291,6 +3311,8 @@ class SlicerProcessService : Service() {
                     machinePolygon.toFloatArray(),
                     machineExcludeArea.toFloatArray(),
                     minimumGap,
+                    bestObjectPositionX,
+                    bestObjectPositionY,
                 ),
             ) { "The objects do not fit on this bed" }
             require(
@@ -4160,6 +4182,8 @@ private object SlicerProcessContract {
     const val KEY_BED_ORIGIN_Y = "bedOriginY"
     const val KEY_BED_POLYGON = "bedPolygon"
     const val KEY_BED_EXCLUDE_AREA = "bedExcludeArea"
+    const val KEY_BEST_OBJECT_POSITION_X = "bestObjectPositionX"
+    const val KEY_BEST_OBJECT_POSITION_Y = "bestObjectPositionY"
     const val KEY_MINIMUM_GAP = "minimumGap"
     const val KEY_ARRANGED_LOWER_LEFT = "arrangedLowerLeft"
     const val KEY_OBJECT_SIZES = "objectSizes"

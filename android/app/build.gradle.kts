@@ -88,6 +88,8 @@ val buildSlicerRuntime = tasks.register<Exec>("buildSlicerRuntime") {
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/extra-solid-infills.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/resonance-avoidance.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/printer-structure.patch"))
+    inputs.file(repositoryRoot.resolve("native/slicer-runtime/auto-arrange-rotations.patch"))
+    inputs.file(repositoryRoot.resolve("native/slicer-runtime/arrange-preferred-position.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/silent-mode-machine-limits.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/machine-minimum-rates.patch"))
     inputs.dir(repositoryRoot.resolve("native/slicer-runtime/overlay"))
@@ -119,7 +121,7 @@ val generateOrcaProfileCatalog = tasks.register<Exec>("generateOrcaProfileCatalo
     )
     inputs.file(profileCatalogGenerator)
     inputs.dir(orcaProfileRoot)
-    inputs.property("profileSchemaVersion", 113)
+    inputs.property("profileSchemaVersion", 114)
     inputs.property("orcaRevision", orcaEngineRevision)
     outputs.file(generatedProfileCatalog)
     outputs.upToDateWhen {

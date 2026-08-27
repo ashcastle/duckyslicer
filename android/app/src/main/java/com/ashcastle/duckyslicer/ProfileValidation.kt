@@ -41,6 +41,8 @@ internal object ProfileValidation {
             profile.nozzleVolume in 0f..1_000f &&
             profile.gcodeFlavor in setOf("marlin", "marlin2", "klipper", "reprapfirmware") &&
             profile.printerStructure in PRINTER_STRUCTURES &&
+            profile.bestObjectPositionX in 0f..1f &&
+            profile.bestObjectPositionY in 0f..1f &&
             listOf(
                 profile.machineLoadFilamentTime,
                 profile.machineUnloadFilamentTime,

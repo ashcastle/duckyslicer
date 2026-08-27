@@ -2823,7 +2823,7 @@ class NativeEngineInstrumentedTest {
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
         assertFalse(loadResult.bundledCatalogUnavailable)
-        assertEquals(113, catalog.schemaVersion)
+        assertEquals(114, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertEquals(789, catalog.printers.count { it.id.startsWith("orca-printer-") })
@@ -2847,6 +2847,10 @@ class NativeEngineInstrumentedTest {
             catalog.printers.single { it.name == "Bambu Lab A1 mini 0.4 nozzle" }
                 .headWrapDetectZone,
         )
+        catalog.printers.single { it.name == "Bambu Lab A1 mini 0.4 nozzle" }.let { printer ->
+            assertEquals(0.7f, printer.bestObjectPositionX)
+            assertEquals(0.5f, printer.bestObjectPositionY)
+        }
         val restoredBreakawayProfiles = mapOf(
             "Snapmaker Breakaway Support" to (220 to 230),
             "Snapmaker Breakaway Support @J1" to (220 to 230),
@@ -4075,6 +4079,31 @@ class NativeEngineInstrumentedTest {
         }
         val restored = applied.undo()
         assertTrue(restored.current.objects.all { it.transform.rotationZdeg == 0f })
+    }
+
+    @Test
+    fun automaticArrangementUsesThePrinterPreferredPosition() {
+        val model = inspectModel(fixtureModel().absolutePath)
+        val objects = listOf(
+            ProjectObject("preferred-arrange-first", model),
+            ProjectObject("preferred-arrange-second", model),
+        )
+        val options = SliceOptions().selectPrinter(
+            PrinterProfile.CUSTOM_CARTESIAN.copy(
+                bedSizeX = 200f,
+                bedSizeY = 100f,
+                bedPolygon = rectangularBedPolygon(200f, 100f),
+                bestObjectPositionX = 0.85f,
+                bestObjectPositionY = 0.5f,
+            ),
+        )
+
+        val arrangement = OnDeviceSlicer.arrange(objects, options, minimumGap = 2f)
+
+        assertTrue(
+            "Orca must arrange around the printer's preferred X position",
+            arrangement.centersMm.asList().chunked(2).map { it[0] }.average() > 120.0,
+        )
     }
 
     @Test

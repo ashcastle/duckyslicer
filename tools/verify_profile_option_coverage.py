@@ -29,7 +29,6 @@ INTENTIONALLY_UNMAPPED_OPTIONS = {
     # Profile identity, compatibility, UI assets, or arrangement metadata.
     "bed_custom_model",
     "bed_custom_texture",
-    "best_object_pos",
     "compatible_printers_condition",
     "compatible_prints",
     "default_bed_type",

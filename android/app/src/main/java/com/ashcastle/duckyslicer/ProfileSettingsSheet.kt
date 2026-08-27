@@ -1044,6 +1044,24 @@ private fun PrinterSettingsSheet(
         },
         onSelected = { onOptionsChanged(options.copy(printerStructure = it)) },
     )
+    CoordinatePairSettingField(
+        label = stringResource(R.string.preferred_arrangement_position),
+        valueX = options.printerProfile.bestObjectPositionX * 100f,
+        valueY = options.printerProfile.bestObjectPositionY * 100f,
+        minimum = 0f,
+        maximum = 100f,
+        suffix = "%",
+        onValueChange = { x, y ->
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(
+                        bestObjectPositionX = x / 100f,
+                        bestObjectPositionY = y / 100f,
+                    ),
+                ),
+            )
+        },
+    )
     SettingsSwitch(
         label = stringResource(R.string.pellet_extruder),
         checked = options.printerProfile.pelletModded,

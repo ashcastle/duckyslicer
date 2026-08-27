@@ -370,6 +370,26 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported printer structure"):
             build_printer("Example", base | {"printer_structure": "polar"})
 
+    def test_preserves_and_validates_preferred_arrangement_position(self) -> None:
+        base = {
+            "name": "Arrangement-aware printer",
+            "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+            "printable_height": "250",
+            "nozzle_diameter": ["0.4"],
+            "gcode_flavor": "marlin",
+        }
+
+        default = build_printer("Example", base)
+        preferred = build_printer("Example", base | {"best_object_pos": "0.7x0.45"})
+
+        self.assertEqual(0.5, default["bestObjectPositionX"])
+        self.assertEqual(0.5, default["bestObjectPositionY"])
+        self.assertEqual(0.7, preferred["bestObjectPositionX"])
+        self.assertEqual(0.45, preferred["bestObjectPositionY"])
+        for invalid in ("-0.1x0.5", "0.5x1.1"):
+            with self.assertRaisesRegex(ValueError, "unsafe best object position"):
+                build_printer("Example", base | {"best_object_pos": invalid})
+
     def test_preserves_and_validates_resonance_avoidance(self) -> None:
         base = {
             "name": "Resonance-aware printer",

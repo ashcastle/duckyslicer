@@ -1,0 +1,67 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -767,5 +767,7 @@ public:
+     std::optional<std::vector<float>> autoArrangeObjects(
+         const std::vector<float>& bedPolygon,
+         const std::vector<float>& bedExcludeArea,
+-        float minimumGap);
++        float minimumGap,
++        float preferredPositionX,
++        float preferredPositionY);
+ 
+diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil_arrange.cpp
+--- a/app/src/main/cpp/src/sapil_arrange.cpp
++++ b/app/src/main/cpp/src/sapil_arrange.cpp
+@@ -555,17 +555,23 @@ std::optional<std::vector<float>> SlicerEngine::autoArrangeObjects(
+ std::optional<std::vector<float>> SlicerEngine::autoArrangeObjects(
+     const std::vector<float>& bedPolygon,
+     const std::vector<float>& bedExcludeArea,
+-    float minimumGap) {
++    float minimumGap,
++    float preferredPositionX,
++    float preferredPositionY) {
+     if (!isModelLoaded() || bedPolygon.size() < 6 || bedPolygon.size() > 512 ||
+         bedPolygon.size() % 2 != 0 || bedExcludeArea.size() > 512 ||
+         bedExcludeArea.size() % 2 != 0 || !std::isfinite(minimumGap) ||
+-        minimumGap < 0.0f) {
++        minimumGap < 0.0f || !std::isfinite(preferredPositionX) ||
++        !std::isfinite(preferredPositionY) || preferredPositionX < 0.0f ||
++        preferredPositionX > 1.0f || preferredPositionY < 0.0f ||
++        preferredPositionY > 1.0f) {
+         return std::nullopt;
+     }
+     std::vector<float> placements;
+     try {
+         Slic3r::arrangement::ArrangeParams params{Slic3r::scaled(minimumGap)};
+         params.allow_rotations = true;
++        params.align_center = Slic3r::Vec2d(preferredPositionX, preferredPositionY);
+         params.progressind = [](unsigned, std::string) {};
+         params.stopcondition = []() { return false; };
+         Slic3r::Points bedPoints;
+diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slicer_wrapper.cpp
+--- a/app/src/main/cpp/src/slicer_wrapper.cpp
++++ b/app/src/main/cpp/src/slicer_wrapper.cpp
+@@ -434,18 +434,20 @@ JNIEXPORT jfloatArray JNICALL
+ Java_com_u1_slicer_NativeLibrary_nativeAutoArrangeObjects(
+         JNIEnv* env, jobject, jfloatArray jbed_polygon,
+-        jfloatArray jbed_exclude_area, jfloat minimum_gap) {
++        jfloatArray jbed_exclude_area, jfloat minimum_gap,
++        jfloat preferred_position_x, jfloat preferred_position_y) {
+     if (!g_engine || !jbed_polygon || !jbed_exclude_area) return nullptr;
+     const jsize length = env->GetArrayLength(jbed_polygon);
+     if (length < 6 || length > 512 || length % 2 != 0) return nullptr;
+     std::vector<float> bed_polygon(static_cast<size_t>(length));
+     env->GetFloatArrayRegion(jbed_polygon, 0, length, bed_polygon.data());
+     if (env->ExceptionCheck()) return nullptr;
+     const jsize exclude_length = env->GetArrayLength(jbed_exclude_area);
+     if (exclude_length > 512 || exclude_length % 2 != 0) return nullptr;
+     std::vector<float> bed_exclude_area(static_cast<size_t>(exclude_length));
+     env->GetFloatArrayRegion(
+         jbed_exclude_area, 0, exclude_length, bed_exclude_area.data());
+     if (env->ExceptionCheck()) return nullptr;
+     auto positions = g_engine->autoArrangeObjects(
+-        bed_polygon, bed_exclude_area, minimum_gap);
++        bed_polygon, bed_exclude_area, minimum_gap,
++        preferred_position_x, preferred_position_y);
+     if (!positions) return nullptr;
