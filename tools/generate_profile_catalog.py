@@ -1189,7 +1189,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     overhang_3_speed, overhang_3_percent = float_or_percent(raw.get("overhang_3_4_speed"), 0)
     overhang_4_speed, overhang_4_percent = float_or_percent(raw.get("overhang_4_4_speed"), 0)
     internal_bridge_speed, internal_bridge_speed_percent = float_or_percent(
-        raw.get("internal_bridge_speed"), "150%"
+        raw.get("internal_bridge_speed", raw.get("ineternal_bridge_speed")), "150%"
     )
     initial_layer_travel_speed, initial_layer_travel_speed_percent = float_or_percent(
         raw.get("initial_layer_travel_speed"), "100%"

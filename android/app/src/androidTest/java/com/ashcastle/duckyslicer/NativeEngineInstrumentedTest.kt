@@ -2726,6 +2726,25 @@ class NativeEngineInstrumentedTest {
                 .map(QualityProfile::name)
                 .toSet(),
         )
+        val absoluteBridgeSpeedVivedinoProfiles = setOf(
+            "0.08mm Extra Fine @Troodon2",
+            "0.12mm Fine @Troodon2",
+            "0.15mm Optimal @Troodon2",
+            "0.20mm Standard @Troodon2",
+            "0.24mm Draft @Troodon2",
+            "0.28mm Extra Draft @Troodon2",
+        )
+        assertEquals(
+            absoluteBridgeSpeedVivedinoProfiles,
+            catalog.slicing
+                .filter { it.brand == "Vivedino" && it.name in absoluteBridgeSpeedVivedinoProfiles }
+                .onEach {
+                    assertEquals(70f, it.internalBridgeSpeed)
+                    assertFalse(it.internalBridgeSpeedPercent)
+                }
+                .map(QualityProfile::name)
+                .toSet(),
+        )
         assertEquals(
             mapOf(
                 NozzleMaterial.UNDEFINED to 345,

@@ -622,6 +622,34 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual("cw", clockwise["wallDirection"])
         self.assertEqual("ccw", counter_clockwise["wallDirection"])
 
+    def test_preserves_legacy_internal_bridge_speed_typo(self) -> None:
+        legacy = build_process(
+            "Example",
+            {
+                "name": "Legacy internal bridge speed",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "ineternal_bridge_speed": "70",
+            },
+            {},
+        )
+        canonical = build_process(
+            "Example",
+            {
+                "name": "Canonical internal bridge speed",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "internal_bridge_speed": "55%",
+                "ineternal_bridge_speed": "70",
+            },
+            {},
+        )
+
+        self.assertEqual(70.0, legacy["internalBridgeSpeed"])
+        self.assertFalse(legacy["internalBridgeSpeedPercent"])
+        self.assertEqual(55.0, canonical["internalBridgeSpeed"])
+        self.assertTrue(canonical["internalBridgeSpeedPercent"])
+
     def test_rejects_segmented_region_depth_larger_than_its_width(self) -> None:
         with self.assertRaises(ValueError):
             build_process(
