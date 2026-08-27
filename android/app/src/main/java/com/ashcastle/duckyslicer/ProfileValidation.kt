@@ -58,6 +58,7 @@ internal object ProfileValidation {
             ).all { it in 0.1f..100_000f } &&
             listOf(profile.maxJerkX, profile.maxJerkY, profile.maxJerkZ, profile.maxJerkE)
                 .all { it in 0f..100_000f } &&
+            machineMotionLimitsAreValid(profile.silentMotionLimits) &&
             profile.maxJunctionDeviation in 0f..10f &&
             profile.minResonanceAvoidanceSpeed in 0f..2_000f &&
             profile.maxResonanceAvoidanceSpeed in profile.minResonanceAvoidanceSpeed..2_000f &&
@@ -103,6 +104,21 @@ internal object ProfileValidation {
             profile.layerChangeGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
             profile.changeFilamentGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
             profile.printingByObjectGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH
+
+    private fun machineMotionLimitsAreValid(limits: MachineMotionLimits): Boolean =
+        listOf(limits.maxSpeedX, limits.maxSpeedY, limits.maxSpeedZ, limits.maxSpeedE)
+            .all { it in 0.1f..2_000f } &&
+            listOf(
+                limits.maxAccelerationX,
+                limits.maxAccelerationY,
+                limits.maxAccelerationZ,
+                limits.maxAccelerationE,
+                limits.maxAccelerationExtruding,
+                limits.maxAccelerationRetracting,
+                limits.maxAccelerationTravel,
+            ).all { it in 0.1f..100_000f } &&
+            listOf(limits.maxJerkX, limits.maxJerkY, limits.maxJerkZ, limits.maxJerkE)
+                .all { it in 0f..100_000f }
 
     fun filament(profile: FilamentProfile): Boolean =
         profile.id.isSafeLabel() &&

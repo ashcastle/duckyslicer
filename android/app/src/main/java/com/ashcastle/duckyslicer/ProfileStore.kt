@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 107
+internal const val USER_PROFILE_SCHEMA_VERSION = 108
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -119,6 +119,8 @@ class ProfileStore private constructor(
             maxJerkY = options.maxJerkY,
             maxJerkZ = options.maxJerkZ,
             maxJerkE = options.maxJerkE,
+            silentMode = options.machineMotion.silentMode,
+            silentMotionLimits = options.machineMotion.silentMotionLimits,
             maxJunctionDeviation = options.maxJunctionDeviation,
             resonanceAvoidance = options.printerProfile.resonanceAvoidance,
             minResonanceAvoidanceSpeed = options.printerProfile.minResonanceAvoidanceSpeed,
@@ -833,6 +835,8 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("maxAccelerationTravel", maxAccelerationTravel)
     .put("maxJerkX", maxJerkX).put("maxJerkY", maxJerkY)
     .put("maxJerkZ", maxJerkZ).put("maxJerkE", maxJerkE)
+    .put("silentMode", silentMode)
+    .put("silentMotionLimits", JSONArray(silentMotionLimits.toFloatList()))
     .put("maxJunctionDeviation", maxJunctionDeviation)
     .put("resonanceAvoidance", resonanceAvoidance)
     .put("minResonanceAvoidanceSpeed", minResonanceAvoidanceSpeed)
@@ -1333,6 +1337,23 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
     val nozzleDiameter = getDouble("nozzleDiameter").toFloat()
     val retractLength = optDouble("retractLength", 0.8).toFloat()
     val extruderCount = optInt("extruderCount", 1)
+    val motionLimits = MachineMotionLimits(
+        maxSpeedX = optDouble("maxSpeedX", 500.0).toFloat(),
+        maxSpeedY = optDouble("maxSpeedY", 500.0).toFloat(),
+        maxSpeedZ = optDouble("maxSpeedZ", 20.0).toFloat(),
+        maxSpeedE = optDouble("maxSpeedE", 30.0).toFloat(),
+        maxAccelerationX = optDouble("maxAccelerationX", 20_000.0).toFloat(),
+        maxAccelerationY = optDouble("maxAccelerationY", 20_000.0).toFloat(),
+        maxAccelerationZ = optDouble("maxAccelerationZ", 500.0).toFloat(),
+        maxAccelerationE = optDouble("maxAccelerationE", 5_000.0).toFloat(),
+        maxAccelerationExtruding = optDouble("maxAccelerationExtruding", 20_000.0).toFloat(),
+        maxAccelerationRetracting = optDouble("maxAccelerationRetracting", 5_000.0).toFloat(),
+        maxAccelerationTravel = optDouble("maxAccelerationTravel", 20_000.0).toFloat(),
+        maxJerkX = optDouble("maxJerkX", 9.0).toFloat(),
+        maxJerkY = optDouble("maxJerkY", 9.0).toFloat(),
+        maxJerkZ = optDouble("maxJerkZ", 3.0).toFloat(),
+        maxJerkE = optDouble("maxJerkE", 2.5).toFloat(),
+    )
     PrinterProfile(
         getString("id"), getString("name"),
         bedSizeX, bedSizeY,
@@ -1366,21 +1387,23 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         toolChangeTemperatureWait = optBoolean("toolChangeTemperatureWait", true),
         gcodeFlavor = optString("gcodeFlavor", "marlin"),
         printerStructure = optString("printerStructure", "undefine"),
-        maxSpeedX = optDouble("maxSpeedX", 500.0).toFloat(),
-        maxSpeedY = optDouble("maxSpeedY", 500.0).toFloat(),
-        maxSpeedZ = optDouble("maxSpeedZ", 20.0).toFloat(),
-        maxSpeedE = optDouble("maxSpeedE", 30.0).toFloat(),
-        maxAccelerationX = optDouble("maxAccelerationX", 20_000.0).toFloat(),
-        maxAccelerationY = optDouble("maxAccelerationY", 20_000.0).toFloat(),
-        maxAccelerationZ = optDouble("maxAccelerationZ", 500.0).toFloat(),
-        maxAccelerationE = optDouble("maxAccelerationE", 5_000.0).toFloat(),
-        maxAccelerationExtruding = optDouble("maxAccelerationExtruding", 20_000.0).toFloat(),
-        maxAccelerationRetracting = optDouble("maxAccelerationRetracting", 5_000.0).toFloat(),
-        maxAccelerationTravel = optDouble("maxAccelerationTravel", 20_000.0).toFloat(),
-        maxJerkX = optDouble("maxJerkX", 9.0).toFloat(),
-        maxJerkY = optDouble("maxJerkY", 9.0).toFloat(),
-        maxJerkZ = optDouble("maxJerkZ", 3.0).toFloat(),
-        maxJerkE = optDouble("maxJerkE", 2.5).toFloat(),
+        maxSpeedX = motionLimits.maxSpeedX,
+        maxSpeedY = motionLimits.maxSpeedY,
+        maxSpeedZ = motionLimits.maxSpeedZ,
+        maxSpeedE = motionLimits.maxSpeedE,
+        maxAccelerationX = motionLimits.maxAccelerationX,
+        maxAccelerationY = motionLimits.maxAccelerationY,
+        maxAccelerationZ = motionLimits.maxAccelerationZ,
+        maxAccelerationE = motionLimits.maxAccelerationE,
+        maxAccelerationExtruding = motionLimits.maxAccelerationExtruding,
+        maxAccelerationRetracting = motionLimits.maxAccelerationRetracting,
+        maxAccelerationTravel = motionLimits.maxAccelerationTravel,
+        maxJerkX = motionLimits.maxJerkX,
+        maxJerkY = motionLimits.maxJerkY,
+        maxJerkZ = motionLimits.maxJerkZ,
+        maxJerkE = motionLimits.maxJerkE,
+        silentMode = optBoolean("silentMode"),
+        silentMotionLimits = machineMotionLimits("silentMotionLimits") ?: motionLimits,
         maxJunctionDeviation = optDouble("maxJunctionDeviation", 0.0).toFloat(),
         resonanceAvoidance = optBoolean("resonanceAvoidance"),
         minResonanceAvoidanceSpeed = optDouble("minResonanceAvoidanceSpeed", 70.0).toFloat(),
@@ -1997,6 +2020,14 @@ private fun JSONObject.floatList(key: String): List<Float>? = optJSONArray(key)?
     if (values.length() !in 6..512 || values.length() % 2 != 0) return null
     List(values.length()) { index -> values.getDouble(index).toFloat() }
 }
+
+private fun JSONObject.machineMotionLimits(key: String): MachineMotionLimits? =
+    optJSONArray(key)?.let { values ->
+        if (values.length() != MachineMotionLimits.VALUE_COUNT) return null
+        MachineMotionLimits.fromFloatList(
+            List(values.length()) { index -> values.getDouble(index).toFloat() },
+        )
+    }
 
 private fun JSONObject.bedExcludeFloatList(key: String): List<Float>? =
     optJSONArray(key)?.let { values ->

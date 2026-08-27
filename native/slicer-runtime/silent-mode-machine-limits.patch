@@ -1,0 +1,119 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+index b38b21a..aeaca23 100644
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -529,6 +529,8 @@ struct SliceConfig {
+     float machine_max_jerk_y = 9.0f;
+     float machine_max_jerk_z = 3.0f;
+     float machine_max_jerk_e = 2.5f;
++    bool machine_silent_mode = false;
++    std::vector<float> machine_silent_motion_limits;
+     float machine_max_junction_deviation = 0.0f;
+     bool resonance_avoidance = false;
+     float min_resonance_avoidance_speed = 70.0f;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+index c62191c..31e2db1 100644
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -562,6 +562,8 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.machine_max_jerk_y = getFloat("machineMaxJerkY");
+     config.machine_max_jerk_z = getFloat("machineMaxJerkZ");
+     config.machine_max_jerk_e = getFloat("machineMaxJerkE");
++    config.machine_silent_mode = getBool("machineSilentMode");
++    config.machine_silent_motion_limits = getFloatArray("machineSilentMotionLimits");
+     config.machine_max_junction_deviation = getFloat("machineMaxJunctionDeviation");
+     config.resonance_avoidance = getBool("resonanceAvoidance");
+     config.min_resonance_avoidance_speed = getFloat("minResonanceAvoidanceSpeed");
+@@ -1203,6 +1205,8 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setFloat("machineMaxJerkY", config.machine_max_jerk_y);
+     setFloat("machineMaxJerkZ", config.machine_max_jerk_z);
+     setFloat("machineMaxJerkE", config.machine_max_jerk_e);
++    setBool("machineSilentMode", config.machine_silent_mode);
++    setFloatArray("machineSilentMotionLimits", config.machine_silent_motion_limits);
+     setFloat("machineMaxJunctionDeviation", config.machine_max_junction_deviation);
+     setBool("resonanceAvoidance", config.resonance_avoidance);
+     setFloat("minResonanceAvoidanceSpeed", config.min_resonance_avoidance_speed);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+index 4e478f3..f2efcbb 100644
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -613,13 +613,21 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+         "curr_bed_type",
+         new Slic3r::ConfigOptionEnum<Slic3r::BedType>(bed_type));
+ 
+-    // Machine limits come from the active printer profile. Store two equal modes
+-    // because this mobile contract does not currently expose Orca's silent mode.
++    // Machine limits come from the active printer profile. Orca's time estimator
++    // consumes the first value as normal mode and the second as silent mode.
+     auto positive = [](float value, double fallback) {
+         return value > 0.0f ? static_cast<double>(value) : fallback;
+     };
+-    auto machine_modes = [](double value) {
+-        return new Slic3r::ConfigOptionFloats({value, value});
++    auto silent_value = [&](size_t index, double normal) {
++        if (!config.machine_silent_mode ||
++            config.machine_silent_motion_limits.size() != 15 ||
++            config.machine_silent_motion_limits[index] <= 0.0f) {
++            return normal;
++        }
++        return static_cast<double>(config.machine_silent_motion_limits[index]);
++    };
++    auto machine_modes = [&](size_t index, double normal) {
++        return new Slic3r::ConfigOptionFloats({normal, silent_value(index, normal)});
+     };
+     const double max_speed_x = positive(config.machine_max_speed_x, 500.0);
+     const double max_speed_y = positive(config.machine_max_speed_y, 500.0);
+@@ -627,18 +635,18 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     const double max_acceleration_y = positive(config.machine_max_acceleration_y, 20000.0);
+     const double max_acceleration_extruding = positive(config.machine_max_acceleration_extruding, 20000.0);
+     const double max_acceleration_travel = positive(config.machine_max_acceleration_travel, 20000.0);
+-    dpc.set_key_value("machine_max_speed_x", machine_modes(max_speed_x));
+-    dpc.set_key_value("machine_max_speed_y", machine_modes(max_speed_y));
+-    dpc.set_key_value("machine_max_speed_z", machine_modes(positive(config.machine_max_speed_z, 20.0)));
+-    dpc.set_key_value("machine_max_speed_e", machine_modes(positive(config.machine_max_speed_e, 30.0)));
+-    dpc.set_key_value("machine_max_acceleration_x", machine_modes(max_acceleration_x));
+-    dpc.set_key_value("machine_max_acceleration_y", machine_modes(max_acceleration_y));
+-    dpc.set_key_value("machine_max_acceleration_z", machine_modes(positive(config.machine_max_acceleration_z, 500.0)));
+-    dpc.set_key_value("machine_max_acceleration_e", machine_modes(positive(config.machine_max_acceleration_e, 5000.0)));
+-    dpc.set_key_value("machine_max_jerk_x", machine_modes(positive(config.machine_max_jerk_x, 9.0)));
+-    dpc.set_key_value("machine_max_jerk_y", machine_modes(positive(config.machine_max_jerk_y, 9.0)));
+-    dpc.set_key_value("machine_max_jerk_z", machine_modes(positive(config.machine_max_jerk_z, 3.0)));
+-    dpc.set_key_value("machine_max_jerk_e", machine_modes(positive(config.machine_max_jerk_e, 2.5)));
++    dpc.set_key_value("machine_max_speed_x", machine_modes(0, max_speed_x));
++    dpc.set_key_value("machine_max_speed_y", machine_modes(1, max_speed_y));
++    dpc.set_key_value("machine_max_speed_z", machine_modes(2, positive(config.machine_max_speed_z, 20.0)));
++    dpc.set_key_value("machine_max_speed_e", machine_modes(3, positive(config.machine_max_speed_e, 30.0)));
++    dpc.set_key_value("machine_max_acceleration_x", machine_modes(4, max_acceleration_x));
++    dpc.set_key_value("machine_max_acceleration_y", machine_modes(5, max_acceleration_y));
++    dpc.set_key_value("machine_max_acceleration_z", machine_modes(6, positive(config.machine_max_acceleration_z, 500.0)));
++    dpc.set_key_value("machine_max_acceleration_e", machine_modes(7, positive(config.machine_max_acceleration_e, 5000.0)));
++    dpc.set_key_value("machine_max_jerk_x", machine_modes(11, positive(config.machine_max_jerk_x, 9.0)));
++    dpc.set_key_value("machine_max_jerk_y", machine_modes(12, positive(config.machine_max_jerk_y, 9.0)));
++    dpc.set_key_value("machine_max_jerk_z", machine_modes(13, positive(config.machine_max_jerk_z, 3.0)));
++    dpc.set_key_value("machine_max_jerk_e", machine_modes(14, positive(config.machine_max_jerk_e, 2.5)));
+     if (!std::isfinite(config.machine_max_junction_deviation) ||
+         config.machine_max_junction_deviation < 0.0f ||
+         config.machine_max_junction_deviation > 10.0f) {
+@@ -646,7 +654,7 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     }
+     dpc.set_key_value(
+         "machine_max_junction_deviation",
+-        machine_modes(config.machine_max_junction_deviation));
++        new Slic3r::ConfigOptionFloats({config.machine_max_junction_deviation, config.machine_max_junction_deviation}));
+     if (!std::isfinite(config.min_resonance_avoidance_speed) ||
+         !std::isfinite(config.max_resonance_avoidance_speed) ||
+         config.min_resonance_avoidance_speed < 0.0f ||
+@@ -682,9 +690,10 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+         throw std::invalid_argument("Invalid nozzle volume");
+     }
+     dpc.set_key_value("nozzle_volume", new Slic3r::ConfigOptionFloat(config.nozzle_volume));
+-    dpc.set_key_value("machine_max_acceleration_extruding", machine_modes(max_acceleration_extruding));
+-    dpc.set_key_value("machine_max_acceleration_retracting", machine_modes(positive(config.machine_max_acceleration_retracting, 5000.0)));
+-    dpc.set_key_value("machine_max_acceleration_travel", machine_modes(max_acceleration_travel));
++    dpc.set_key_value("machine_max_acceleration_extruding", machine_modes(8, max_acceleration_extruding));
++    dpc.set_key_value("machine_max_acceleration_retracting", machine_modes(9, positive(config.machine_max_acceleration_retracting, 5000.0)));
++    dpc.set_key_value("machine_max_acceleration_travel", machine_modes(10, max_acceleration_travel));
++    dpc.set_key_value("silent_mode", new Slic3r::ConfigOptionBool(config.machine_silent_mode));
+ 
+     Slic3r::GCodeFlavor flavor = Slic3r::gcfMarlinLegacy;
+     if (config.gcode_flavor == "marlin2") flavor = Slic3r::gcfMarlinFirmware;

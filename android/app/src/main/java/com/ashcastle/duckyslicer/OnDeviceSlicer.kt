@@ -214,6 +214,50 @@ enum class NozzleMaterial(
 
 internal val PRINTER_STRUCTURES = listOf("undefine", "corexy", "i3", "hbot", "delta")
 
+data class MachineMotionLimits(
+    val maxSpeedX: Float,
+    val maxSpeedY: Float,
+    val maxSpeedZ: Float,
+    val maxSpeedE: Float,
+    val maxAccelerationX: Float,
+    val maxAccelerationY: Float,
+    val maxAccelerationZ: Float,
+    val maxAccelerationE: Float,
+    val maxAccelerationExtruding: Float,
+    val maxAccelerationRetracting: Float,
+    val maxAccelerationTravel: Float,
+    val maxJerkX: Float,
+    val maxJerkY: Float,
+    val maxJerkZ: Float,
+    val maxJerkE: Float,
+) {
+    fun toFloatList(): List<Float> = listOf(
+        maxSpeedX, maxSpeedY, maxSpeedZ, maxSpeedE,
+        maxAccelerationX, maxAccelerationY, maxAccelerationZ, maxAccelerationE,
+        maxAccelerationExtruding, maxAccelerationRetracting, maxAccelerationTravel,
+        maxJerkX, maxJerkY, maxJerkZ, maxJerkE,
+    )
+
+    companion object {
+        const val VALUE_COUNT = 15
+
+        fun fromFloatList(values: List<Float>): MachineMotionLimits {
+            require(values.size == VALUE_COUNT) { "Invalid machine motion limit count" }
+            return MachineMotionLimits(
+                maxSpeedX = values[0], maxSpeedY = values[1],
+                maxSpeedZ = values[2], maxSpeedE = values[3],
+                maxAccelerationX = values[4], maxAccelerationY = values[5],
+                maxAccelerationZ = values[6], maxAccelerationE = values[7],
+                maxAccelerationExtruding = values[8],
+                maxAccelerationRetracting = values[9],
+                maxAccelerationTravel = values[10],
+                maxJerkX = values[11], maxJerkY = values[12],
+                maxJerkZ = values[13], maxJerkE = values[14],
+            )
+        }
+    }
+}
+
 data class PrinterProfile(
     val id: String,
     val name: String,
@@ -262,6 +306,13 @@ data class PrinterProfile(
     val maxJerkY: Float = 9f,
     val maxJerkZ: Float = 3f,
     val maxJerkE: Float = 2.5f,
+    val silentMode: Boolean = false,
+    val silentMotionLimits: MachineMotionLimits = MachineMotionLimits(
+        maxSpeedX, maxSpeedY, maxSpeedZ, maxSpeedE,
+        maxAccelerationX, maxAccelerationY, maxAccelerationZ, maxAccelerationE,
+        maxAccelerationExtruding, maxAccelerationRetracting, maxAccelerationTravel,
+        maxJerkX, maxJerkY, maxJerkZ, maxJerkE,
+    ),
     val maxJunctionDeviation: Float = 0f,
     val resonanceAvoidance: Boolean = false,
     val minResonanceAvoidanceSpeed: Float = 70f,
@@ -1324,7 +1375,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 107,
+    val schemaVersion: Int = 108,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1345,6 +1396,8 @@ data class MachineMotionSettings(
     val maxJerkY: Float,
     val maxJerkZ: Float,
     val maxJerkE: Float,
+    val silentMode: Boolean,
+    val silentMotionLimits: MachineMotionLimits,
     val maxJunctionDeviation: Float,
 ) {
     companion object {
@@ -1364,6 +1417,8 @@ data class MachineMotionSettings(
             maxJerkY = profile.maxJerkY,
             maxJerkZ = profile.maxJerkZ,
             maxJerkE = profile.maxJerkE,
+            silentMode = profile.silentMode,
+            silentMotionLimits = profile.silentMotionLimits,
             maxJunctionDeviation = profile.maxJunctionDeviation,
         )
     }
@@ -2394,6 +2449,8 @@ data class SliceOptions(
             native.supportFlowRatio = supportFlowRatio
             native.supportInterfaceFlowRatio = supportInterfaceFlowRatio
             native.machineMaxJunctionDeviation = maxJunctionDeviation
+            native.machineSilentMode = machineMotion.silentMode
+            native.machineSilentMotionLimits = machineMotion.silentMotionLimits.toFloatList().toFloatArray()
             native.resonanceAvoidance = printerProfile.resonanceAvoidance
             native.minResonanceAvoidanceSpeed = printerProfile.minResonanceAvoidanceSpeed
             native.maxResonanceAvoidanceSpeed = printerProfile.maxResonanceAvoidanceSpeed

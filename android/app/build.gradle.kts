@@ -88,6 +88,7 @@ val buildSlicerRuntime = tasks.register<Exec>("buildSlicerRuntime") {
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/extra-solid-infills.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/resonance-avoidance.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/printer-structure.patch"))
+    inputs.file(repositoryRoot.resolve("native/slicer-runtime/silent-mode-machine-limits.patch"))
     inputs.dir(repositoryRoot.resolve("native/slicer-runtime/overlay"))
     inputs.file(repositoryRoot.resolve(".gitmodules"))
     inputs.property("androidNdkVersion", "28.2.13676358")

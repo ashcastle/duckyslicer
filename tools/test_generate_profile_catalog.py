@@ -448,6 +448,27 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(enabled["scanFirstLayer"])
         self.assertFalse(disabled["scanFirstLayer"])
 
+    def test_preserves_first_two_machine_limit_modes(self) -> None:
+        profile = build_printer(
+            "Example",
+            {
+                "name": "Quiet printer",
+                "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+                "printable_height": "250",
+                "nozzle_diameter": ["0.4"],
+                "gcode_flavor": "marlin2",
+                "silent_mode": "1",
+                "machine_max_speed_x": ["600", "300", "780"],
+                "machine_max_acceleration_x": ["12000", "5000"],
+            },
+        )
+
+        self.assertTrue(profile["silentMode"])
+        self.assertEqual(600.0, profile["maxSpeedX"])
+        self.assertEqual(300.0, profile["silentMotionLimits"][0])
+        self.assertEqual(5000.0, profile["silentMotionLimits"][4])
+        self.assertEqual(15, len(profile["silentMotionLimits"]))
+
     def test_preserves_orca_timelapse_mode_and_rejects_smooth_by_object(self) -> None:
         self.assertEqual("traditional", timelapse_type(None))
         self.assertEqual("traditional", timelapse_type("0"))

@@ -217,6 +217,47 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun silentPrinterProfileProducesDistinctNormalAndSilentTimeEstimates() {
+        val basePrinter = PrinterProfile.CUSTOM_CARTESIAN
+        val silentLimits = basePrinter.silentMotionLimits.copy(
+            maxSpeedX = 5f,
+            maxSpeedY = 5f,
+            maxAccelerationX = 20f,
+            maxAccelerationY = 20f,
+            maxAccelerationExtruding = 20f,
+            maxAccelerationRetracting = 20f,
+            maxAccelerationTravel = 20f,
+        )
+        val outcome = OnDeviceSlicer.slice(
+            fixtureModel(),
+            SliceOptions().selectPrinter(
+                basePrinter.copy(
+                    gcodeFlavor = "marlin2",
+                    silentMode = true,
+                    silentMotionLimits = silentLimits,
+                ),
+            ),
+        )
+        try {
+            val normal = outcome.output.useLines { lines ->
+                lines.firstOrNull { it.startsWith("; estimated printing time (normal mode) =") }
+            }
+            val silent = outcome.output.useLines { lines ->
+                lines.firstOrNull { it.startsWith("; estimated printing time (silent mode) =") }
+            }
+            assertTrue("Normal-mode time metadata must be present", normal != null)
+            assertTrue("Silent-mode time metadata must be present", silent != null)
+            assertNotEquals(
+                "Reduced silent motion limits must change the estimate",
+                normal?.substringAfter('='),
+                silent?.substringAfter('='),
+            )
+        } finally {
+            outcome.output.delete()
+        }
+    }
+
+    @Test
     fun outputFilenameUsesOrcaPlaceholdersAndOriginalModelName() {
         val modelFile = fixtureModel()
         val printer = PrinterProfile.U1_04.copy(name = "Production Printer 0.4")

@@ -271,6 +271,8 @@ data class SliceConfig(
     @JvmField var supportFlowRatio: Float = 1f
     @JvmField var supportInterfaceFlowRatio: Float = 1f
     @JvmField var machineMaxJunctionDeviation: Float = 0f
+    @JvmField var machineSilentMode: Boolean = false
+    @JvmField var machineSilentMotionLimits: FloatArray = floatArrayOf()
     @JvmField var resonanceAvoidance: Boolean = false
     @JvmField var minResonanceAvoidanceSpeed: Float = 70f
     @JvmField var maxResonanceAvoidanceSpeed: Float = 120f

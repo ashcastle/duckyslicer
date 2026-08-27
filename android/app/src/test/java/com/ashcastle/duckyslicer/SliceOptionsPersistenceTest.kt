@@ -1448,6 +1448,13 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             emitMachineLimitsToGcode = false,
             manualFilamentChange = true,
             disableM73 = true,
+            silentMode = true,
+            silentMotionLimits = PrinterProfile.U1_06.silentMotionLimits.copy(
+                maxSpeedX = 120f,
+                maxSpeedY = 125f,
+                maxAccelerationX = 1_200f,
+                maxAccelerationY = 1_250f,
+            ),
             coolingTubeRetraction = 73.5f,
             coolingTubeLength = 11f,
             parkingPosRetraction = 80f,
@@ -1915,6 +1922,13 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             maxAccelerationTravel = 4_600f,
             maxJerkX = 8f,
             maxJerkY = 9f,
+            silentMode = true,
+            silentMotionLimits = PrinterProfile.U1_06.silentMotionLimits.copy(
+                maxSpeedX = 120f,
+                maxSpeedY = 125f,
+                maxAccelerationX = 1_200f,
+                maxAccelerationY = 1_250f,
+            ),
             maxJunctionDeviation = 0.032f,
         ),
     )

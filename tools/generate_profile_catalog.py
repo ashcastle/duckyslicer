@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 107
+SCHEMA_VERSION = 108
 MAX_FILAMENT_SLOTS = 16
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
@@ -519,9 +519,36 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     if printer_structure not in SUPPORTED_PRINTER_STRUCTURES:
         raise ValueError(f"unsupported printer structure: {printer_structure}")
 
-    def motion(key: str, default: float) -> float:
-        parsed = number(raw.get(key), default)
-        return parsed if parsed > 0 else default
+    def motion_pair(key: str, default: float) -> tuple[float, float]:
+        parsed = number_values(raw.get(key), default)
+        normal = parsed[0] if parsed and parsed[0] > 0 else default
+        silent = parsed[1] if len(parsed) > 1 and parsed[1] > 0 else normal
+        return normal, silent
+
+    motion_defaults = (
+        ("machine_max_speed_x", 300),
+        ("machine_max_speed_y", 300),
+        ("machine_max_speed_z", 15),
+        ("machine_max_speed_e", 25),
+        ("machine_max_acceleration_x", 3_000),
+        ("machine_max_acceleration_y", 3_000),
+        ("machine_max_acceleration_z", 200),
+        ("machine_max_acceleration_e", 2_000),
+        ("machine_max_acceleration_extruding", 3_000),
+        ("machine_max_acceleration_retracting", 2_000),
+        ("machine_max_acceleration_travel", 3_000),
+        ("machine_max_jerk_x", 8),
+        ("machine_max_jerk_y", 8),
+        ("machine_max_jerk_z", 0.4),
+        ("machine_max_jerk_e", 5),
+    )
+    motion_pairs = {
+        key: motion_pair(key, default)
+        for key, default in motion_defaults
+    }
+
+    def motion(key: str) -> float:
+        return motion_pairs[key][0]
 
     profile = {
         "id": stable_id("printer", brand, name),
@@ -596,21 +623,23 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "toolChangeTemperatureWait": boolean(raw.get("tool_change_temprature_wait"), True),
         "gcodeFlavor": flavor,
         "printerStructure": printer_structure,
-        "maxSpeedX": motion("machine_max_speed_x", 300),
-        "maxSpeedY": motion("machine_max_speed_y", 300),
-        "maxSpeedZ": motion("machine_max_speed_z", 15),
-        "maxSpeedE": motion("machine_max_speed_e", 25),
-        "maxAccelerationX": motion("machine_max_acceleration_x", 3_000),
-        "maxAccelerationY": motion("machine_max_acceleration_y", 3_000),
-        "maxAccelerationZ": motion("machine_max_acceleration_z", 200),
-        "maxAccelerationE": motion("machine_max_acceleration_e", 2_000),
-        "maxAccelerationExtruding": motion("machine_max_acceleration_extruding", 3_000),
-        "maxAccelerationRetracting": motion("machine_max_acceleration_retracting", 2_000),
-        "maxAccelerationTravel": motion("machine_max_acceleration_travel", 3_000),
-        "maxJerkX": motion("machine_max_jerk_x", 8),
-        "maxJerkY": motion("machine_max_jerk_y", 8),
-        "maxJerkZ": motion("machine_max_jerk_z", 0.4),
-        "maxJerkE": motion("machine_max_jerk_e", 5),
+        "maxSpeedX": motion("machine_max_speed_x"),
+        "maxSpeedY": motion("machine_max_speed_y"),
+        "maxSpeedZ": motion("machine_max_speed_z"),
+        "maxSpeedE": motion("machine_max_speed_e"),
+        "maxAccelerationX": motion("machine_max_acceleration_x"),
+        "maxAccelerationY": motion("machine_max_acceleration_y"),
+        "maxAccelerationZ": motion("machine_max_acceleration_z"),
+        "maxAccelerationE": motion("machine_max_acceleration_e"),
+        "maxAccelerationExtruding": motion("machine_max_acceleration_extruding"),
+        "maxAccelerationRetracting": motion("machine_max_acceleration_retracting"),
+        "maxAccelerationTravel": motion("machine_max_acceleration_travel"),
+        "maxJerkX": motion("machine_max_jerk_x"),
+        "maxJerkY": motion("machine_max_jerk_y"),
+        "maxJerkZ": motion("machine_max_jerk_z"),
+        "maxJerkE": motion("machine_max_jerk_e"),
+        "silentMode": boolean(raw.get("silent_mode")),
+        "silentMotionLimits": [motion_pairs[key][1] for key, _ in motion_defaults],
         "maxJunctionDeviation": number(raw.get("machine_max_junction_deviation"), 0),
         "resonanceAvoidance": boolean(raw.get("resonance_avoidance")),
         "minResonanceAvoidanceSpeed": number(raw.get("min_resonance_avoidance_speed"), 70),
