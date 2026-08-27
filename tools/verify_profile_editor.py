@@ -247,6 +247,8 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "R.string.supports_air_filtration",
         "supportsChamberTemperatureControl =",
         "supportsAirFiltration =",
+        'entries = listOf("marlin", "marlin2", "klipper", "reprapfirmware")',
+        '"reprapfirmware" -> "RepRapFirmware"',
         "R.string.adaptive_bed_mesh",
         "R.string.bed_mesh_min",
         "R.string.bed_mesh_max",

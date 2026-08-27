@@ -119,6 +119,8 @@ def valid_sources() -> dict[str, str]:
             " R.string.printer_environment_capabilities"
             " R.string.supports_chamber_temperature_control R.string.supports_air_filtration"
             " supportsChamberTemperatureControl = supportsAirFiltration ="
+            ' entries = listOf("marlin", "marlin2", "klipper", "reprapfirmware")'
+            ' "reprapfirmware" -> "RepRapFirmware"'
             " R.string.adaptive_bed_mesh R.string.bed_mesh_min R.string.bed_mesh_max"
             " R.string.probe_point_distance R.string.mesh_margin"
             " bedMeshMinX = bedMeshMinY = bedMeshMaxX = bedMeshMaxY ="

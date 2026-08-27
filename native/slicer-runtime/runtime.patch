@@ -2470,7 +2470,7 @@ index 8d61c9cf..6bd1edf6 100644
  void SlicerEngine::cancelSlice() {
      g_slice_cancel.store(true, std::memory_order_release);
      auto* print = g_active_print.load(std::memory_order_acquire);
-@@ -183,84 +264,294 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +264,295 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -2770,6 +2770,7 @@ index 8d61c9cf..6bd1edf6 100644
 +    Slic3r::GCodeFlavor flavor = Slic3r::gcfMarlinLegacy;
 +    if (config.gcode_flavor == "marlin2") flavor = Slic3r::gcfMarlinFirmware;
 +    else if (config.gcode_flavor == "klipper") flavor = Slic3r::gcfKlipper;
++    else if (config.gcode_flavor == "reprapfirmware") flavor = Slic3r::gcfRepRapFirmware;
 +    dpc.set_key_value("gcode_flavor", new Slic3r::ConfigOptionEnum<Slic3r::GCodeFlavor>(flavor));
 +    dpc.set_key_value("auxiliary_fan", new Slic3r::ConfigOptionBool(config.auxiliary_fan));
 +    if (!std::isfinite(config.fan_speedup_time) || config.fan_speedup_time < 0.0f ||

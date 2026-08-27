@@ -21,6 +21,20 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_accepts_reprapfirmware_and_rejects_unknown_gcode_flavors(self) -> None:
+        base = {
+            "name": "RepRapFirmware printer",
+            "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+            "printable_height": "250",
+            "nozzle_diameter": ["0.4"],
+        }
+
+        profile = build_printer("Example", base | {"gcode_flavor": "reprapfirmware"})
+
+        self.assertEqual("reprapfirmware", profile["gcodeFlavor"])
+        with self.assertRaisesRegex(ValueError, "unsupported G-code flavor"):
+            build_printer("Example", base | {"gcode_flavor": "unknown"})
+
     def test_preserves_and_validates_resonance_avoidance(self) -> None:
         base = {
             "name": "Resonance-aware printer",

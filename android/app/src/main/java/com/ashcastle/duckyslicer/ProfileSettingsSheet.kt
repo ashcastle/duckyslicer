@@ -892,12 +892,13 @@ private fun PrinterSettingsSheet(
     )
     SettingChoices(
         settingLabel = stringResource(R.string.printer_firmware),
-        entries = listOf("marlin", "marlin2", "klipper"),
+        entries = listOf("marlin", "marlin2", "klipper", "reprapfirmware"),
         selected = options.gcodeFlavor,
         optionLabel = {
             when (it) {
                 "marlin2" -> "Marlin 2"
                 "klipper" -> "Klipper"
+                "reprapfirmware" -> "RepRapFirmware"
                 else -> "Marlin"
             }
         },

@@ -1036,7 +1036,7 @@ class SliceOptionsPersistenceTest {
         assertEquals(2.5f, restored.raftExpansion)
         assertEquals(86f, restored.raftFirstLayerDensity)
         assertEquals(3.5f, restored.raftFirstLayerExpansion)
-        assertEquals("klipper", restored.gcodeFlavor)
+        assertEquals("reprapfirmware", restored.gcodeFlavor)
         assertEquals(4_600f, restored.maxAccelerationTravel)
     }
 
@@ -1891,7 +1891,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         spiralStartingFlowRatio = 0.35f,
         spiralFinishingFlowRatio = 0.2f,
         preciseOuterWalls = true,
-        gcodeFlavor = "klipper",
+        gcodeFlavor = "reprapfirmware",
         machineMotion = MachineMotionSettings.fromProfile(PrinterProfile.U1_06).copy(
             maxSpeedX = 330f,
             maxSpeedY = 340f,

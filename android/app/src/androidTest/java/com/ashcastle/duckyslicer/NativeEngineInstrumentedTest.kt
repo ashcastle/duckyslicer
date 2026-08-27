@@ -2301,7 +2301,7 @@ class NativeEngineInstrumentedTest {
                 raftExpansion = 2.6f,
                 raftFirstLayerDensity = 87f,
                 raftFirstLayerExpansion = 3.6f,
-                gcodeFlavor = "marlin2",
+                gcodeFlavor = "reprapfirmware",
                 machineMotion = MachineMotionSettings.fromProfile(PrinterProfile.U1_06).copy(
                     maxSpeedX = 320f,
                     maxSpeedY = 330f,
@@ -2621,7 +2621,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(2.6f, restored.slicing.last().raftExpansion)
         assertEquals(87f, restored.slicing.last().raftFirstLayerDensity)
         assertEquals(3.6f, restored.slicing.last().raftFirstLayerExpansion)
-        assertEquals("marlin2", restored.printers.last().gcodeFlavor)
+        assertEquals("reprapfirmware", restored.printers.last().gcodeFlavor)
         assertEquals(320f, restored.printers.last().maxSpeedX)
         assertEquals(330f, restored.printers.last().maxSpeedY)
         assertEquals(24f, restored.printers.last().maxSpeedZ)
@@ -2712,6 +2712,21 @@ class NativeEngineInstrumentedTest {
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include upstream filament presets", catalog.filaments.size > 3_000)
         assertTrue("The catalog must include upstream slicing presets", catalog.slicing.size > 2_000)
+        assertEquals(72, catalog.rejectedCount)
+        val repRapFirmwarePrinters = setOf(
+            "Construct 1 0.4 nozzle",
+            "Construct 1 XL 0.6 nozzle",
+            "MyRRF 0.4 nozzle",
+            "Troodon 2.0 RRF 0.4 nozzle",
+        )
+        assertEquals(
+            repRapFirmwarePrinters,
+            catalog.printers
+                .filter { it.name in repRapFirmwarePrinters }
+                .onEach { assertEquals("reprapfirmware", it.gcodeFlavor) }
+                .map(PrinterProfile::name)
+                .toSet(),
+        )
         val clockwiseSovolProfiles = setOf(
             "0.20mm Standard @Sovol SV08 MAX 0.4 nozzle",
             "0.20mm Standard @Sovol Zero 0.4 nozzle",
@@ -2747,15 +2762,15 @@ class NativeEngineInstrumentedTest {
         )
         assertEquals(
             mapOf(
-                NozzleMaterial.UNDEFINED to 345,
-                NozzleMaterial.HARDENED_STEEL to 265,
+                NozzleMaterial.UNDEFINED to 347,
+                NozzleMaterial.HARDENED_STEEL to 267,
                 NozzleMaterial.STAINLESS_STEEL to 40,
                 NozzleMaterial.BRASS to 140,
             ),
             catalog.printers.groupingBy(PrinterProfile::nozzleMaterial).eachCount(),
         )
         assertEquals(
-            mapOf(2.5f to 714, 4f to 44, 4.2f to 20, 4.76f to 12),
+            mapOf(2.5f to 718, 4f to 44, 4.2f to 20, 4.76f to 12),
             catalog.printers.groupingBy(PrinterProfile::nozzleHeight).eachCount(),
         )
         assertEquals(
@@ -7737,7 +7752,68 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
-    fun marlinAndKlipperFirmwareContractsReachOrca() {
+    fun repRapFirmwareUsesNativeMotionAndTemperatureCommands() {
+        val model = fixtureModel()
+        val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            id = "instrumented-reprapfirmware",
+            name = "Instrumented RepRapFirmware",
+            gcodeFlavor = "reprapfirmware",
+            machineStartGcode = "",
+            maxSpeedX = 301f,
+            maxSpeedY = 302f,
+            maxSpeedZ = 16f,
+            maxSpeedE = 26f,
+            maxAccelerationX = 3_100f,
+            maxAccelerationY = 3_200f,
+            maxAccelerationZ = 210f,
+            maxAccelerationE = 2_100f,
+            maxAccelerationExtruding = 3_300f,
+            maxAccelerationRetracting = 2_200f,
+            maxAccelerationTravel = 3_400f,
+            maxJerkX = 8.1f,
+            maxJerkY = 8.2f,
+            maxJerkZ = 0.5f,
+            maxJerkE = 5.1f,
+        )
+        val outcome = OnDeviceSlicer.slice(
+            model,
+            SliceOptions()
+                .selectPrinter(printer)
+                .selectFilament(FilamentProfile.GENERIC_PLA)
+                .selectQuality(QualityProfile.STANDARD),
+        )
+        try {
+            val gcode = outcome.output.readText()
+            assertTrue(gcode.contains("; gcode_flavor = reprapfirmware"))
+            assertTrue(gcode.lineSequence().any { it == "M201 X3100 Y3200 Z210 E2100" })
+            assertTrue(gcode.lineSequence().any { it == "M203 X18060 Y18120 Z960 E1560" })
+            assertTrue(
+                gcode.lineSequence().any {
+                    it == "M204 P3300 T3400 ; sets acceleration (P, T), mm/sec^2"
+                },
+            )
+            assertTrue(
+                gcode.lineSequence().any {
+                    it == "M566 X486.00 Y492.00 Z30.00 E306.00 ; sets the jerk limits, mm/min"
+                },
+            )
+            assertTrue(
+                "RepRapFirmware must use G10 for tool temperature; commands=" +
+                    gcode.lineSequence()
+                        .filter { it.startsWith("G10") || it.startsWith("M104") || it.startsWith("M109") }
+                        .take(8)
+                        .joinToString(" | "),
+                gcode.lineSequence().any { it.startsWith("G10 S") },
+            )
+            assertTrue("RepRapFirmware output must contain extrusion", gcode.contains(";TYPE:Outer wall"))
+        } finally {
+            outcome.output.delete()
+            model.delete()
+        }
+    }
+
+    @Test
+    fun representativeMarlinAndKlipperFirmwareContractsReachOrca() {
         val model = fixtureModel()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val catalog = OrcaProfileCatalog(context).load()

@@ -26,7 +26,7 @@ DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL = (
 )
 MAX_GCODE_FILENAME_FORMAT_BYTES = 1_024
 MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES = 16_384
-SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
+SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper", "reprapfirmware"}
 NOZZLE_MATERIALS = {"undefine", "hardened_steel", "stainless_steel", "brass"}
 INFILL_PATTERNS = {
     "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
