@@ -31,6 +31,13 @@ class VerifyRepositoryHygieneTest(unittest.TestCase):
                 VALID_GITIGNORE,
             )
 
+    def test_rejects_upstream_ai_issue_automation(self) -> None:
+        with self.assertRaisesRegex(VerificationError, "local AI instructions"):
+            verify_repository_hygiene(
+                ["scripts/auto-close-duplicates.ts"],
+                VALID_GITIGNORE,
+            )
+
     def test_rejects_nested_agent_instruction(self) -> None:
         with self.assertRaisesRegex(VerificationError, "AGENTS.md"):
             verify_repository_hygiene(

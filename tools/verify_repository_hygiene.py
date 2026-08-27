@@ -50,6 +50,12 @@ FORBIDDEN_BASENAMES = {
     "GEMINI.local.md",
     "PROMPT.local.md",
 }
+FORBIDDEN_TRACKED_PATHS = {
+    # Upstream-only AI issue automation is unrelated to DuckySlicer and must not
+    # re-enter the public source bundle through a future engine sync.
+    "scripts/auto-close-duplicates.ts",
+    "scripts/backfill-duplicate-comments.ts",
+}
 FORBIDDEN_SUFFIXES = (
     ".prompt.local.md",
     ".ai.md",
@@ -67,6 +73,8 @@ def _is_forbidden_tracked_path(value: str) -> bool:
     parts = path.parts
     if not value or path.is_absolute() or ".." in parts:
         raise VerificationError(f"invalid tracked path: {value!r}")
+    if value in FORBIDDEN_TRACKED_PATHS:
+        return True
     if FORBIDDEN_DIRECTORY_PARTS.intersection(parts):
         return True
     if any(parts[: len(prefix)] == prefix for prefix in FORBIDDEN_DIRECTORY_PREFIXES):
