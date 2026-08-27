@@ -2796,13 +2796,20 @@ class NativeEngineInstrumentedTest {
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
         assertFalse(loadResult.bundledCatalogUnavailable)
-        assertEquals(111, catalog.schemaVersion)
+        assertEquals(112, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertEquals(789, catalog.printers.count { it.id.startsWith("orca-printer-") })
-        assertEquals(3_311, catalog.filaments.count { it.id.startsWith("orca-filament-") })
+        assertTrue(
+            catalog.printers.single { it.name == "Ginger G1 1.2 nozzle" }.pelletModded,
+        )
+        catalog.filaments.single { it.name == "Ginger Generic PLA" }.let { filament ->
+            assertEquals(1f, filament.pelletFlowCoefficient, 0.000001f)
+            assertEquals(1.12838f, filament.diameter, 0.00001f)
+        }
+        assertEquals(3_314, catalog.filaments.count { it.id.startsWith("orca-filament-") })
         assertEquals(2_319, catalog.slicing.count { it.id.startsWith("orca-process-") })
-        assertEquals(60, catalog.rejectedCount)
+        assertEquals(57, catalog.rejectedCount)
         assertEquals(
             listOf(156f, 152f, 180f, 152f, 180f, 180f, 156f, 180f),
             catalog.printers.single { it.name == "Bambu Lab A1 mini 0.4 nozzle" }
@@ -2946,7 +2953,7 @@ class NativeEngineInstrumentedTest {
             catalog.printers.groupingBy(PrinterProfile::nozzleHeight).eachCount(),
         )
         assertEquals(
-            mapOf(0 to 1_781, 3 to 1_329, 40 to 218),
+            mapOf(0 to 1_784, 3 to 1_329, 40 to 218),
             catalog.filaments.groupingBy(FilamentProfile::requiredNozzleHrc).eachCount(),
         )
         val generatedU1 = catalog.printers.single { it.name == "Snapmaker U1 (0.4 nozzle)" }

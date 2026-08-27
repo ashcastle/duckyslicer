@@ -60,6 +60,51 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(55, profile["bedTemp"])
         self.assertEqual(60, profile["firstLayerBedTemp"])
 
+    def test_preserves_pellet_printer_and_flow_coefficient(self) -> None:
+        printer = build_printer(
+            "Example",
+            {
+                "name": "Pellet printer",
+                "printable_area": ["0x0", "400x0", "400x400", "0x400"],
+                "printable_height": "500",
+                "nozzle_diameter": ["0.8"],
+                "gcode_flavor": "klipper",
+                "pellet_modded_printer": "1",
+            },
+        )
+        filament = build_filament(
+            "Example",
+            {
+                "name": "Pellet material",
+                "filament_type": ["PLA"],
+                "nozzle_temperature": ["220"],
+                "hot_plate_temp": ["60"],
+                "filament_diameter": ["1.12838"],
+                "pellet_flow_coefficient": ["1"],
+            },
+        )
+
+        self.assertTrue(printer["pelletModded"])
+        self.assertEqual(1.0, filament["pelletFlowCoefficient"])
+        self.assertAlmostEqual(1.12838, filament["diameter"], places=5)
+
+    def test_derives_neutral_pellet_coefficient_from_filament_diameter(self) -> None:
+        profile = build_filament(
+            "Example",
+            {
+                "name": "Regular filament",
+                "filament_type": ["PLA"],
+                "nozzle_temperature": ["220"],
+                "hot_plate_temp": ["60"],
+                "filament_diameter": ["2.85"],
+            },
+        )
+
+        self.assertAlmostEqual(
+            4 / (math.pi * 2.85 * 2.85),
+            profile["pelletFlowCoefficient"],
+        )
+
     def test_prefers_plate_specific_temperatures_over_generic_aliases(self) -> None:
         profile = build_filament(
             "Example",
@@ -1810,6 +1855,21 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                     "hot_plate_temp": ["60"],
                     "filament_diameter": ["4.01"],
                 },
+            )
+
+    def test_accepts_official_pellet_flow_rate_and_rejects_larger_values(self) -> None:
+        base = {
+            "name": "Pellet PLA",
+            "filament_type": ["PLA"],
+            "nozzle_temperature": ["220"],
+            "hot_plate_temp": ["60"],
+            "filament_max_volumetric_speed": ["300"],
+        }
+        self.assertEqual(300.0, build_filament("Example", base)["maxVolumetricSpeed"])
+        with self.assertRaises(ValueError):
+            build_filament(
+                "Example",
+                {**base, "filament_max_volumetric_speed": ["300.1"]},
             )
 
     def test_rejects_unsafe_material_statistics(self) -> None:

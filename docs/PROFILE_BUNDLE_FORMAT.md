@@ -12,7 +12,7 @@ The top-level object contains exactly four fields:
 {
   "type": "com.ashcastle.duckyslicer.user-profiles",
   "bundleVersion": 1,
-  "profileSchemaVersion": 111,
+  "profileSchemaVersion": 112,
   "profiles": {
     "printers": [],
     "filaments": [],
@@ -23,15 +23,15 @@ The top-level object contains exactly four fields:
 
 `profiles` contains exactly the three arrays shown above. Each record uses the same
 canonical fields as DuckySlicer's versioned app-private user-profile store. Printer
-records carry bed geometry and origin, nozzle and extruder capabilities, machine
+records carry bed geometry and origin, nozzle, pellet, and extruder capabilities, machine
 G-code, and motion limits. Filament records carry material, temperature, flow,
 cooling, retraction, and printer-compatibility settings. Slicing records carry the
 Quality, Strength, Speed, Support, and Others process settings exposed by the app.
 The serializers and validators in `ProfileStore.kt` are the authoritative field
 definitions.
 
-Exports currently write profile schema 102. Bundle version 1 accepts supported profile
-schemas 1 through 102 and applies the same safe defaults used for an older private
+Exports currently write profile schema 112. Bundle version 1 accepts supported profile
+schemas 1 through 112 and applies the same safe defaults used for an older private
 profile store. A future bundle envelope or profile schema is rejected until an
 explicit migration is implemented.
 

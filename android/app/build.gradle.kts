@@ -119,7 +119,7 @@ val generateOrcaProfileCatalog = tasks.register<Exec>("generateOrcaProfileCatalo
     )
     inputs.file(profileCatalogGenerator)
     inputs.dir(orcaProfileRoot)
-    inputs.property("profileSchemaVersion", 111)
+    inputs.property("profileSchemaVersion", 112)
     inputs.property("orcaRevision", orcaEngineRevision)
     outputs.file(generatedProfileCatalog)
     outputs.upToDateWhen {

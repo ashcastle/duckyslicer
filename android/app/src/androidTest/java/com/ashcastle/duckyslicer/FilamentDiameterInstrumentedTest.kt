@@ -47,6 +47,41 @@ class FilamentDiameterInstrumentedTest {
         }
     }
 
+    @Test
+    fun pelletFlowCoefficientChangesRealOrcaExtrusion() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val modelFile = File(context.cacheDir, "pellet-flow-cube.stl").apply {
+            writeText(cubeStl())
+        }
+        val outputs = ArrayList<File>()
+        try {
+            val model = ProjectObject("pellet-flow", inspectModel(modelFile.absolutePath))
+            val base = SliceOptions().copy(
+                bedSizeX = 100f,
+                bedSizeY = 100f,
+                bedPolygon = rectangularBedPolygon(100f, 100f),
+                fillDensity = 0.2f,
+            )
+            val filament = FilamentProfile.GENERIC_PLA.copy(
+                id = "ginger-pellet-pla",
+                pelletFlowCoefficient = 1f,
+                diameter = filamentDiameterFromPelletFlowCoefficient(1f),
+            )
+            val pellet = OnDeviceSlicer.slice(
+                listOf(model),
+                base.copy(
+                    printerProfile = base.printerProfile.copy(pelletModded = true),
+                ).selectFilament(filament),
+            ).also { outputs += it.output }
+
+            assertTrue(pellet.output.readText().contains("; filament_diameter: 1.12838"))
+            assertTrue("Pellet extrusion estimate must be meaningful", pellet.filamentMm > 100f)
+        } finally {
+            outputs.forEach(File::delete)
+            modelFile.delete()
+        }
+    }
+
     private fun cubeStl(): String {
         val vertices = arrayOf(
             floatArrayOf(0f, 0f, 0f), floatArrayOf(20f, 0f, 0f),

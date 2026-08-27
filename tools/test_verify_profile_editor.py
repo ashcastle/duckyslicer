@@ -120,6 +120,7 @@ def valid_sources() -> dict[str, str]:
             " minimumExtrudingRate = it minimumTravelRate = it"
             " silentMinimumExtrudingRate = it silentMinimumTravelRate = it"
             " R.string.printer_environment_capabilities"
+            " R.string.pellet_extruder pelletModded = it"
             " R.string.supports_chamber_temperature_control R.string.supports_air_filtration"
             " supportsChamberTemperatureControl = supportsAirFiltration ="
             ' entries = listOf("marlin", "marlin2", "klipper", "reprapfirmware")'
@@ -130,8 +131,11 @@ def valid_sources() -> dict[str, str]:
             " bedMeshProbeDistanceX = bedMeshProbeDistanceY = adaptiveBedMeshMargin ="
             " CoordinatePairSettingField("
             " MAX_GCODE_TEMPLATE_BYTES"
-            " R.string.filament_gcode R.string.filament_start_gcode R.string.filament_end_gcode"
-            " R.string.filament_diameter activeProfile.copy(diameter ="
+            " R.string.filament_gcode R.string.pellet_flow_coefficient"
+            " filamentDiameterFromPelletFlowCoefficient pelletFlowCoefficient = coefficient"
+            " R.string.filament_start_gcode R.string.filament_end_gcode"
+            " R.string.filament_diameter diameter = diameter"
+            " pelletFlowCoefficient = pelletFlowCoefficientFromDiameter(diameter)"
             " R.string.filament_density activeProfile.copy(density ="
             " R.string.filament_price_per_kilogram activeProfile.copy(costPerKilogram ="
             " R.string.filament_shrinkage_xy activeProfile.copy(shrinkageXyPercent ="
@@ -300,6 +304,7 @@ def valid_sources() -> dict[str, str]:
             ' name="printing_by_object_gcode" name="use_relative_e_distances"'
             ' name="emit_machine_limits_to_gcode" name="manual_filament_change"'
             ' name="disable_m73"'
+            ' name="pellet_extruder" name="pellet_flow_coefficient"'
             ' name="minimum_layer_height" name="maximum_layer_height"'
             ' name="tool_change_retraction" name="tool_change_retraction_length"'
             ' name="tool_change_retract_restart_extra"'
@@ -370,6 +375,7 @@ def valid_sources() -> dict[str, str]:
             ' name="change_pressure_when_wiping" name="ramming_pressure_advance"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
+            ' name="pellet_extruder" name="pellet_flow_coefficient"'
             ' name="minimum_layer_height" name="maximum_layer_height"'
             ' name="tool_change_retraction" name="tool_change_retraction_length"'
             ' name="tool_change_retract_restart_extra"'

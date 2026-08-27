@@ -300,6 +300,8 @@
     <string name="spiral_finishing_flow">Finishing flow</string>
     <string name="max_volumetric_speed">Maximum flow</string>
     <string name="filament_diameter">Diameter</string>
+    <string name="pellet_extruder">Pellet extruder</string>
+    <string name="pellet_flow_coefficient">Pellet flow coefficient</string>
     <string name="filament_density">Density</string>
     <string name="filament_price_per_kilogram">Price per kilogram</string>
     <string name="filament_shrinkage_xy">Shrinkage (XY)</string>

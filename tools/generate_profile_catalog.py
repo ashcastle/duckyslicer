@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 111
+SCHEMA_VERSION = 112
 MAX_FILAMENT_SLOTS = 16
 NO_FILAMENT_COLOR = -1
 MAX_GCODE_THUMBNAILS = 8
@@ -631,6 +631,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "nozzleVolume": nozzle_volume,
         "minLayerHeight": min_layer_height,
         "maxLayerHeight": max_layer_height,
+        "pelletModded": boolean(raw.get("pellet_modded_printer")),
         "singleExtruderMultiMaterial": supports_multi_material,
         "coolingTubeRetraction": number(raw.get("cooling_tube_retraction"), 91.5),
         "coolingTubeLength": number(raw.get("cooling_tube_length"), 5),
@@ -1039,6 +1040,11 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     )
     if not filament_type or not (150 <= nozzle <= 400 and 0 <= bed <= 160):
         raise ValueError("unsafe filament temperatures")
+    diameter = number(raw.get("filament_diameter"), 1.75)
+    pellet_flow_coefficient = number(
+        raw.get("pellet_flow_coefficient"),
+        4 / (math.pi * diameter * diameter),
+    )
     adaptive_pa_enabled = boolean(raw.get("adaptive_pressure_advance"))
     profile = {
         "id": stable_id("filament", brand, name),
@@ -1064,7 +1070,8 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "firstLayerGraphicEffectPlateTemp": first_graphic_effect_bed,
         "flowRatio": number(raw.get("filament_flow_ratio"), 1.0),
         "maxVolumetricSpeed": number(raw.get("filament_max_volumetric_speed"), 12),
-        "diameter": number(raw.get("filament_diameter"), 1.75),
+        "diameter": diameter,
+        "pelletFlowCoefficient": pellet_flow_coefficient,
         "density": number(raw.get("filament_density"), 1.24),
         "costPerKilogram": number(raw.get("filament_cost"), 0),
         "shrinkageXyPercent": number(raw.get("filament_shrink"), 100),
@@ -1193,8 +1200,11 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
             ]
         )
         and 0.5 <= profile["flowRatio"] <= 1.5
-        and 0.1 <= profile["maxVolumetricSpeed"] <= 100
+        and 0.1 <= profile["maxVolumetricSpeed"] <= 300
         and 0.5 <= profile["diameter"] <= 4
+        and 4 / (math.pi * 4 * 4)
+        <= profile["pelletFlowCoefficient"]
+        <= 4 / (math.pi * 0.5 * 0.5)
         and 0 <= profile["density"] <= 10
         and 0 <= profile["costPerKilogram"] <= 1_000_000
         and 10 <= profile["shrinkageXyPercent"] <= 200

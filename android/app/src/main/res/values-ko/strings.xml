@@ -300,6 +300,8 @@
     <string name="flow_ratio">유량 비율</string>
     <string name="max_volumetric_speed">최대 유량</string>
     <string name="filament_diameter">직경</string>
+    <string name="pellet_extruder">펠릿 압출기</string>
+    <string name="pellet_flow_coefficient">펠릿 유량 계수</string>
     <string name="filament_density">밀도</string>
     <string name="filament_price_per_kilogram">kg당 가격</string>
     <string name="filament_shrinkage_xy">수축률(XY)</string>

@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 111
+internal const val USER_PROFILE_SCHEMA_VERSION = 112
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -96,6 +96,7 @@ class ProfileStore internal constructor(
             gcodeThumbnails = options.printerProfile.gcodeThumbnails,
             minLayerHeight = options.printerProfile.minLayerHeight,
             maxLayerHeight = options.printerProfile.maxLayerHeight,
+            pelletModded = options.printerProfile.pelletModded,
             machineStartGcode = options.printerProfile.machineStartGcode,
             machineEndGcode = options.printerProfile.machineEndGcode,
             machinePauseGcode = options.printerProfile.machinePauseGcode,
@@ -339,6 +340,7 @@ class ProfileStore internal constructor(
             adaptivePressureAdvance = effective.adaptivePressureAdvance,
             requiredNozzleHrc = effective.requiredNozzleHrc,
             diameter = effective.diameter,
+            pelletFlowCoefficient = effective.pelletFlowCoefficient,
             density = effective.density,
             costPerKilogram = effective.costPerKilogram,
             shrinkageXyPercent = effective.shrinkageXyPercent,
@@ -825,6 +827,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("nozzleVolume", nozzleVolume)
     .put("gcodeThumbnails", gcodeThumbnails)
     .put("minLayerHeight", minLayerHeight).put("maxLayerHeight", maxLayerHeight)
+    .put("pelletModded", pelletModded)
     .put("machineStartGcode", machineStartGcode).put("machineEndGcode", machineEndGcode)
     .put("machinePauseGcode", machinePauseGcode)
     .put("timeLapseGcode", timeLapseGcode)
@@ -969,6 +972,7 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("adaptivePressureAdvanceBridge", adaptivePressureAdvance.bridge)
     .put("requiredNozzleHrc", requiredNozzleHrc)
     .put("diameter", diameter)
+    .put("pelletFlowCoefficient", pelletFlowCoefficient)
     .put("density", density)
     .put("costPerKilogram", costPerKilogram)
     .put("shrinkageXyPercent", shrinkageXyPercent)
@@ -1381,6 +1385,7 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         getDouble("maxPrintHeight").toFloat(), nozzleDiameter,
         minLayerHeight = optDouble("minLayerHeight", 0.04).toFloat(),
         maxLayerHeight = optDouble("maxLayerHeight", nozzleDiameter * 0.7).toFloat(),
+        pelletModded = optBoolean("pelletModded"),
         builtIn = optBoolean("builtIn"),
         brand = optionalString("brand"),
         nozzleMaterial = requireNotNull(
@@ -1523,6 +1528,7 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
 internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatching {
     val bedTemp = getInt("bedTemp")
     val firstLayerBedTemp = optInt("firstLayerBedTemp", bedTemp)
+    val diameter = optDouble("diameter", 1.75).toFloat()
     FilamentProfile(
         getString("id"), getString("name"), getString("nativeName"),
         getInt("nozzleTemp"), optInt("firstLayerNozzleTemp", getInt("nozzleTemp")),
@@ -1591,7 +1597,11 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         requiredNozzleHrc = optInt("requiredNozzleHrc", 0),
         defaultColor = optInt("defaultColor", NO_FILAMENT_COLOR),
         compatiblePrinters = stringList("compatiblePrinters"),
-        diameter = optDouble("diameter", 1.75).toFloat(),
+        diameter = diameter,
+        pelletFlowCoefficient = optDouble(
+            "pelletFlowCoefficient",
+            pelletFlowCoefficientFromDiameter(diameter).toDouble(),
+        ).toFloat(),
         density = optDouble("density", 1.24).toFloat(),
         costPerKilogram = optDouble("costPerKilogram", 0.0).toFloat(),
         shrinkageXyPercent = optDouble("shrinkageXyPercent", 100.0).toFloat(),

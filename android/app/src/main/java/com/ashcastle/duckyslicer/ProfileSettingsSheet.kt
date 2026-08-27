@@ -1044,6 +1044,17 @@ private fun PrinterSettingsSheet(
         },
         onSelected = { onOptionsChanged(options.copy(printerStructure = it)) },
     )
+    SettingsSwitch(
+        label = stringResource(R.string.pellet_extruder),
+        checked = options.printerProfile.pelletModded,
+        onCheckedChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(pelletModded = it),
+                ),
+            )
+        },
+    )
     SettingsGroupTitle(stringResource(R.string.adaptive_bed_mesh))
     CoordinatePairSettingField(
         label = stringResource(R.string.bed_mesh_min),
@@ -2285,8 +2296,8 @@ private fun FilamentSettingsSheet(
             label = stringResource(R.string.max_volumetric_speed),
             valueText = stringResource(R.string.volumetric_speed_value, activeProfile.maxVolumetricSpeed),
             value = activeProfile.maxVolumetricSpeed,
-            range = 4f..40f,
-            steps = 35,
+            range = if (options.printerProfile.pelletModded) 4f..300f else 4f..100f,
+            steps = if (options.printerProfile.pelletModded) 295 else 95,
             onValueChange = {
                 onOptionsChanged(
                     options.updateFilamentSlot(
@@ -2296,7 +2307,26 @@ private fun FilamentSettingsSheet(
                 )
             },
         )
-        if (selectedSlot == 0) {
+        if (selectedSlot == 0 && options.printerProfile.pelletModded) {
+            DecimalSettingField(
+                label = stringResource(R.string.pellet_flow_coefficient),
+                value = activeProfile.pelletFlowCoefficient,
+                minimum = MIN_PELLET_FLOW_COEFFICIENT,
+                maximum = MAX_PELLET_FLOW_COEFFICIENT,
+                suffix = "",
+                onValueChange = { coefficient ->
+                    onOptionsChanged(
+                        options.updateFilamentSlot(
+                            selectedSlot,
+                            activeProfile.copy(
+                                pelletFlowCoefficient = coefficient,
+                                diameter = filamentDiameterFromPelletFlowCoefficient(coefficient),
+                            ),
+                        ),
+                    )
+                },
+            )
+        } else if (selectedSlot == 0) {
             SettingSlider(
                 label = stringResource(R.string.filament_diameter),
                 valueText = stringResource(
@@ -2307,10 +2337,14 @@ private fun FilamentSettingsSheet(
                 range = 0.5f..4f,
                 steps = 349,
                 onValueChange = {
+                    val diameter = (it * 100f).roundToInt() / 100f
                     onOptionsChanged(
                         options.updateFilamentSlot(
                             selectedSlot,
-                            activeProfile.copy(diameter = (it * 100f).roundToInt() / 100f),
+                            activeProfile.copy(
+                                diameter = diameter,
+                                pelletFlowCoefficient = pelletFlowCoefficientFromDiameter(diameter),
+                            ),
                         ),
                     )
                 },

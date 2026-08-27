@@ -5,7 +5,9 @@ import com.u1.slicer.data.SliceConfig
 import java.io.File
 import java.io.Serializable
 import java.util.UUID
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.sqrt
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -273,6 +275,7 @@ data class PrinterProfile(
     val nozzleVolume: Float = 0f,
     val minLayerHeight: Float = 0.04f,
     val maxLayerHeight: Float = nozzleDiameter * 0.7f,
+    val pelletModded: Boolean = false,
     val machineStartGcode: String = "",
     val machineEndGcode: String = "",
     val machinePauseGcode: String = "",
@@ -551,6 +554,7 @@ data class FilamentProfile(
     val requiredNozzleHrc: Int = 0,
     val compatiblePrinters: List<String> = emptyList(),
     val diameter: Float = 1.75f,
+    val pelletFlowCoefficient: Float = pelletFlowCoefficientFromDiameter(diameter),
     val density: Float = 1.24f,
     val costPerKilogram: Float = 0f,
     val shrinkageXyPercent: Float = 100f,
@@ -666,6 +670,15 @@ data class FilamentProfile(
         )
     }
 }
+
+internal fun pelletFlowCoefficientFromDiameter(diameter: Float): Float =
+    (4.0 / (PI * diameter * diameter)).toFloat()
+
+internal fun filamentDiameterFromPelletFlowCoefficient(coefficient: Float): Float =
+    sqrt(4.0 / (PI * coefficient)).toFloat()
+
+internal val MIN_PELLET_FLOW_COEFFICIENT = pelletFlowCoefficientFromDiameter(4f)
+internal val MAX_PELLET_FLOW_COEFFICIENT = pelletFlowCoefficientFromDiameter(0.5f)
 
 internal const val DEFAULT_FILAMENT_RAMMING_PARAMETERS =
     "120 100 6.6 6.8 7.2 7.6 7.9 8.2 8.7 9.4 9.9 10.0|" +
@@ -1381,7 +1394,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 111,
+    val schemaVersion: Int = 112,
     val sourceRevision: String = FALLBACK_PROFILE_CATALOG_REVISION,
     val rejectedCount: Int = 0,
 )

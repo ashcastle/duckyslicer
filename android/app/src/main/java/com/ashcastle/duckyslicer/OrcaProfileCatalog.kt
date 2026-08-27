@@ -53,7 +53,7 @@ class OrcaProfileCatalog internal constructor(
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 111) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 112) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -94,6 +94,7 @@ class OrcaProfileCatalog internal constructor(
         nozzleVolume = input.readFloat(),
         minLayerHeight = input.readFloat(),
         maxLayerHeight = input.readFloat(),
+        pelletModded = input.readCatalogBoolean(),
         singleExtruderMultiMaterial = input.readCatalogBoolean(),
         coolingTubeRetraction = input.readFloat(),
         coolingTubeLength = input.readFloat(),
@@ -221,6 +222,7 @@ class OrcaProfileCatalog internal constructor(
         flowRatio = input.readFloat(),
         maxVolumetricSpeed = input.readFloat(),
         diameter = input.readFloat(),
+        pelletFlowCoefficient = input.readFloat(),
         density = input.readFloat(),
         costPerKilogram = input.readFloat(),
         shrinkageXyPercent = input.readFloat(),
@@ -387,6 +389,7 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("nozzleVolume", BINARY_FLOAT),
     BinaryField("minLayerHeight", BINARY_FLOAT),
     BinaryField("maxLayerHeight", BINARY_FLOAT),
+    BinaryField("pelletModded", BINARY_BOOL),
     BinaryField("singleExtruderMultiMaterial", BINARY_BOOL),
     BinaryField("coolingTubeRetraction", BINARY_FLOAT),
     BinaryField("coolingTubeLength", BINARY_FLOAT),
@@ -515,6 +518,7 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("flowRatio", BINARY_FLOAT),
     BinaryField("maxVolumetricSpeed", BINARY_FLOAT),
     BinaryField("diameter", BINARY_FLOAT),
+    BinaryField("pelletFlowCoefficient", BINARY_FLOAT),
     BinaryField("density", BINARY_FLOAT),
     BinaryField("costPerKilogram", BINARY_FLOAT),
     BinaryField("shrinkageXyPercent", BINARY_FLOAT),

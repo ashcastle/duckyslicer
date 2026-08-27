@@ -152,8 +152,10 @@ internal object ProfileValidation {
                 profile.firstLayerGraphicEffectPlateTemp,
             ).all { it in 0..160 } &&
             profile.flowRatio in 0.5f..1.5f &&
-            profile.maxVolumetricSpeed in 0.1f..100f &&
+            profile.maxVolumetricSpeed in 0.1f..300f &&
             profile.diameter in 0.5f..4f &&
+            profile.pelletFlowCoefficient in
+                MIN_PELLET_FLOW_COEFFICIENT..MAX_PELLET_FLOW_COEFFICIENT &&
             profile.density in 0f..10f &&
             profile.costPerKilogram in 0f..1_000_000f &&
             profile.shrinkageXyPercent in 10f..200f &&
