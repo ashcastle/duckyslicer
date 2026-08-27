@@ -2845,8 +2845,15 @@ class NativeEngineInstrumentedTest {
                 .compatiblePrints,
         )
         assertEquals(3_314, catalog.filaments.count { it.id.startsWith("orca-filament-") })
-        assertEquals(2_319, catalog.slicing.count { it.id.startsWith("orca-process-") })
-        assertEquals(57, catalog.rejectedCount)
+        assertEquals(2_332, catalog.slicing.count { it.id.startsWith("orca-process-") })
+        assertEquals(44, catalog.rejectedCount)
+        catalog.slicing.single { it.name == "0.55mm DRAFT @CORE One 0.8" }.let { process ->
+            assertEquals(0.8f, process.nozzleDiameter)
+            assertEquals(listOf("Prusa CORE One 0.8 nozzle"), process.compatiblePrinters)
+        }
+        assertTrue(
+            catalog.slicing.none { it.name == "0.20mm SOLUBLE FULL @MK4S 0.4" },
+        )
         assertEquals(
             listOf(156f, 152f, 180f, 152f, 180f, 180f, 156f, 180f),
             catalog.printers.single { it.name == "Bambu Lab A1 mini 0.4 nozzle" }

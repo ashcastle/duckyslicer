@@ -18,12 +18,15 @@ from tools.generate_profile_catalog import (
     build_process,
     build_process_variants,
     canonical_profiles,
+    compatible_printers_from_condition,
     coordinate_pair,
     extra_solid_infills,
     filament_vendor,
     infer_binary_kind,
     nozzle_material,
+    printer_condition_values,
     printable_geometry,
+    resolved_compatible_printers,
     small_area_flow_compensation_model,
     stable_id,
     support_type,
@@ -105,6 +108,29 @@ class GenerateProfileCatalogTest(unittest.TestCase):
             ["Special quality", "Special draft"],
             profile["compatiblePrints"],
         )
+
+    def test_normalizes_filament_printer_condition_to_exact_names(self) -> None:
+        raw = {
+            "name": "Conditional filament",
+            "filament_type": ["PLA"],
+            "nozzle_temperature": ["215"],
+            "hot_plate_temp": ["60"],
+            "compatible_printers_condition": (
+                "printer_notes=~/.*EXAMPLE_MODEL.*/ and nozzle_diameter[0]==0.4"
+            ),
+        }
+        printers = {
+            "Example 0.4": (0.4, "EXAMPLE_MODEL", False),
+            "Example 0.6": (0.6, "EXAMPLE_MODEL", False),
+        }
+
+        profile = build_filament(
+            "Example",
+            raw,
+            compatible_override=resolved_compatible_printers(raw, printers),
+        )
+
+        self.assertEqual(["Example 0.4"], profile["compatiblePrinters"])
 
     def test_preserves_pellet_printer_and_flow_coefficient(self) -> None:
         printer = build_printer(
@@ -312,6 +338,103 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual([0.6, 0.8], [profile["outerWallLineWidth"] for profile in profiles])
         self.assertEqual(2, len({profile["id"] for profile in profiles}))
         self.assertEqual({"0.40mm Shared"}, {profile["name"] for profile in profiles})
+
+    def test_resolves_supported_orca_printer_compatibility_condition(self) -> None:
+        printers = {
+            "Standard 0.8": printer_condition_values(
+                {
+                    "nozzle_diameter": ["0.8"],
+                    "printer_notes": ["PRINTER_MODEL_COREONE"],
+                }
+            ),
+            "High-flow 0.8": printer_condition_values(
+                {
+                    "nozzle_diameter": ["0.8"],
+                    "printer_notes": ["PRINTER_MODEL_COREONE\nHF_NOZZLE"],
+                }
+            ),
+            "Standard 0.6": printer_condition_values(
+                {
+                    "nozzle_diameter": ["0.6"],
+                    "printer_notes": ["PRINTER_MODEL_COREONE"],
+                }
+            ),
+        }
+
+        compatible = compatible_printers_from_condition(
+            "printer_notes=~/.*PRINTER_MODEL_COREONE.*/ and "
+            "nozzle_diameter[0]==0.8 and printer_notes!~/.*HF_NOZZLE.*/",
+            printers,
+        )
+
+        self.assertEqual(["Standard 0.8"], compatible)
+
+    def test_normalizes_condition_process_to_exact_compatible_printers(self) -> None:
+        raw = {
+            "name": "0.55mm Conditional",
+            "layer_height": "0.55",
+            "initial_layer_print_height": "0.20",
+            "compatible_printers_condition": (
+                "printer_notes=~/.*PRINTER_MODEL_COREONE.*/ and "
+                "nozzle_diameter[0]==0.8"
+            ),
+        }
+        conditions = {
+            "Printer 0.4": (0.4, "PRINTER_MODEL_COREONE", False),
+            "Printer 0.8": (0.8, "PRINTER_MODEL_COREONE", False),
+            "Other 0.8": (0.8, "OTHER_MODEL", False),
+        }
+
+        profiles = build_process_variants(
+            "Example",
+            raw,
+            {name: values[0] for name, values in conditions.items()},
+            conditions,
+        )
+
+        self.assertEqual(1, len(profiles))
+        self.assertEqual(0.8, profiles[0]["nozzleDiameter"])
+        self.assertEqual(["Printer 0.8"], profiles[0]["compatiblePrinters"])
+
+    def test_rejects_unmatched_or_unsupported_printer_conditions(self) -> None:
+        raw = {
+            "name": "Conditional process",
+            "layer_height": "0.20",
+            "initial_layer_print_height": "0.20",
+        }
+        conditions = {"Printer 0.4": (0.4, "PRINTER_MODEL_COREONE", False)}
+
+        self.assertEqual(
+            ["Printer 0.4"],
+            resolved_compatible_printers(
+                raw | {
+                    "compatible_printers": ["Printer 0.4"],
+                    "compatible_printers_condition": "unsupported expression",
+                },
+                conditions,
+            ),
+        )
+
+        with self.assertRaisesRegex(ValueError, "matched no printers"):
+            build_process_variants(
+                "Example",
+                raw | {
+                    "compatible_printers_condition": (
+                        "printer_notes=~/.*PRINTER_MODEL_COREONE.*/ and "
+                        "single_extruder_multi_material"
+                    )
+                },
+                {"Printer 0.4": 0.4},
+                conditions,
+            )
+        with self.assertRaisesRegex(
+            ValueError,
+            "unsupported compatible-printer condition",
+        ):
+            compatible_printers_from_condition(
+                "printer_notes=~/.*COREONE.*/ or nozzle_diameter[0]==0.4",
+                conditions,
+            )
 
     def test_preserves_legacy_id_for_shared_point_four_process_variant(self) -> None:
         raw = {

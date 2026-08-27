@@ -51,6 +51,13 @@ BINARY_NULLABLE_BOOL = 8
 BINARY_NULLABLE_STRING = 9
 BINARY_EMPTY_LIST = 255
 
+PRINTER_NOTES_CONDITION = re.compile(
+    r"^printer_notes(?P<operator>=~|!~)/\.\*(?P<token>[A-Za-z0-9_]+)\.\*/$"
+)
+NOZZLE_DIAMETER_CONDITION = re.compile(
+    r"^nozzle_diameter\[0\]==(?P<diameter>[0-9]+(?:\.[0-9]+)?)$"
+)
+
 
 def scalar(value: Any, default: Any = None) -> Any:
     if isinstance(value, list):
@@ -107,6 +114,73 @@ def filament_color(value: Any) -> int:
 def boolean(value: Any, default: bool = False) -> bool:
     candidate = str(scalar(value, "1" if default else "0")).strip().lower()
     return candidate in {"1", "true", "yes", "on"}
+
+
+def printer_condition_values(raw: dict[str, Any]) -> tuple[float, str, bool]:
+    return (
+        number(raw.get("nozzle_diameter"), 0),
+        str(scalar(raw.get("printer_notes"), "")),
+        boolean(raw.get("single_extruder_multi_material")),
+    )
+
+
+def compatible_printers_from_condition(
+    condition: str,
+    printers: dict[str, tuple[float, str, bool]],
+) -> list[str]:
+    clauses = [clause.strip() for clause in condition.strip().split(" and ")]
+    if not clauses or any(not clause for clause in clauses):
+        raise ValueError("unsupported compatible-printer condition")
+
+    predicates: list[tuple[str, str | float | None]] = []
+    for clause in clauses:
+        notes_match = PRINTER_NOTES_CONDITION.fullmatch(clause)
+        if notes_match is not None:
+            predicates.append(
+                (notes_match.group("operator"), notes_match.group("token"))
+            )
+            continue
+        nozzle_match = NOZZLE_DIAMETER_CONDITION.fullmatch(clause)
+        if nozzle_match is not None:
+            predicates.append(("nozzle", float(nozzle_match.group("diameter"))))
+            continue
+        if clause == "single_extruder_multi_material":
+            predicates.append(("semm", None))
+            continue
+        raise ValueError("unsupported compatible-printer condition")
+
+    def matches(values: tuple[float, str, bool]) -> bool:
+        nozzle, notes, single_extruder_multi_material = values
+        for operator, operand in predicates:
+            if operator == "=~" and str(operand) not in notes:
+                return False
+            if operator == "!~" and str(operand) in notes:
+                return False
+            if operator == "nozzle" and not math.isclose(
+                nozzle,
+                float(operand),
+                abs_tol=0.0001,
+            ):
+                return False
+            if operator == "semm" and not single_extruder_multi_material:
+                return False
+        return True
+
+    return sorted(name for name, values in printers.items() if matches(values))
+
+
+def resolved_compatible_printers(
+    raw: dict[str, Any],
+    printers: dict[str, tuple[float, str, bool]],
+) -> list[str]:
+    compatible = values(raw.get("compatible_printers"))
+    condition = str(scalar(raw.get("compatible_printers_condition"), "")).strip()
+    if compatible or not condition:
+        return compatible
+    compatible = compatible_printers_from_condition(condition, printers)
+    if not compatible:
+        raise ValueError("compatible-printer condition matched no printers")
+    return compatible
 
 
 def build_plate_type(value: Any) -> str:
@@ -1025,7 +1099,12 @@ def extra_solid_infills(value: Any, default: str = "") -> str:
     return ",".join(normalized)
 
 
-def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
+def build_filament(
+    brand: str,
+    raw: dict[str, Any],
+    *,
+    compatible_override: list[str] | None = None,
+) -> dict[str, Any]:
     name = str(raw["name"])
     vendor = filament_vendor(raw.get("filament_vendor"), brand)
     filament_type = str(scalar(raw.get("filament_type"), "")).strip()
@@ -1220,7 +1299,11 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
             raw.get("adaptive_pressure_advance_bridges"), 0
         ),
         "requiredNozzleHrc": integer(raw.get("required_nozzle_HRC"), 0),
-        "compatiblePrinters": values(raw.get("compatible_printers")),
+        "compatiblePrinters": (
+            compatible_override
+            if compatible_override is not None
+            else values(raw.get("compatible_printers"))
+        ),
         "compatiblePrints": values(raw.get("compatible_prints")),
     }
     if not (
@@ -2150,8 +2233,12 @@ def build_process_variants(
     brand: str,
     raw: dict[str, Any],
     printer_nozzles: dict[str, float],
+    printer_conditions: dict[str, tuple[float, str, bool]] | None = None,
 ) -> list[dict[str, Any]]:
-    compatible = values(raw.get("compatible_printers"))
+    condition = str(scalar(raw.get("compatible_printers_condition"), "")).strip()
+    if printer_conditions is None and condition and not values(raw.get("compatible_printers")):
+        raise ValueError("compatible-printer condition requires printer metadata")
+    compatible = resolved_compatible_printers(raw, printer_conditions or {})
     compatible_by_nozzle: dict[float, list[str]] = defaultdict(list)
     for printer_name in compatible:
         nozzle = printer_nozzles.get(printer_name)
@@ -2159,7 +2246,14 @@ def build_process_variants(
             compatible_by_nozzle[nozzle].append(printer_name)
 
     if len(compatible_by_nozzle) <= 1:
-        return [build_process(brand, raw, printer_nozzles)]
+        return [
+            build_process(
+                brand,
+                raw,
+                printer_nozzles,
+                compatible_override=compatible,
+            )
+        ]
 
     sorted_nozzles = sorted(compatible_by_nozzle)
     base_nozzle = next(
@@ -2372,27 +2466,60 @@ def main() -> None:
             rejected[f"inheritance: {error}"] += 1
 
     printer_candidates: list[tuple[Path, dict[str, Any]]] = []
+    printer_condition_candidates: dict[
+        str,
+        set[tuple[float, str, bool]],
+    ] = defaultdict(set)
     for source, brand, raw in resolved_entries:
         if raw.get("type") != "machine":
             continue
         try:
-            printer_candidates.append((source, build_printer(brand, raw)))
+            profile = build_printer(brand, raw)
+            printer_candidates.append((source, profile))
+            printer_condition_candidates[profile["id"]].add(
+                printer_condition_values(raw)
+            )
         except ValueError as error:
             rejected[f"printer: {error}"] += 1
     printers = canonical_profiles(printer_candidates, "printer")
     printers.sort(key=lambda profile: (profile["brand"].casefold(), profile["name"].casefold()))
     printer_nozzles = {profile["name"]: profile["nozzleDiameter"] for profile in printers}
+    printer_conditions: dict[str, tuple[float, str, bool]] = {}
+    for profile in printers:
+        candidates = printer_condition_candidates[profile["id"]]
+        if len(candidates) != 1:
+            raise ValueError(
+                f"conflicting printer compatibility metadata: {profile['name']}"
+            )
+        printer_conditions[profile["name"]] = next(iter(candidates))
 
     filament_candidates: list[tuple[Path, dict[str, Any]]] = []
     process_candidates: list[tuple[Path, dict[str, Any]]] = []
     for source, brand, raw in resolved_entries:
         try:
             if raw.get("type") == "filament":
-                filament_candidates.append((source, build_filament(brand, raw)))
+                filament_candidates.append(
+                    (
+                        source,
+                        build_filament(
+                            brand,
+                            raw,
+                            compatible_override=resolved_compatible_printers(
+                                raw,
+                                printer_conditions,
+                            ),
+                        ),
+                    )
+                )
             elif raw.get("type") == "process":
                 process_candidates.extend(
                     (source, profile)
-                    for profile in build_process_variants(brand, raw, printer_nozzles)
+                    for profile in build_process_variants(
+                        brand,
+                        raw,
+                        printer_nozzles,
+                        printer_conditions,
+                    )
                 )
         except ValueError as error:
             rejected[f"{raw.get('type')}: {error}"] += 1
