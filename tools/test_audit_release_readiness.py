@@ -20,6 +20,8 @@ from tools.run_physical_qualification import DeviceIdentity
 
 
 COMMIT = "a" * 40
+ORIGIN_URL = "https://github.com/ashcastle/duckyslicer.git"
+REPOSITORY = "ashcastle/duckyslicer"
 
 
 def identity(serial: str, *, emulator: bool = False) -> DeviceIdentity:
@@ -64,10 +66,23 @@ def ready_runner() -> FakeRunner:
                 " 0123456789abcdef third_party/runtime",
             ),
             ("gh", "auth", "status", "-h", "github.com"): CommandResult(0),
+            ("git", "remote", "get-url", "origin"): CommandResult(0, ORIGIN_URL),
+            (
+                "gh",
+                "repo",
+                "view",
+                ORIGIN_URL,
+                "--json",
+                "nameWithOwner",
+                "--jq",
+                ".nameWithOwner",
+            ): CommandResult(0, REPOSITORY),
             (
                 "gh",
                 "variable",
                 "list",
+                "--repo",
+                REPOSITORY,
                 "--env",
                 "play",
                 "--json",
@@ -110,6 +125,7 @@ class AuditReleaseReadinessTest(unittest.TestCase):
         checks = github_checks(ready_runner())
         self.assertTrue(all(check.passed for check in checks))
         self.assertEqual({"github-auth", "play-wif"}, {check.name for check in checks})
+        self.assertIn(REPOSITORY, checks[-1].detail)
 
         runner = ready_runner()
         runner.results[("gh", "auth", "status", "-h", "github.com")] = CommandResult(1)

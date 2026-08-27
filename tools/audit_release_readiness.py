@@ -158,11 +158,33 @@ def github_checks(runner: CommandRunner) -> list[ReadinessCheck]:
         return [blocked("github-auth", "GitHub CLI 재인증 필요")]
 
     checks = [passed("github-auth", "GitHub CLI 인증 유효")]
+    origin = runner(("git", "remote", "get-url", "origin"))
+    if origin.returncode != 0 or not origin.stdout.strip():
+        checks.append(blocked("play-wif", "origin 저장소를 확인할 수 없음"))
+        return checks
+    repository = runner(
+        (
+            "gh",
+            "repo",
+            "view",
+            origin.stdout.strip(),
+            "--json",
+            "nameWithOwner",
+            "--jq",
+            ".nameWithOwner",
+        )
+    )
+    repository_name = repository.stdout.strip()
+    if repository.returncode != 0 or not repository_name:
+        checks.append(blocked("play-wif", "origin GitHub 저장소를 확인할 수 없음"))
+        return checks
     variables = runner(
         (
             "gh",
             "variable",
             "list",
+            "--repo",
+            repository_name,
             "--env",
             "play",
             "--json",
@@ -172,14 +194,26 @@ def github_checks(runner: CommandRunner) -> list[ReadinessCheck]:
         )
     )
     if variables.returncode != 0:
-        checks.append(blocked("play-wif", "보호된 play 환경 변수를 읽을 수 없음"))
+        checks.append(
+            blocked(
+                "play-wif",
+                f"{repository_name}의 보호된 play 환경 변수를 읽을 수 없음",
+            )
+        )
         return checks
     configured = {line.strip() for line in variables.stdout.splitlines() if line.strip()}
     missing = sorted(PLAY_VARIABLES - configured)
     if missing:
-        checks.append(blocked("play-wif", "누락 변수: " + ", ".join(missing)))
+        checks.append(
+            blocked(
+                "play-wif",
+                f"{repository_name} 누락 변수: " + ", ".join(missing),
+            )
+        )
     else:
-        checks.append(passed("play-wif", "키 없는 Play 인증 변수 구성됨"))
+        checks.append(
+            passed("play-wif", f"{repository_name}에 키 없는 Play 인증 변수 구성됨")
+        )
     return checks
 
 
