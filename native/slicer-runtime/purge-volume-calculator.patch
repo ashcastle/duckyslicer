@@ -9,33 +9,6 @@ diff --git a/app/src/main/cpp/CMakeLists.txt b/app/src/main/cpp/CMakeLists.txt
  
          # Format loaders
          ${LIBSLIC3R_DIR}/Format/3mf.cpp
-diff --git a/app/src/main/cpp/orcaslicer/src/slic3r/Utils/ColorSpaceConvert.cpp b/app/src/main/cpp/orcaslicer/src/slic3r/Utils/ColorSpaceConvert.cpp
---- a/app/src/main/cpp/orcaslicer/src/slic3r/Utils/ColorSpaceConvert.cpp
-+++ b/app/src/main/cpp/orcaslicer/src/slic3r/Utils/ColorSpaceConvert.cpp
-@@ -1,8 +1,10 @@
- #include "ColorSpaceConvert.hpp"
- 
- #include <algorithm>
-+#ifndef SLIC3R_ANDROID
- #include <boost/algorithm/string.hpp>
- #include <wx/colordlg.h>
-+#endif
- #include <cmath>
- 
- const static float param_13 = 1.0f / 3.0f;
-@@ -236,6 +238,7 @@ float DeltaE76(float l1, float a1, float b1, float l2, float a2, float b2)
-     return std::sqrt(std::pow((l1 - l2), 2) + std::pow((a1 - a2), 2) + std::pow((b1 - b2), 2));
- }
- 
-+#ifndef SLIC3R_ANDROID
- std::string color_to_string(const wxColour &color)
- {
-     std::string str = std::to_string(color.Red()) + "," + std::to_string(color.Green()) + "," + std::to_string(color.Blue()) + "," + std::to_string(color.Alpha());
-@@ -253,3 +256,4 @@ wxColour string_to_wxColor(const std::string &str)
-     }
-     return color;
- };
-+#endif
 diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slicer_wrapper.cpp
 --- a/app/src/main/cpp/src/slicer_wrapper.cpp
 +++ b/app/src/main/cpp/src/slicer_wrapper.cpp

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Verify the checked-in Rust/JNI failure-containment contract."""
+"""Verify checked-in native failure containment and patch ownership."""
 
 from __future__ import annotations
 
 import re
+import shlex
 import tomllib
 from pathlib import Path
 
@@ -11,6 +12,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "rust/duckyslicer-jni/Cargo.toml"
 SOURCE = ROOT / "rust/duckyslicer-jni/src/lib.rs"
+PATCH_ROOT = ROOT / "native/slicer-runtime"
+RUNTIME_SOURCE_PREFIX = "app/src/main/cpp/"
+ENGINE_SUBMODULE_PREFIX = "app/src/main/cpp/orcaslicer/"
 JNI_EXPORT = re.compile(
     r'#\[unsafe\(no_mangle\)\]\s*pub extern "system" fn\s+(Java_[A-Za-z0-9_]+)\s*\(',
     re.MULTILINE,
@@ -92,6 +96,35 @@ def verify_mutation_regressions(source: str) -> None:
         )
 
 
+def verify_patch_boundaries(patches: dict[str, str]) -> int:
+    """Keep runtime and nested Orca changes in independently reviewable patches."""
+    checked = 0
+    for name, source in sorted(patches.items()):
+        paths = []
+        for line in source.splitlines():
+            if not line.startswith("diff --git "):
+                continue
+            fields = shlex.split(line)
+            if len(fields) >= 4 and fields[2].startswith("a/"):
+                paths.append(fields[2][2:])
+        if not paths:
+            raise VerificationError(f"native patch has no file changes: {name}")
+        if name.startswith("engine-"):
+            rooted = [path for path in paths if path.startswith(RUNTIME_SOURCE_PREFIX)]
+            if rooted:
+                raise VerificationError(
+                    f"engine patch must use Orca-root-relative paths: {name}: {rooted[0]}"
+                )
+        else:
+            nested = [path for path in paths if path.startswith(ENGINE_SUBMODULE_PREFIX)]
+            if nested:
+                raise VerificationError(
+                    f"runtime patch crosses the Orca submodule boundary: {name}: {nested[0]}"
+                )
+        checked += 1
+    return checked
+
+
 def main() -> None:
     try:
         manifest = tomllib.loads(MANIFEST.read_text(encoding="utf-8"))
@@ -99,12 +132,18 @@ def main() -> None:
         verify_manifest(manifest)
         entrypoint_count = verify_source(source)
         verify_mutation_regressions(source)
+        patch_count = verify_patch_boundaries(
+            {
+                path.name: path.read_text(encoding="utf-8")
+                for path in PATCH_ROOT.glob("*.patch")
+            }
+        )
     except (OSError, tomllib.TOMLDecodeError, VerificationError) as error:
         raise SystemExit(f"Native safety verification failed: {error}") from error
     print(
-        f"Verified Rust/JNI safety: panic=unwind, {entrypoint_count} allowlisted "
+        f"Verified native safety: panic=unwind, {entrypoint_count} allowlisted "
         "entrypoints contained, no panic-prone production shortcuts, deterministic "
-        "STL/G-code mutation regressions present"
+        f"STL/G-code mutation regressions present, {patch_count} patch boundaries owned"
     )
 
 

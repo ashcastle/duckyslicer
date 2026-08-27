@@ -7,6 +7,7 @@ from tools.verify_native_safety import (
     VerificationError,
     verify_manifest,
     verify_mutation_regressions,
+    verify_patch_boundaries,
     verify_source,
 )
 
@@ -85,6 +86,39 @@ class VerifyNativeSafetyTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(VerificationError, "ASCII and binary STL seeds"):
             verify_mutation_regressions(source)
+
+    def test_accepts_repository_relative_patch_ownership(self) -> None:
+        self.assertEqual(
+            2,
+            verify_patch_boundaries(
+                {
+                    "runtime.patch": "diff --git a/app/src/main/cpp/src/a.cpp b/app/src/main/cpp/src/a.cpp\n",
+                    "engine-feature.patch": "diff --git a/src/libslic3r/a.cpp b/src/libslic3r/a.cpp\n",
+                }
+            ),
+        )
+
+    def test_rejects_runtime_patch_crossing_engine_submodule(self) -> None:
+        with self.assertRaisesRegex(VerificationError, "crosses the Orca submodule"):
+            verify_patch_boundaries(
+                {
+                    "mixed.patch": (
+                        "diff --git a/app/src/main/cpp/orcaslicer/src/a.cpp "
+                        "b/app/src/main/cpp/orcaslicer/src/a.cpp\n"
+                    )
+                }
+            )
+
+    def test_rejects_engine_patch_with_runtime_rooted_paths(self) -> None:
+        with self.assertRaisesRegex(VerificationError, "Orca-root-relative"):
+            verify_patch_boundaries(
+                {
+                    "engine-mixed.patch": (
+                        "diff --git a/app/src/main/cpp/orcaslicer/src/a.cpp "
+                        "b/app/src/main/cpp/orcaslicer/src/a.cpp\n"
+                    )
+                }
+            )
 
 
 if __name__ == "__main__":

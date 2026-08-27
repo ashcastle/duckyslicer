@@ -100,10 +100,16 @@ cmake_android() {
 }
 
 prepare_runtime_source() {
+    local upstream_engine
+    upstream_engine="$UPSTREAM_ROOT/app/src/main/cpp/orcaslicer"
     git -C "$UPSTREAM_ROOT" rev-parse --git-dir >/dev/null 2>&1 || \
         die "initialize submodules with: git submodule update --init"
     [ "$(git -C "$UPSTREAM_ROOT" rev-parse HEAD)" = "$ANDROID_SLICER_RUNTIME_COMMIT" ] || \
         die "android runtime submodule is not at its locked commit"
+    git -C "$upstream_engine" rev-parse --git-dir >/dev/null 2>&1 || \
+        die "initialize recursive submodules with: git submodule update --init --recursive"
+    [ "$(git -C "$upstream_engine" rev-parse HEAD)" = "$SLICER_ENGINE_COMMIT" ] || \
+        die "source slicer engine submodule is not at its locked commit"
 
     if [ ! -e "$SOURCE_ROOT/.git" ]; then
         mkdir -p "$WORK_ROOT"
@@ -112,7 +118,12 @@ prepare_runtime_source() {
     [ "$(git -C "$SOURCE_ROOT" rev-parse HEAD)" = "$ANDROID_SLICER_RUNTIME_COMMIT" ] || \
         die "generated runtime worktree is stale; remove $WORK_ROOT and retry"
 
-    git -C "$SOURCE_ROOT" submodule update --init --recursive app/src/main/cpp/orcaslicer
+    # Reuse the already verified recursive checkout instead of cloning the large
+    # Orca repository from the network into every generated runtime worktree.
+    git -C "$SOURCE_ROOT" \
+        -c protocol.file.allow=always \
+        -c "submodule.app/src/main/cpp/orcaslicer.url=$upstream_engine" \
+        submodule update --init --recursive app/src/main/cpp/orcaslicer
     [ "$(git -C "$SOURCE_ROOT/app/src/main/cpp/orcaslicer" rev-parse HEAD)" = "$SLICER_ENGINE_COMMIT" ] || \
         die "slicer engine submodule pin mismatch"
 
@@ -277,6 +288,7 @@ prepare_runtime_source() {
         "$SCRIPT_DIR/engine-profile-options.patch"
         "$SCRIPT_DIR/engine-nozzle-volume.patch"
         "$SCRIPT_DIR/engine-branding.patch"
+        "$SCRIPT_DIR/engine-purge-volume-calculator.patch"
         "$SCRIPT_DIR/engine-support-flow-ratios.patch"
         "$SCRIPT_DIR/engine-initial-layer-travel-acceleration.patch"
         "$SCRIPT_DIR/engine-resonance-profile.patch"

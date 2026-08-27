@@ -73,6 +73,7 @@ val buildSlicerRuntime = tasks.register<Exec>("buildSlicerRuntime") {
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/engine-profile-options.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/engine-nozzle-volume.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/engine-branding.patch"))
+    inputs.file(repositoryRoot.resolve("native/slicer-runtime/engine-purge-volume-calculator.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/engine-support-flow-ratios.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/engine-resonance-profile.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/adaptive-pressure-advance.patch"))

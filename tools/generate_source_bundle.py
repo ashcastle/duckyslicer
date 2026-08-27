@@ -72,6 +72,7 @@ BUILD_INPUTS = (
     "native/slicer-runtime/engine-profile-options.patch",
     "native/slicer-runtime/engine-nozzle-volume.patch",
     "native/slicer-runtime/engine-branding.patch",
+    "native/slicer-runtime/engine-purge-volume-calculator.patch",
     "native/slicer-runtime/engine-support-flow-ratios.patch",
     "native/slicer-runtime/engine-resonance-profile.patch",
     "native/slicer-runtime/extra-solid-infills.patch",
