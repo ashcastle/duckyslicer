@@ -333,6 +333,8 @@ def main() -> None:
             "languages: java-kotlin\n          build-mode: manual"
         ),
         "CodeQL runs the extended security suite": "queries: security-extended",
+        "CodeQL leaves runner memory headroom": "ram: 8192",
+        "CodeQL bounds query parallelism": "threads: 2",
         "CodeQL uploads the Java and Kotlin analysis": (
             "github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3"
         ),

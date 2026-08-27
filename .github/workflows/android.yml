@@ -56,6 +56,11 @@ jobs:
           languages: java-kotlin
           build-mode: manual
           queries: security-extended
+          # Keep enough runner memory for the OS and action wrapper. Automatic detection has
+          # assigned nearly the full 16 GB runner to CodeQL and twice ended query execution
+          # without a diagnostic, while the traced build itself completed successfully.
+          ram: 8192
+          threads: 2
 
       - name: Install Android SDK components
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
