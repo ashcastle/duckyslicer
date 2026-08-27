@@ -8,7 +8,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 110
+internal const val USER_PROFILE_SCHEMA_VERSION = 111
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -86,6 +86,7 @@ class ProfileStore internal constructor(
             bedOriginY = options.bedOriginY,
             bedPolygon = options.bedPolygon,
             bedExcludeArea = options.bedExcludeArea,
+            headWrapDetectZone = options.printerProfile.headWrapDetectZone,
             maxPrintHeight = options.maxPrintHeight,
             nozzleDiameter = options.nozzleDiameter,
             nozzleMaterial = options.printerProfile.nozzleMaterial,
@@ -817,6 +818,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("bedOriginX", bedOriginX).put("bedOriginY", bedOriginY)
     .put("bedPolygon", JSONArray(bedPolygon))
     .put("bedExcludeArea", JSONArray(bedExcludeArea))
+    .put("headWrapDetectZone", JSONArray(headWrapDetectZone))
     .put("maxPrintHeight", maxPrintHeight).put("nozzleDiameter", nozzleDiameter)
     .put("nozzleMaterial", nozzleMaterial.storageValue).put("nozzleHrc", nozzleHrc)
     .put("nozzleHeight", nozzleHeight)
@@ -1480,6 +1482,13 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         } else {
             listOf(0f, 0f)
         },
+        headWrapDetectZone = if (has("headWrapDetectZone")) {
+            requireNotNull(optionalPolygonFloatList("headWrapDetectZone")) {
+                "Invalid head-wrap detection zone"
+            }
+        } else {
+            emptyList()
+        },
         singleExtruderMultiMaterial = optBoolean("singleExtruderMultiMaterial"),
         coolingTubeRetraction = optDouble("coolingTubeRetraction", 91.5).toFloat(),
         coolingTubeLength = optDouble("coolingTubeLength", 5.0).toFloat(),
@@ -2050,6 +2059,14 @@ private fun JSONObject.floatList(key: String): List<Float>? = optJSONArray(key)?
     if (values.length() !in 6..512 || values.length() % 2 != 0) return null
     List(values.length()) { index -> values.getDouble(index).toFloat() }
 }
+
+private fun JSONObject.optionalPolygonFloatList(key: String): List<Float>? =
+    optJSONArray(key)?.let { values ->
+        if (values.length() != 0 && (values.length() !in 6..512 || values.length() % 2 != 0)) {
+            return null
+        }
+        List(values.length()) { index -> values.getDouble(index).toFloat() }
+    }
 
 private fun JSONObject.machineMotionLimits(key: String): MachineMotionLimits? =
     optJSONArray(key)?.let { values ->

@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 110
+SCHEMA_VERSION = 111
 MAX_FILAMENT_SLOTS = 16
 NO_FILAMENT_COLOR = -1
 MAX_GCODE_THUMBNAILS = 8
@@ -49,6 +49,7 @@ BINARY_FLOAT_LIST = 6
 BINARY_NULLABLE_FLOAT = 7
 BINARY_NULLABLE_BOOL = 8
 BINARY_NULLABLE_STRING = 9
+BINARY_EMPTY_LIST = 255
 
 
 def scalar(value: Any, default: Any = None) -> Any:
@@ -359,6 +360,26 @@ def point_values(value: Any) -> tuple[list[float], list[float]]:
     return [point[0] for point in points], [point[1] for point in points]
 
 
+def optional_polygon(value: Any, label: str) -> list[float]:
+    """Preserve an optional machine-space Orca polygon with bounded coordinates."""
+    if not values(value):
+        return []
+    xs, ys = point_values(value)
+    flattened = [coordinate for point in zip(xs, ys) for coordinate in point]
+    if len(flattened) < 6 or len(flattened) > 512 or len(flattened) % 2:
+        raise ValueError(f"invalid {label} point count")
+    if any(not math.isfinite(coordinate) or abs(coordinate) > 3_000 for coordinate in flattened):
+        raise ValueError(f"unsafe {label} coordinate")
+    signed_double_area = sum(
+        flattened[index] * flattened[(index + 3) % len(flattened)] -
+        flattened[(index + 2) % len(flattened)] * flattened[index + 1]
+        for index in range(0, len(flattened), 2)
+    )
+    if abs(signed_double_area) < 2.0:
+        raise ValueError(f"degenerate {label}")
+    return flattened
+
+
 def coordinate_pair(value: Any, default_x: float, default_y: float) -> tuple[float, float]:
     """Parse Orca's scalar, comma/x-delimited, or two-element point representation."""
     candidates = values(value)
@@ -512,6 +533,10 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     bed_exclude_area = bed_exclude_geometry(
         raw.get("bed_exclude_area"), bed_origin_x, bed_origin_y, width, depth
     )
+    head_wrap_detect_zone = optional_polygon(
+        raw.get("head_wrap_detect_zone"),
+        "head-wrap detection zone",
+    )
     height = number(raw.get("printable_height"), 0)
     nozzle = number(raw.get("nozzle_diameter"), 0)
     nozzle_height = number(raw.get("nozzle_height"), 2.5)
@@ -597,6 +622,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "bedOriginY": bed_origin_y,
         "bedPolygon": bed_polygon,
         "bedExcludeArea": bed_exclude_area,
+        "headWrapDetectZone": head_wrap_detect_zone,
         "maxPrintHeight": height,
         "nozzleDiameter": nozzle,
         "nozzleMaterial": nozzle_material(raw.get("nozzle_type")),
@@ -2153,6 +2179,8 @@ def binary_kind(value: Any) -> int:
         return BINARY_FLOAT
     if isinstance(value, str):
         return BINARY_STRING
+    if isinstance(value, list) and not value:
+        return BINARY_EMPTY_LIST
     if isinstance(value, list) and all(isinstance(item, str) for item in value):
         return BINARY_STRING_LIST
     if isinstance(value, list) and all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in value):
@@ -2162,6 +2190,10 @@ def binary_kind(value: Any) -> int:
 
 def infer_binary_kind(records: list[dict[str, Any]], field: str) -> int:
     kinds = {binary_kind(record[field]) for record in records}
+    empty_list = BINARY_EMPTY_LIST in kinds
+    kinds.discard(BINARY_EMPTY_LIST)
+    if empty_list and not kinds:
+        return BINARY_STRING_LIST
     nullable = 0 in kinds
     kinds.discard(0)
     if nullable:
@@ -2234,7 +2266,11 @@ def write_binary_section(output: Any, records: list[dict[str, Any]]) -> None:
                 or (kind == BINARY_NULLABLE_BOOL and actual_kind in {0, BINARY_BOOL})
                 or (kind == BINARY_NULLABLE_STRING and actual_kind in {0, BINARY_STRING})
             )
-            if actual_kind != kind and not nullable_match and not (
+            empty_list_match = actual_kind == BINARY_EMPTY_LIST and kind in {
+                BINARY_STRING_LIST,
+                BINARY_FLOAT_LIST,
+            }
+            if actual_kind != kind and not nullable_match and not empty_list_match and not (
                 kind == BINARY_FLOAT and actual_kind == BINARY_INT
             ):
                 raise ValueError(f"binary catalog field changed type: {field}")

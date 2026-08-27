@@ -297,6 +297,7 @@ class ProfileStoreMigrationTest {
                     bedOriginY = -110f,
                     bedPolygon = polygon,
                     bedExcludeArea = listOf(0f, 0f, 18f, 0f, 18f, 28f, 0f, 28f),
+                    headWrapDetectZone = listOf(226f, 224f, 256f, 224f, 256f, 256f, 226f, 256f),
                     singleExtruderMultiMaterial = true,
                     extruderCount = 2,
                     auxiliaryFan = true,
@@ -322,6 +323,10 @@ class ProfileStoreMigrationTest {
             assertEquals(
                 listOf(0f, 0f, 18f, 0f, 18f, 28f, 0f, 28f),
                 restored.bedExcludeArea,
+            )
+            assertEquals(
+                listOf(226f, 224f, 256f, 224f, 256f, 256f, 226f, 256f),
+                restored.headWrapDetectZone,
             )
             assertEquals(-110f, restored.bedOriginX)
             assertEquals(-110f, restored.bedOriginY)

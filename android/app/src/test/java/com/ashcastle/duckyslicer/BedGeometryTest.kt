@@ -64,6 +64,23 @@ class BedGeometryTest {
     }
 
     @Test
+    fun validatesMachineSpaceHeadWrapDetectionZonesOutsideTheBed() {
+        assertTrue(
+            headWrapDetectZoneIsValid(
+                listOf(226f, 224f, 256f, 224f, 256f, 256f, 226f, 256f),
+            ),
+        )
+        assertTrue(headWrapDetectZoneIsValid(emptyList()))
+        assertFalse(headWrapDetectZoneIsValid(listOf(1f, 1f, 2f, 2f)))
+        assertFalse(headWrapDetectZoneIsValid(listOf(1f, 1f, 2f, 2f, 3f, 3f)))
+        assertFalse(
+            headWrapDetectZoneIsValid(
+                listOf(0f, 0f, 4_000f, 0f, 4_000f, 10f, 0f, 10f),
+            ),
+        )
+    }
+
+    @Test
     fun triangulatesConvexAndConcaveBedsWithoutFillingOutsideCorners() {
         assertEquals(6, triangulateBedPolygon(diamond).size)
         val concave = listOf(0f, 0f, 100f, 0f, 100f, 40f, 40f, 40f, 40f, 100f, 0f, 100f)

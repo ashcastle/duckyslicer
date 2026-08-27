@@ -62,7 +62,6 @@ INTENTIONALLY_UNMAPPED_OPTIONS = {
     # Engine-generated placeholder, not a user/profile input.
     "filament_extruder_id",
     # Known specialized capabilities that remain explicit production backlog.
-    "head_wrap_detect_zone",
     "pellet_flow_coefficient",
     "pellet_modded_printer",
     "template_custom_gcode",

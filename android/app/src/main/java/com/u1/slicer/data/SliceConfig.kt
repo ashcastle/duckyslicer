@@ -304,6 +304,7 @@ data class SliceConfig(
     @JvmField var filamentTowerInterfacePurgeLengths: FloatArray = floatArrayOf()
     @JvmField var filamentTowerInterfacePrintTemperatures: IntArray = intArrayOf()
     @JvmField var bedExcludeArea: FloatArray = floatArrayOf(0f, 0f)
+    @JvmField var headWrapDetectZone: FloatArray = floatArrayOf()
     @JvmField var machineLoadFilamentTime: Float = 0f
     @JvmField var machineUnloadFilamentTime: Float = 0f
     @JvmField var machineToolChangeTime: Float = 0f

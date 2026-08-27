@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 
 from tools.generate_profile_catalog import (
+    BINARY_FLOAT_LIST,
+    BINARY_STRING_LIST,
     Resolver,
     adaptive_pressure_advance_model,
     bed_exclude_geometry,
@@ -18,6 +20,7 @@ from tools.generate_profile_catalog import (
     coordinate_pair,
     extra_solid_infills,
     filament_vendor,
+    infer_binary_kind,
     nozzle_material,
     printable_geometry,
     small_area_flow_compensation_model,
@@ -29,6 +32,16 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_empty_binary_lists_take_the_type_of_populated_records(self) -> None:
+        self.assertEqual(
+            BINARY_FLOAT_LIST,
+            infer_binary_kind([{"points": []}, {"points": [1.0, 2.0]}], "points"),
+        )
+        self.assertEqual(
+            BINARY_STRING_LIST,
+            infer_binary_kind([{"names": []}, {"names": ["Example"]}], "names"),
+        )
+
     def test_preserves_generic_orca_temperature_aliases(self) -> None:
         profile = build_filament(
             "Example",
@@ -258,6 +271,40 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual("reprapfirmware", profile["gcodeFlavor"])
         with self.assertRaisesRegex(ValueError, "unsupported G-code flavor"):
             build_printer("Example", base | {"gcode_flavor": "unknown"})
+
+    def test_preserves_machine_space_head_wrap_detection_zone(self) -> None:
+        profile = build_printer(
+            "Example",
+            {
+                "name": "Head-wrap aware printer",
+                "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+                "printable_height": "250",
+                "nozzle_diameter": ["0.4"],
+                "gcode_flavor": "marlin",
+                "head_wrap_detect_zone": ["226x224", "256x224", "256x256", "226x256"],
+            },
+        )
+
+        self.assertEqual(
+            [226.0, 224.0, 256.0, 224.0, 256.0, 256.0, 226.0, 256.0],
+            profile["headWrapDetectZone"],
+        )
+
+    def test_rejects_unsafe_head_wrap_detection_zone(self) -> None:
+        base = {
+            "name": "Unsafe head-wrap printer",
+            "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+            "printable_height": "250",
+            "nozzle_diameter": ["0.4"],
+            "gcode_flavor": "marlin",
+        }
+        for zone in (
+            ["1x1", "2x2"],
+            ["1x1", "2x2", "3x3"],
+            ["0x0", "4000x0", "4000x10", "0x10"],
+        ):
+            with self.assertRaises(ValueError):
+                build_printer("Example", base | {"head_wrap_detect_zone": zone})
 
     def test_preserves_and_validates_printer_structure(self) -> None:
         base = {

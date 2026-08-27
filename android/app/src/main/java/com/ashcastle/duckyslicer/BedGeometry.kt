@@ -90,6 +90,21 @@ internal fun bedExcludeAreaIsValid(
     }
 }
 
+internal fun headWrapDetectZoneIsValid(points: List<Float>): Boolean {
+    if (points.isEmpty()) return true
+    if (points.size !in 6..MAX_BED_POLYGON_COORDINATES || points.size % 2 != 0) return false
+    if (points.any { !it.isFinite() || abs(it) > MAXIMUM_HEAD_WRAP_COORDINATE_MM }) return false
+    val pointCount = points.size / 2
+    var signedDoubleArea = 0f
+    repeat(pointCount) { index ->
+        val next = (index + 1) % pointCount
+        signedDoubleArea +=
+            points[index * 2] * points[next * 2 + 1] -
+                points[next * 2] * points[index * 2 + 1]
+    }
+    return abs(signedDoubleArea) >= MINIMUM_BED_AREA_MM2 * 2f
+}
+
 internal fun scaledBedPolygon(
     polygon: List<Float>,
     oldWidth: Float,
@@ -362,6 +377,7 @@ private fun squaredDistance(ax: Float, ay: Float, bx: Float, by: Float): Float {
 
 private const val MAX_BED_POLYGON_COORDINATES = 512
 private const val BED_GEOMETRY_TOLERANCE_MM = 0.05f
+private const val MAXIMUM_HEAD_WRAP_COORDINATE_MM = 3_000f
 private const val BED_GEOMETRY_EPSILON = 0.0001f
 private const val MINIMUM_BED_EDGE_MM = 0.001f
 private const val MINIMUM_BED_AREA_MM2 = 1f

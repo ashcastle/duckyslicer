@@ -352,6 +352,7 @@ data class PrinterProfile(
     val bedOriginY: Float = 0f,
     val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
     val bedExcludeArea: List<Float> = listOf(0f, 0f),
+    val headWrapDetectZone: List<Float> = emptyList(),
     val singleExtruderMultiMaterial: Boolean = false,
     val coolingTubeRetraction: Float = 91.5f,
     val coolingTubeLength: Float = 5f,
@@ -1380,7 +1381,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 110,
+    val schemaVersion: Int = 111,
     val sourceRevision: String = FALLBACK_PROFILE_CATALOG_REVISION,
     val rejectedCount: Int = 0,
 )
@@ -2537,6 +2538,7 @@ data class SliceOptions(
                 .map(FilamentProfile::requiredNozzleHrc)
                 .toIntArray()
             native.bedExcludeArea = bedExcludeArea.toFloatArray()
+            native.headWrapDetectZone = printerProfile.headWrapDetectZone.toFloatArray()
             native.machineLoadFilamentTime = printerProfile.machineLoadFilamentTime
             native.machineUnloadFilamentTime = printerProfile.machineUnloadFilamentTime
             native.machineToolChangeTime = printerProfile.machineToolChangeTime

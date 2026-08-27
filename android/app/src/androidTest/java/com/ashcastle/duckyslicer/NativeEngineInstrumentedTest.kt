@@ -2796,13 +2796,18 @@ class NativeEngineInstrumentedTest {
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
         assertFalse(loadResult.bundledCatalogUnavailable)
-        assertEquals(110, catalog.schemaVersion)
+        assertEquals(111, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertEquals(789, catalog.printers.count { it.id.startsWith("orca-printer-") })
         assertEquals(3_311, catalog.filaments.count { it.id.startsWith("orca-filament-") })
         assertEquals(2_319, catalog.slicing.count { it.id.startsWith("orca-process-") })
         assertEquals(60, catalog.rejectedCount)
+        assertEquals(
+            listOf(156f, 152f, 180f, 152f, 180f, 180f, 156f, 180f),
+            catalog.printers.single { it.name == "Bambu Lab A1 mini 0.4 nozzle" }
+                .headWrapDetectZone,
+        )
         val restoredBreakawayProfiles = mapOf(
             "Snapmaker Breakaway Support" to (220 to 230),
             "Snapmaker Breakaway Support @J1" to (220 to 230),
@@ -5045,6 +5050,47 @@ class NativeEngineInstrumentedTest {
                 smoothTowerExtrusion > traditionalTowerExtrusion ||
                 !traditionalPreview.segments.contentEquals(smoothPreview.segments),
         )
+    }
+
+    @Test
+    fun headWrapDetectionZoneControlsOrcaTimelapseCondition() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val printer = OrcaProfileCatalog(context).load().printers.single {
+            it.name == "Bambu Lab P1P 0.4 nozzle"
+        }
+        val markerTemplate =
+            "{if in_head_wrap_detect_zone}M118 HEAD_WRAP_INSIDE{else}M118 HEAD_WRAP_OUTSIDE{endif}"
+        val insidePrinter = printer.copy(
+            layerChangeGcode = markerTemplate,
+            headWrapDetectZone = listOf(0f, 0f, 256f, 0f, 256f, 256f, 0f, 256f),
+        )
+        val outsidePrinter = insidePrinter.copy(
+            headWrapDetectZone = listOf(1_000f, 1_000f, 1_050f, 1_000f, 1_050f, 1_050f, 1_000f, 1_050f),
+        )
+        val base = SliceOptions()
+            .selectPrinter(insidePrinter)
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+        val inside = OnDeviceSlicer.slice(fixtureModel(), base)
+        val outside = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.selectPrinter(outsidePrinter),
+        )
+        try {
+            fun List<String>.executes(marker: String): Boolean = any { line ->
+                val command = line.trimStart()
+                !command.startsWith(';') && command.contains(marker)
+            }
+            val insideCommands = inside.output.readLines()
+            val outsideCommands = outside.output.readLines()
+            assertTrue(insideCommands.executes("M118 HEAD_WRAP_INSIDE"))
+            assertFalse(insideCommands.executes("M118 HEAD_WRAP_OUTSIDE"))
+            assertTrue(outsideCommands.executes("M118 HEAD_WRAP_OUTSIDE"))
+            assertFalse(outsideCommands.executes("M118 HEAD_WRAP_INSIDE"))
+        } finally {
+            inside.output.delete()
+            outside.output.delete()
+        }
     }
 
     @Test

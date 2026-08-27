@@ -705,6 +705,15 @@ class SliceOptionsPersistenceTest {
         assertEquals(options.bedOriginY, restored.bedOriginY)
         assertEquals(options.bedPolygon, restored.bedPolygon)
         assertEquals(options.bedExcludeArea, restored.bedExcludeArea)
+        assertEquals(
+            options.printerProfile.headWrapDetectZone,
+            restored.printerProfile.headWrapDetectZone,
+        )
+        assertArrayEquals(
+            options.printerProfile.headWrapDetectZone.toFloatArray(),
+            restored.toNativeConfig().headWrapDetectZone,
+            0f,
+        )
         assertEquals(73f, restored.extruderClearanceRadius)
         assertEquals(29f, restored.extruderClearanceHeightToRod)
         assertEquals(117f, restored.extruderClearanceHeightToLid)
@@ -1506,6 +1515,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             toolChangeRetractRestartExtras = listOf(-0.2f, 0.3f),
             defaultPrintProfile = "Fixture process",
             defaultFilamentProfiles = listOf("Fixture primary", "Fixture secondary"),
+            headWrapDetectZone = listOf(226f, 224f, 256f, 224f, 256f, 256f, 226f, 256f),
         ),
     )
     .selectFilament(

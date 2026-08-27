@@ -53,7 +53,7 @@ class OrcaProfileCatalog internal constructor(
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 110) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 111) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -83,6 +83,7 @@ class OrcaProfileCatalog internal constructor(
         bedOriginY = input.readFloat(),
         bedPolygon = input.readCatalogFloatList(),
         bedExcludeArea = input.readCatalogFloatList(),
+        headWrapDetectZone = input.readCatalogFloatList(),
         maxPrintHeight = input.readFloat(),
         nozzleDiameter = input.readFloat(),
         nozzleMaterial = checkNotNull(
@@ -377,6 +378,7 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("bedOriginY", BINARY_FLOAT),
     BinaryField("bedPolygon", BINARY_FLOAT_LIST),
     BinaryField("bedExcludeArea", BINARY_FLOAT_LIST),
+    BinaryField("headWrapDetectZone", BINARY_FLOAT_LIST),
     BinaryField("maxPrintHeight", BINARY_FLOAT),
     BinaryField("nozzleDiameter", BINARY_FLOAT),
     BinaryField("nozzleMaterial", BINARY_STRING),

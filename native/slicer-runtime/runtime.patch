@@ -237,7 +237,7 @@ index 116a4a85..669271fe 100644
  
      // Retraction
      float retract_length = 0.8f;
-@@ -58,19 +184,171 @@ struct SliceConfig {
+@@ -58,19 +184,172 @@ struct SliceConfig {
  
      // Support
      bool support_enabled = false;
@@ -409,6 +409,7 @@ index 116a4a85..669271fe 100644
 +    float bed_origin_y = 0.0f;
 +    std::vector<float> bed_polygon = {0.0f, 0.0f, 270.0f, 0.0f, 270.0f, 270.0f, 0.0f, 270.0f};
 +    std::vector<float> bed_exclude_area = {0.0f, 0.0f};
++    std::vector<float> head_wrap_detect_zone;
      float max_print_height = 270.0f;
  
      // Nozzle
@@ -930,7 +931,7 @@ diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_
 index d93efb7d..cf6b9fdd 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -92,31 +92,296 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -92,31 +92,297 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.perimeters = getInt("perimeters");
      config.top_solid_layers = getInt("topSolidLayers");
      config.bottom_solid_layers = getInt("bottomSolidLayers");
@@ -1224,6 +1225,7 @@ index d93efb7d..cf6b9fdd 100644
 +    config.bed_origin_y = getFloat("bedOriginY");
 +    config.bed_polygon = getFloatArray("bedPolygon");
 +    config.bed_exclude_area = getFloatArray("bedExcludeArea");
++    config.head_wrap_detect_zone = getFloatArray("headWrapDetectZone");
      config.max_print_height = getFloat("maxPrintHeight");
  
      config.nozzle_diameter = getFloat("nozzleDiameter");
@@ -1435,7 +1437,7 @@ index d93efb7d..cf6b9fdd 100644
  
      env->DeleteLocalRef(cls);
      return config;
-@@ -235,27 +674,298 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -235,27 +674,299 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
      setInt("bottomSolidLayers", config.bottom_solid_layers);
@@ -1723,6 +1725,7 @@ index d93efb7d..cf6b9fdd 100644
 +    setFloat("bedOriginY", config.bed_origin_y);
 +    setFloatArray("bedPolygon", config.bed_polygon);
 +    setFloatArray("bedExcludeArea", config.bed_exclude_area);
++    setFloatArray("headWrapDetectZone", config.head_wrap_detect_zone);
      setFloat("maxPrintHeight", config.max_print_height);
      setFloat("nozzleDiameter", config.nozzle_diameter);
 +    setFloatArray("minimumLayerHeights", config.minimum_layer_heights);
@@ -2470,7 +2473,7 @@ index 8d61c9cf..6bd1edf6 100644
  void SlicerEngine::cancelSlice() {
      g_slice_cancel.store(true, std::memory_order_release);
      auto* print = g_active_print.load(std::memory_order_acquire);
-@@ -183,84 +264,295 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +264,323 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -2723,6 +2726,34 @@ index 8d61c9cf..6bd1edf6 100644
 +    dpc.set_key_value(
 +        "bed_exclude_area",
 +        new Slic3r::ConfigOptionPoints(bed_exclude_area));
++    if (!config.head_wrap_detect_zone.empty() &&
++        (config.head_wrap_detect_zone.size() < 6 ||
++         config.head_wrap_detect_zone.size() > 512 ||
++         config.head_wrap_detect_zone.size() % 2 != 0)) {
++        throw std::invalid_argument("Invalid head-wrap detection zone");
++    }
++    Slic3r::Pointfs head_wrap_detect_zone;
++    head_wrap_detect_zone.reserve(config.head_wrap_detect_zone.size() / 2);
++    double head_wrap_signed_double_area = 0.0;
++    for (size_t index = 0; index < config.head_wrap_detect_zone.size(); index += 2) {
++        const float x = config.head_wrap_detect_zone[index];
++        const float y = config.head_wrap_detect_zone[index + 1];
++        if (!std::isfinite(x) || !std::isfinite(y) || std::abs(x) > 3000.0f ||
++            std::abs(y) > 3000.0f) {
++            throw std::invalid_argument("Invalid head-wrap detection zone");
++        }
++        const size_t next = (index + 2) % config.head_wrap_detect_zone.size();
++        head_wrap_signed_double_area +=
++            static_cast<double>(x) * config.head_wrap_detect_zone[next + 1] -
++            static_cast<double>(config.head_wrap_detect_zone[next]) * y;
++        head_wrap_detect_zone.emplace_back(x, y);
++    }
++    if (!head_wrap_detect_zone.empty() && std::abs(head_wrap_signed_double_area) < 2.0) {
++        throw std::invalid_argument("Invalid head-wrap detection zone");
++    }
++    dpc.set_key_value(
++        "head_wrap_detect_zone",
++        new Slic3r::ConfigOptionPoints(head_wrap_detect_zone));
 +    dpc.set_key_value("printable_height", new Slic3r::ConfigOptionFloat(printable_height));
 +
 +    const auto bed_type = config.bed_type > Slic3r::btDefault && config.bed_type < Slic3r::btCount
