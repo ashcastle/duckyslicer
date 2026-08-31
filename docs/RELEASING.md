@@ -61,11 +61,13 @@ key prevents publishing a compatible update under the same Android identity.
 
 ## Release procedure
 
-Before starting, run `python3 tools/audit_release_readiness.py`. It reports repository
-synchronization, GitHub authentication, keyless Play variables, a representative
-physical ARM64 device, and source-bound qualification evidence together without
-changing repository, device, GitHub, or Play state. Resolve every `BLOCKED` line
-before preparing a candidate.
+Before starting, run
+`python3 tools/audit_release_readiness.py --target github`. It reports repository
+synchronization, exact-source GitHub CI, a representative physical ARM64 device,
+and source-bound qualification evidence without changing repository, device, or
+GitHub state. Play credentials are outside the GitHub APK release gate; audit the
+dormant Play path separately with `--target play` only when Play publishing is an
+explicit release goal. Resolve every `BLOCKED` line before preparing a candidate.
 
 1. Switch to a clean `main`, initialize recursive submodules, and run the physical
    rendering/slicing and startup qualifications on an awake, unlocked representative
