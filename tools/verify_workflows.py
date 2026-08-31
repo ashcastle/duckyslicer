@@ -327,7 +327,7 @@ def main() -> None:
             "tools.test_verify_play_bundle_workflow"
         ),
         "CodeQL traces the real Kotlin build": (
-            "github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3"
+            "github/codeql-action/init@"
         ),
         "CodeQL uses manual Java and Kotlin extraction": (
             "languages: java-kotlin\n          build-mode: manual"
@@ -336,7 +336,7 @@ def main() -> None:
         "CodeQL leaves runner memory headroom": "ram: 8192",
         "CodeQL bounds query parallelism": "threads: 2",
         "CodeQL uploads the Java and Kotlin analysis": (
-            "github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3"
+            "github/codeql-action/analyze@"
         ),
         "generated G-code storage policy is verified": (
             "python3 tools/verify_slice_storage.py"
