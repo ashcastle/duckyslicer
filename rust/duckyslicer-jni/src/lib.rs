@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
-use std::ffi::{CStr, c_char};
+use std::ffi::c_char;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -17,9 +17,11 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 unsafe extern "C" {
-    fn duckyslicer_core_version() -> *const c_char;
+    fn duckyslicer_core_version(output: *mut c_char, capacity: usize) -> usize;
     fn duckyslicer_probe_vulkan(capabilities: *mut VulkanCapabilitiesNative);
 }
+
+const CORE_VERSION_BUFFER_BYTES: usize = 128;
 
 #[repr(C)]
 struct VulkanCapabilitiesNative {
@@ -105,6 +107,17 @@ fn native_text(value: &[c_char]) -> String {
         .map(|character| *character as u8)
         .collect::<Vec<_>>();
     String::from_utf8_lossy(&bytes).into_owned()
+}
+
+fn core_version_text() -> String {
+    let mut buffer = [0 as c_char; CORE_VERSION_BUFFER_BYTES];
+    // SAFETY: the C bridge receives a writable fixed buffer and its exact capacity. Its contract
+    // writes at most `capacity - 1` bytes plus one terminator and returns the full source length.
+    let required = unsafe { duckyslicer_core_version(buffer.as_mut_ptr(), buffer.len()) };
+    if required >= buffer.len() {
+        return "DuckySlicer native bridge".to_owned();
+    }
+    native_text(&buffer)
 }
 
 fn probe_vulkan() -> VulkanCapabilities {
@@ -2656,20 +2669,9 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_version<'loca
     _class: JClass<'local>,
 ) -> jstring {
     env.with_env(|env| {
-        let version = catch_unwind(AssertUnwindSafe(|| {
-            // SAFETY: the C bridge returns either null or a process-lifetime NUL-terminated
-            // version string. The pointer is checked before constructing the borrowed CStr.
-            let pointer = unsafe { duckyslicer_core_version() };
-            if pointer.is_null() {
-                "DuckySlicer native bridge unavailable"
-            } else {
-                unsafe { CStr::from_ptr(pointer) }
-                    .to_str()
-                    .unwrap_or("DuckySlicer native bridge")
-            }
-        }))
-        .unwrap_or("DuckySlicer native bridge unavailable");
-        make_java_string(env, version)
+        let version = catch_unwind(AssertUnwindSafe(core_version_text))
+            .unwrap_or_else(|_| "DuckySlicer native bridge unavailable".to_owned());
+        make_java_string(env, &version)
     })
     .resolve::<LogErrorAndDefault>()
 }
@@ -3112,6 +3114,14 @@ mod tests {
         assert_eq!(native_text(&terminated), "Du");
         assert_eq!(native_text(&unterminated), "Duck");
         assert_eq!(native_text(&[]), "");
+    }
+
+    #[test]
+    fn core_version_uses_a_bounded_c_abi_buffer() {
+        assert_eq!(
+            core_version_text(),
+            "DuckySlicer native bridge (Android ARM64 runtime)",
+        );
     }
 
     #[test]

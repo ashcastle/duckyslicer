@@ -11,7 +11,17 @@
 #include <vulkan/vulkan.h>
 #endif
 
-const char* duckyslicer_core_version(void) { return "DuckySlicer native bridge (Android ARM64 runtime)"; }
+size_t duckyslicer_core_version(char* output, size_t capacity)
+{
+    constexpr char   version[] = "DuckySlicer native bridge (Android ARM64 runtime)";
+    constexpr size_t length    = sizeof(version) - 1;
+    if (output != nullptr && capacity > 0) {
+        const size_t copied = std::min(length, capacity - 1);
+        std::memcpy(output, version, copied);
+        output[copied] = '\0';
+    }
+    return length;
+}
 
 namespace {
 

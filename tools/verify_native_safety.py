@@ -12,6 +12,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "rust/duckyslicer-jni/Cargo.toml"
 SOURCE = ROOT / "rust/duckyslicer-jni/src/lib.rs"
+BRIDGE_HEADER = ROOT / "native/duckyslicer_bridge/include/duckyslicer_bridge.h"
+BRIDGE_SOURCE = ROOT / "native/duckyslicer_bridge/src/duckyslicer_bridge.cpp"
 PATCH_ROOT = ROOT / "native/slicer-runtime"
 RUNTIME_SOURCE_PREFIX = "app/src/main/cpp/"
 ENGINE_SUBMODULE_PREFIX = "app/src/main/cpp/orcaslicer/"
@@ -120,6 +122,34 @@ def verify_fixed_native_text(source: str) -> None:
         )
 
 
+def verify_bounded_core_version(rust: str, header: str, bridge: str) -> None:
+    production = rust.partition("#[cfg(test)]")[0]
+    if "CStr::from_ptr" in production:
+        raise VerificationError("core version still borrows an unbounded C string pointer")
+    markers = {
+        "Rust bounded ABI declaration": (
+            "fn duckyslicer_core_version(output: *mut c_char, capacity: usize) -> usize;"
+        ),
+        "Rust fixed output buffer": "[0 as c_char; CORE_VERSION_BUFFER_BYTES]",
+        "Rust truncation rejection": "if required >= buffer.len()",
+        "Rust ABI regression": "fn core_version_uses_a_bounded_c_abi_buffer()",
+        "C header bounded ABI": (
+            "size_t duckyslicer_core_version(char* output, size_t capacity);"
+        ),
+        "C null and capacity guard": "if (output != nullptr && capacity > 0)",
+        "C bounded copy": "std::min(length, capacity - 1)",
+        "C terminator write": "output[copied] = '\\0';",
+    }
+    combined = rust + "\n" + header + "\n" + bridge
+    missing = [description for description, marker in markers.items() if marker not in combined]
+    if missing:
+        raise VerificationError(
+            "bounded core version ABI is incomplete: " + ", ".join(missing)
+        )
+    if "const char* duckyslicer_core_version" in header + bridge:
+        raise VerificationError("core version ABI exposes a borrowed C string")
+
+
 def verify_patch_boundaries(patches: dict[str, str]) -> int:
     """Keep runtime and nested Orca changes in independently reviewable patches."""
     checked = 0
@@ -153,10 +183,13 @@ def main() -> None:
     try:
         manifest = tomllib.loads(MANIFEST.read_text(encoding="utf-8"))
         source = SOURCE.read_text(encoding="utf-8")
+        bridge_header = BRIDGE_HEADER.read_text(encoding="utf-8")
+        bridge_source = BRIDGE_SOURCE.read_text(encoding="utf-8")
         verify_manifest(manifest)
         entrypoint_count = verify_source(source)
         verify_mutation_regressions(source)
         verify_fixed_native_text(source)
+        verify_bounded_core_version(source, bridge_header, bridge_source)
         patch_count = verify_patch_boundaries(
             {
                 path.name: path.read_text(encoding="utf-8")
@@ -167,8 +200,8 @@ def main() -> None:
         raise SystemExit(f"Native safety verification failed: {error}") from error
     print(
         f"Verified native safety: panic=unwind, {entrypoint_count} allowlisted "
-        "entrypoints contained, bounded native text, no panic-prone production shortcuts, "
-        "deterministic "
+        "entrypoints contained, bounded native text and version ABI, no panic-prone production "
+        "shortcuts, deterministic "
         f"STL/G-code mutation regressions present, {patch_count} patch boundaries owned"
     )
 

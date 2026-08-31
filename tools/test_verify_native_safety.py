@@ -5,6 +5,7 @@ import unittest
 from tools.verify_native_safety import (
     EXPECTED_ENTRYPOINTS,
     VerificationError,
+    verify_bounded_core_version,
     verify_fixed_native_text,
     verify_manifest,
     verify_mutation_regressions,
@@ -123,6 +124,39 @@ fn native_text(value: &[c_char]) -> String {
 fn probe_vulkan() {}
 fn native_text_never_reads_past_a_fixed_native_buffer() {}
 """
+            )
+
+    def test_accepts_bounded_core_version_abi(self) -> None:
+        verify_bounded_core_version(
+            """
+unsafe extern "C" {
+    fn duckyslicer_core_version(output: *mut c_char, capacity: usize) -> usize;
+}
+fn core_version_text() {
+    let mut buffer = [0 as c_char; CORE_VERSION_BUFFER_BYTES];
+    let required = unsafe { duckyslicer_core_version(buffer.as_mut_ptr(), buffer.len()) };
+    if required >= buffer.len() { return; }
+}
+#[cfg(test)]
+fn core_version_uses_a_bounded_c_abi_buffer() {}
+""",
+            "size_t duckyslicer_core_version(char* output, size_t capacity);",
+            """
+size_t duckyslicer_core_version(char* output, size_t capacity) {
+    if (output != nullptr && capacity > 0) {
+        const size_t copied = std::min(length, capacity - 1);
+        output[copied] = '\\0';
+    }
+}
+""",
+        )
+
+    def test_rejects_borrowed_core_version_pointer(self) -> None:
+        with self.assertRaisesRegex(VerificationError, "unbounded C string pointer"):
+            verify_bounded_core_version(
+                "fn core() { unsafe { CStr::from_ptr(pointer) }; }\n#[cfg(test)]",
+                "const char* duckyslicer_core_version(void);",
+                'const char* duckyslicer_core_version(void) { return "version"; }',
             )
 
     def test_accepts_repository_relative_patch_ownership(self) -> None:

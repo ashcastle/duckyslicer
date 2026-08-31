@@ -1,12 +1,13 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-const char* duckyslicer_core_version(void);
+size_t duckyslicer_core_version(char* output, size_t capacity);
 
 typedef struct duckyslicer_vulkan_capabilities
 {
