@@ -96,18 +96,22 @@ fn vulkan_version(value: u32) -> String {
 }
 
 fn native_text(value: &[c_char]) -> String {
-    let pointer = value.as_ptr();
-    if pointer.is_null() {
-        String::new()
-    } else {
-        unsafe { CStr::from_ptr(pointer) }
-            .to_string_lossy()
-            .into_owned()
-    }
+    let end = value
+        .iter()
+        .position(|character| *character == 0)
+        .unwrap_or(value.len());
+    let bytes = value[..end]
+        .iter()
+        .map(|character| *character as u8)
+        .collect::<Vec<_>>();
+    String::from_utf8_lossy(&bytes).into_owned()
 }
 
 fn probe_vulkan() -> VulkanCapabilities {
     let mut native = VulkanCapabilitiesNative::default();
+    // SAFETY: the C bridge receives one valid, writable, repr(C) output object and promises to
+    // initialize only fields within that object. Fixed-size text fields are bounded again by
+    // `native_text`, so a missing terminator cannot turn into an out-of-bounds Rust read.
     unsafe { duckyslicer_probe_vulkan(&mut native) };
     VulkanCapabilities {
         api_available: native.api_available != 0,
@@ -2653,6 +2657,8 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_version<'loca
 ) -> jstring {
     env.with_env(|env| {
         let version = catch_unwind(AssertUnwindSafe(|| {
+            // SAFETY: the C bridge returns either null or a process-lifetime NUL-terminated
+            // version string. The pointer is checked before constructing the borrowed CStr.
             let pointer = unsafe { duckyslicer_core_version() };
             if pointer.is_null() {
                 "DuckySlicer native bridge unavailable"
@@ -3091,6 +3097,21 @@ mod tests {
         assert!(!capabilities.auto_enabled);
         assert!(!capabilities.auto_candidate);
         assert_eq!(capabilities.reason, "not_android");
+    }
+
+    #[test]
+    fn native_text_never_reads_past_a_fixed_native_buffer() {
+        let terminated = [b'D' as c_char, b'u' as c_char, 0, b'x' as c_char];
+        let unterminated = [
+            b'D' as c_char,
+            b'u' as c_char,
+            b'c' as c_char,
+            b'k' as c_char,
+        ];
+
+        assert_eq!(native_text(&terminated), "Du");
+        assert_eq!(native_text(&unterminated), "Duck");
+        assert_eq!(native_text(&[]), "");
     }
 
     #[test]

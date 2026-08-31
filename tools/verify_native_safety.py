@@ -97,6 +97,29 @@ def verify_mutation_regressions(source: str) -> None:
         )
 
 
+def verify_fixed_native_text(source: str) -> None:
+    start = source.find("fn native_text(value: &[c_char]) -> String {")
+    end = source.find("\nfn probe_vulkan()", start)
+    if start < 0 or end < 0:
+        raise VerificationError("fixed native text decoder is missing")
+    body = source[start:end]
+    if "CStr::from_ptr" in body or "from_raw_parts" in body:
+        raise VerificationError("fixed native text decoder performs an unbounded pointer read")
+    markers = {
+        "in-buffer terminator search": ".position(|character| *character == 0)",
+        "unterminated-buffer bound": ".unwrap_or(value.len())",
+        "bounded UTF-8 conversion": "String::from_utf8_lossy(&bytes)",
+        "unterminated-buffer regression": (
+            "fn native_text_never_reads_past_a_fixed_native_buffer()"
+        ),
+    }
+    missing = [description for description, marker in markers.items() if marker not in source]
+    if missing:
+        raise VerificationError(
+            "fixed native text decoder contract is incomplete: " + ", ".join(missing)
+        )
+
+
 def verify_patch_boundaries(patches: dict[str, str]) -> int:
     """Keep runtime and nested Orca changes in independently reviewable patches."""
     checked = 0
@@ -133,6 +156,7 @@ def main() -> None:
         verify_manifest(manifest)
         entrypoint_count = verify_source(source)
         verify_mutation_regressions(source)
+        verify_fixed_native_text(source)
         patch_count = verify_patch_boundaries(
             {
                 path.name: path.read_text(encoding="utf-8")
@@ -143,7 +167,8 @@ def main() -> None:
         raise SystemExit(f"Native safety verification failed: {error}") from error
     print(
         f"Verified native safety: panic=unwind, {entrypoint_count} allowlisted "
-        "entrypoints contained, no panic-prone production shortcuts, deterministic "
+        "entrypoints contained, bounded native text, no panic-prone production shortcuts, "
+        "deterministic "
         f"STL/G-code mutation regressions present, {patch_count} patch boundaries owned"
     )
 

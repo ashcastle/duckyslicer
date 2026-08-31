@@ -5,6 +5,7 @@ import unittest
 from tools.verify_native_safety import (
     EXPECTED_ENTRYPOINTS,
     VerificationError,
+    verify_fixed_native_text,
     verify_manifest,
     verify_mutation_regressions,
     verify_patch_boundaries,
@@ -98,6 +99,31 @@ class VerifyNativeSafetyTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(VerificationError, "ASCII and binary STL seeds"):
             verify_mutation_regressions(source)
+
+    def test_accepts_bounded_fixed_native_text_decoding(self) -> None:
+        verify_fixed_native_text(
+            """
+fn native_text(value: &[c_char]) -> String {
+    let end = value.iter().position(|character| *character == 0).unwrap_or(value.len());
+    let bytes = value[..end].iter().map(|character| *character as u8).collect::<Vec<_>>();
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+fn probe_vulkan() {}
+fn native_text_never_reads_past_a_fixed_native_buffer() {}
+"""
+        )
+
+    def test_rejects_unbounded_fixed_native_text_pointer_reads(self) -> None:
+        with self.assertRaisesRegex(VerificationError, "unbounded pointer read"):
+            verify_fixed_native_text(
+                """
+fn native_text(value: &[c_char]) -> String {
+    unsafe { CStr::from_ptr(value.as_ptr()) }.to_string_lossy().into_owned()
+}
+fn probe_vulkan() {}
+fn native_text_never_reads_past_a_fixed_native_buffer() {}
+"""
+            )
 
     def test_accepts_repository_relative_patch_ownership(self) -> None:
         self.assertEqual(
