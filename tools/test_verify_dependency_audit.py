@@ -15,6 +15,8 @@ ARCHIVE_URL=https://example.com/archive.tar.xz
 ARCHIVE_SHA256=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 """
 
+ACTION_REVISION = "d" * 40
+
 WORKFLOW = f"""\
 name: Dependency vulnerability audit
 
@@ -32,7 +34,7 @@ permissions:
 
 jobs:
   full-audit:
-    uses: {audit.ACTION_REFERENCE}
+    uses: {audit.ACTION_WORKFLOW}@{ACTION_REVISION}
     with:
       checkout-submodules: true
       fail-on-vuln: true
@@ -98,7 +100,7 @@ class VerifyDependencyAuditTest(unittest.TestCase):
 
     def test_rejects_unpinned_action_or_non_blocking_findings(self) -> None:
         for changed in (
-            WORKFLOW.replace(audit.ACTION_REVISION, "v2.5.0"),
+            WORKFLOW.replace(ACTION_REVISION, "v2.5.0"),
             WORKFLOW.replace("fail-on-vuln: true", "fail-on-vuln: false"),
             WORKFLOW + "    continue-on-error: true\n",
         ):

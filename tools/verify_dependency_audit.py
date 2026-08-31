@@ -14,10 +14,12 @@ VERSIONS = ROOT / "native/slicer-runtime/versions.env"
 INVENTORY = ROOT / "osv-scanner-custom.json"
 WORKFLOW = ROOT / ".github/workflows/dependency-audit.yml"
 CONFIG = ROOT / "osv-scanner.toml"
-ACTION_REVISION = "8deb546fdb875b9996d27d4950be7312dac076a1"
-ACTION_REFERENCE = (
-    "google/osv-scanner-action/.github/workflows/"
-    f"osv-scanner-reusable.yml@{ACTION_REVISION}"
+ACTION_WORKFLOW = (
+    "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml"
+)
+ACTION_REFERENCE = re.compile(
+    rf"^\s+uses: {re.escape(ACTION_WORKFLOW)}@(?P<revision>[0-9a-f]{{40}})\s*(?:#.*)?$",
+    re.MULTILINE,
 )
 COMMIT = re.compile(r"[0-9a-f]{40}")
 KEY = re.compile(r"[A-Z][A-Z0-9_]*")
@@ -143,7 +145,7 @@ def verify_workflow(source: str) -> None:
             raise VerificationError(f"dependency audit is missing permission: {permission}")
     if "continue-on-error:" in source:
         raise VerificationError("dependency vulnerability findings must not be ignored")
-    if jobs.count(f"uses: {ACTION_REFERENCE}") != 1:
+    if len(tuple(ACTION_REFERENCE.finditer(jobs))) != 1:
         raise VerificationError("dependency audit must use the approved full-SHA OSV workflow")
     required_inputs = (
         "checkout-submodules: true",
@@ -188,7 +190,7 @@ def main() -> None:
     )
     print(
         f"Verified dependency audit: Cargo and Gradle locks plus {count} native Git commits; "
-        f"OSV workflow={ACTION_REVISION[:12]}"
+        "OSV workflow is pinned to one immutable commit"
     )
 
 
