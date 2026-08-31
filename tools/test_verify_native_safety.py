@@ -12,12 +12,18 @@ from tools.verify_native_safety import (
 )
 
 
-def native_source(*, unguarded: str | None = None, production_panic: str = "") -> str:
+def native_source(
+    *,
+    unguarded: str | None = None,
+    production_panic: str = "",
+    generic_lifetime: bool = False,
+) -> str:
     functions = []
     for name in sorted(EXPECTED_ENTRYPOINTS):
         boundary = "return_null();" if name == unguarded else "guarded_json();"
+        generics = "<'local>" if generic_lifetime else ""
         functions.append(
-            f'#[unsafe(no_mangle)]\npub extern "system" fn {name}() {{ {boundary} }}'
+            f'#[unsafe(no_mangle)]\npub extern "system" fn {name}{generics}() {{ {boundary} }}'
         )
     return (
         "use std::panic::{catch_unwind, AssertUnwindSafe};\n"
@@ -56,6 +62,12 @@ class VerifyNativeSafetyTest(unittest.TestCase):
     def test_accepts_unwind_and_guarded_allowlisted_exports(self) -> None:
         verify_manifest({"profile": {"release": {"panic": "unwind"}}})
         self.assertEqual(len(EXPECTED_ENTRYPOINTS), verify_source(native_source()))
+
+    def test_accepts_named_lifetimes_on_ffi_safe_jni_exports(self) -> None:
+        self.assertEqual(
+            len(EXPECTED_ENTRYPOINTS),
+            verify_source(native_source(generic_lifetime=True)),
+        )
 
     def test_rejects_abort_release_profile(self) -> None:
         with self.assertRaisesRegex(VerificationError, "panic ="):

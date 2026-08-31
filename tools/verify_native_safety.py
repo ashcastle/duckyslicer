@@ -16,7 +16,8 @@ PATCH_ROOT = ROOT / "native/slicer-runtime"
 RUNTIME_SOURCE_PREFIX = "app/src/main/cpp/"
 ENGINE_SUBMODULE_PREFIX = "app/src/main/cpp/orcaslicer/"
 JNI_EXPORT = re.compile(
-    r'#\[unsafe\(no_mangle\)\]\s*pub extern "system" fn\s+(Java_[A-Za-z0-9_]+)\s*\(',
+    r'#\[unsafe\(no_mangle\)\]\s*pub extern "system" fn\s+'
+    r'(Java_[A-Za-z0-9_]+)(?:\s*<[^>\n]+>)?\s*\(',
     re.MULTILINE,
 )
 FORBIDDEN_PRODUCTION_PANIC = re.compile(
