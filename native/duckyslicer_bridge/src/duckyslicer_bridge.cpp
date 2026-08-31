@@ -11,6 +11,12 @@
 #include <vulkan/vulkan.h>
 #endif
 
+static_assert(sizeof(duckyslicer_vulkan_capabilities) == 424);
+static_assert(offsetof(duckyslicer_vulkan_capabilities, compute_queue_family) == 28);
+static_assert(offsetof(duckyslicer_vulkan_capabilities, api_available) == 32);
+static_assert(offsetof(duckyslicer_vulkan_capabilities, device_name) == 38);
+static_assert(offsetof(duckyslicer_vulkan_capabilities, reason) == 294);
+
 size_t duckyslicer_core_version(char* output, size_t capacity)
 {
     constexpr char   version[] = "DuckySlicer native bridge (Android ARM64 runtime)";

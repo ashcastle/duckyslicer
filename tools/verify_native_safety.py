@@ -150,6 +150,27 @@ def verify_bounded_core_version(rust: str, header: str, bridge: str) -> None:
         raise VerificationError("core version ABI exposes a borrowed C string")
 
 
+def verify_vulkan_abi_layout(rust: str, bridge: str) -> None:
+    markers = {
+        "Rust repr(C) layout": "#[repr(C)]\nstruct VulkanCapabilitiesNative",
+        "Rust layout regression": "fn vulkan_capabilities_c_abi_layout_is_stable()",
+        "Rust size assertion": "size_of::<VulkanCapabilitiesNative>(), 424",
+        "Rust final-field offset": "offset_of!(VulkanCapabilitiesNative, reason), 294",
+        "C++ size assertion": "sizeof(duckyslicer_vulkan_capabilities) == 424",
+        "C++ queue offset": (
+            "offsetof(duckyslicer_vulkan_capabilities, compute_queue_family) == 28"
+        ),
+        "C++ text offset": "offsetof(duckyslicer_vulkan_capabilities, device_name) == 38",
+        "C++ final-field offset": "offsetof(duckyslicer_vulkan_capabilities, reason) == 294",
+    }
+    combined = rust + "\n" + bridge
+    missing = [description for description, marker in markers.items() if marker not in combined]
+    if missing:
+        raise VerificationError(
+            "Vulkan C ABI layout contract is incomplete: " + ", ".join(missing)
+        )
+
+
 def verify_patch_boundaries(patches: dict[str, str]) -> int:
     """Keep runtime and nested Orca changes in independently reviewable patches."""
     checked = 0
@@ -190,6 +211,7 @@ def main() -> None:
         verify_mutation_regressions(source)
         verify_fixed_native_text(source)
         verify_bounded_core_version(source, bridge_header, bridge_source)
+        verify_vulkan_abi_layout(source, bridge_source)
         patch_count = verify_patch_boundaries(
             {
                 path.name: path.read_text(encoding="utf-8")
@@ -200,8 +222,8 @@ def main() -> None:
         raise SystemExit(f"Native safety verification failed: {error}") from error
     print(
         f"Verified native safety: panic=unwind, {entrypoint_count} allowlisted "
-        "entrypoints contained, bounded native text and version ABI, no panic-prone production "
-        "shortcuts, deterministic "
+        "entrypoints contained, bounded native text and version ABI, fixed Vulkan ABI layout, "
+        "no panic-prone production shortcuts, deterministic "
         f"STL/G-code mutation regressions present, {patch_count} patch boundaries owned"
     )
 

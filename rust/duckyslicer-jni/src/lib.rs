@@ -3125,6 +3125,24 @@ mod tests {
     }
 
     #[test]
+    fn vulkan_capabilities_c_abi_layout_is_stable() {
+        assert_eq!(std::mem::size_of::<VulkanCapabilitiesNative>(), 424);
+        assert_eq!(
+            std::mem::offset_of!(VulkanCapabilitiesNative, compute_queue_family),
+            28,
+        );
+        assert_eq!(
+            std::mem::offset_of!(VulkanCapabilitiesNative, api_available),
+            32,
+        );
+        assert_eq!(
+            std::mem::offset_of!(VulkanCapabilitiesNative, device_name),
+            38,
+        );
+        assert_eq!(std::mem::offset_of!(VulkanCapabilitiesNative, reason), 294);
+    }
+
+    #[test]
     fn missing_stl_is_reported_without_panicking() {
         let result = inspect_stl("/definitely/missing/duckyslicer.stl");
         assert!(matches!(result, Err(EngineError::Open(_))));

@@ -11,6 +11,7 @@ from tools.verify_native_safety import (
     verify_mutation_regressions,
     verify_patch_boundaries,
     verify_source,
+    verify_vulkan_abi_layout,
 )
 
 
@@ -157,6 +158,42 @@ size_t duckyslicer_core_version(char* output, size_t capacity) {
                 "fn core() { unsafe { CStr::from_ptr(pointer) }; }\n#[cfg(test)]",
                 "const char* duckyslicer_core_version(void);",
                 'const char* duckyslicer_core_version(void) { return "version"; }',
+            )
+
+    def test_accepts_matching_vulkan_abi_layout_guards(self) -> None:
+        verify_vulkan_abi_layout(
+            """
+#[repr(C)]
+struct VulkanCapabilitiesNative {}
+fn vulkan_capabilities_c_abi_layout_is_stable() {
+    assert_eq!(std::mem::size_of::<VulkanCapabilitiesNative>(), 424);
+    assert_eq!(std::mem::offset_of!(VulkanCapabilitiesNative, reason), 294);
+}
+""",
+            """
+static_assert(sizeof(duckyslicer_vulkan_capabilities) == 424);
+static_assert(offsetof(duckyslicer_vulkan_capabilities, compute_queue_family) == 28);
+static_assert(offsetof(duckyslicer_vulkan_capabilities, device_name) == 38);
+static_assert(offsetof(duckyslicer_vulkan_capabilities, reason) == 294);
+""",
+        )
+
+    def test_rejects_vulkan_abi_without_cpp_size_guard(self) -> None:
+        with self.assertRaisesRegex(VerificationError, "C\\+\\+ size assertion"):
+            verify_vulkan_abi_layout(
+                """
+#[repr(C)]
+struct VulkanCapabilitiesNative {}
+fn vulkan_capabilities_c_abi_layout_is_stable() {
+    assert_eq!(std::mem::size_of::<VulkanCapabilitiesNative>(), 424);
+    assert_eq!(std::mem::offset_of!(VulkanCapabilitiesNative, reason), 294);
+}
+""",
+                """
+static_assert(offsetof(duckyslicer_vulkan_capabilities, compute_queue_family) == 28);
+static_assert(offsetof(duckyslicer_vulkan_capabilities, device_name) == 38);
+static_assert(offsetof(duckyslicer_vulkan_capabilities, reason) == 294);
+""",
             )
 
     def test_accepts_repository_relative_patch_ownership(self) -> None:
