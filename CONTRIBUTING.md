@@ -147,6 +147,18 @@ not a complete functional gate. API 35+ ARM64 16 KB devices remain valid for nor
 development checks. The local GitHub APK and Play AAB preparation commands raise that
 requirement to an Android 16/API 36 ARM64 16 KB runtime and refuse to create a release
 candidate without it.
+
+Public open-source release readiness is audited independently from app-store delivery:
+
+```shell
+python3 tools/audit_release_readiness.py --target github
+```
+
+The default GitHub target requires the exact `main` commit to have successful Android
+and vulnerability-audit runs plus matching physical, startup, and desktop-Orca evidence.
+It never requires Play credentials. Play delivery is a dormant optional path and is
+checked only when `--target play` is requested explicitly.
+
 Run `python3 tools/prepare_release_avd.py --create` to install or verify the pinned
 local ARM64 16 KB system image and AVD. The command prints the headless emulator launch
 and exact API 36 gate commands; hosted CI is not a substitute for this runtime check.

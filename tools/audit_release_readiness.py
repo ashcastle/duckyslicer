@@ -38,6 +38,8 @@ PLAY_VARIABLES = frozenset(
         "DUCKYSLICER_GOOGLE_PLAY_SERVICE_ACCOUNT",
     }
 )
+REQUIRED_CI_WORKFLOWS = frozenset({"Android", "Dependency vulnerability audit"})
+RELEASE_TARGETS = ("github", "play")
 
 
 @dataclass(frozen=True)
@@ -55,13 +57,15 @@ class ReadinessCheck:
 
 @dataclass(frozen=True)
 class ReadinessReport:
+    target: str
     source_commit: str | None
     ready: bool
     checks: tuple[ReadinessCheck, ...]
 
     def document(self) -> dict[str, object]:
         return {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
+            "target": self.target,
             "sourceCommit": self.source_commit,
             "ready": self.ready,
             "checks": [asdict(check) for check in self.checks],
@@ -152,16 +156,10 @@ def repository_checks(runner: CommandRunner) -> tuple[str | None, list[Readiness
     return commit, checks
 
 
-def github_checks(runner: CommandRunner) -> list[ReadinessCheck]:
-    auth = runner(("gh", "auth", "status", "-h", "github.com"))
-    if auth.returncode != 0:
-        return [blocked("github-auth", "GitHub CLI 재인증 필요")]
-
-    checks = [passed("github-auth", "GitHub CLI 인증 유효")]
+def github_repository(runner: CommandRunner) -> str | None:
     origin = runner(("git", "remote", "get-url", "origin"))
     if origin.returncode != 0 or not origin.stdout.strip():
-        checks.append(blocked("play-wif", "origin 저장소를 확인할 수 없음"))
-        return checks
+        return None
     repository = runner(
         (
             "gh",
@@ -176,8 +174,73 @@ def github_checks(runner: CommandRunner) -> list[ReadinessCheck]:
     )
     repository_name = repository.stdout.strip()
     if repository.returncode != 0 or not repository_name:
-        checks.append(blocked("play-wif", "origin GitHub 저장소를 확인할 수 없음"))
-        return checks
+        return None
+    return repository_name
+
+
+def github_ci_check(
+    source_commit: str | None,
+    repository_name: str,
+    runner: CommandRunner,
+) -> ReadinessCheck:
+    if source_commit is None:
+        return blocked("github-ci", "검증할 source commit이 없음")
+    runs = runner(
+        (
+            "gh",
+            "run",
+            "list",
+            "--repo",
+            repository_name,
+            "--commit",
+            source_commit,
+            "--limit",
+            "20",
+            "--json",
+            "name,status,conclusion,headSha",
+        )
+    )
+    if runs.returncode != 0:
+        return blocked("github-ci", f"{repository_name}의 main 검사를 읽을 수 없음")
+    try:
+        document = json.loads(runs.stdout)
+    except json.JSONDecodeError:
+        return blocked("github-ci", "GitHub 검사 응답이 올바른 JSON이 아님")
+    if not isinstance(document, list):
+        return blocked("github-ci", "GitHub 검사 응답 형식이 올바르지 않음")
+
+    latest: dict[str, tuple[str, str]] = {}
+    for item in document:
+        if not isinstance(item, dict) or item.get("headSha") != source_commit:
+            continue
+        name = item.get("name")
+        status = item.get("status")
+        conclusion = item.get("conclusion")
+        if (
+            isinstance(name, str)
+            and name in REQUIRED_CI_WORKFLOWS
+            and name not in latest
+            and isinstance(status, str)
+            and isinstance(conclusion, str)
+        ):
+            latest[name] = (status, conclusion)
+
+    problems: list[str] = []
+    for name in sorted(REQUIRED_CI_WORKFLOWS):
+        state = latest.get(name)
+        if state is None:
+            problems.append(f"{name}: 누락")
+        elif state != ("completed", "success"):
+            problems.append(f"{name}: {state[0]}/{state[1] or 'pending'}")
+    if problems:
+        return blocked("github-ci", ", ".join(problems))
+    return passed(
+        "github-ci",
+        f"{repository_name}의 Android·취약점 감사가 source commit에서 성공",
+    )
+
+
+def play_wif_check(repository_name: str, runner: CommandRunner) -> ReadinessCheck:
     variables = runner(
         (
             "gh",
@@ -194,26 +257,40 @@ def github_checks(runner: CommandRunner) -> list[ReadinessCheck]:
         )
     )
     if variables.returncode != 0:
-        checks.append(
-            blocked(
-                "play-wif",
-                f"{repository_name}의 보호된 play 환경 변수를 읽을 수 없음",
-            )
+        return blocked(
+            "play-wif",
+            f"{repository_name}의 보호된 play 환경 변수를 읽을 수 없음",
         )
-        return checks
     configured = {line.strip() for line in variables.stdout.splitlines() if line.strip()}
     missing = sorted(PLAY_VARIABLES - configured)
     if missing:
-        checks.append(
-            blocked(
-                "play-wif",
-                f"{repository_name} 누락 변수: " + ", ".join(missing),
-            )
+        return blocked(
+            "play-wif",
+            f"{repository_name} 누락 변수: " + ", ".join(missing),
         )
-    else:
-        checks.append(
-            passed("play-wif", f"{repository_name}에 키 없는 Play 인증 변수 구성됨")
-        )
+    return passed("play-wif", f"{repository_name}에 키 없는 Play 인증 변수 구성됨")
+
+
+def github_checks(
+    source_commit: str | None,
+    runner: CommandRunner,
+    *,
+    require_play: bool = False,
+) -> list[ReadinessCheck]:
+    auth = runner(("gh", "auth", "status", "-h", "github.com"))
+    if auth.returncode != 0:
+        return [blocked("github-auth", "GitHub CLI 재인증 필요")]
+
+    checks = [passed("github-auth", "GitHub CLI 인증 유효")]
+    repository_name = github_repository(runner)
+    if repository_name is None:
+        checks.append(blocked("github-ci", "origin GitHub 저장소를 확인할 수 없음"))
+        if require_play:
+            checks.append(blocked("play-wif", "origin GitHub 저장소를 확인할 수 없음"))
+        return checks
+    checks.append(github_ci_check(source_commit, repository_name, runner))
+    if require_play:
+        checks.append(play_wif_check(repository_name, runner))
     return checks
 
 
@@ -263,6 +340,7 @@ def evidence_check(
 
 def audit(
     *,
+    target: str = "github",
     physical_report: Path = PHYSICAL_REPORT,
     startup_report: Path = STARTUP_REPORT,
     orca_report: Path = ORCA_REPORT,
@@ -270,19 +348,29 @@ def audit(
     identity_query: IdentityQuery = query_identity,
     verifier: EvidenceVerifier = verify_release_qualifications,
 ) -> ReadinessReport:
+    if target not in RELEASE_TARGETS:
+        raise ValueError(f"unsupported release target: {target}")
     source_commit, checks = repository_checks(runner)
-    checks.extend(github_checks(runner))
-    checks.append(physical_device_check(runner, identity_query))
-    checks.append(
-        evidence_check(
-            source_commit,
-            physical_report,
-            startup_report,
-            orca_report,
-            verifier,
-        )
+    checks.extend(github_checks(source_commit, runner, require_play=target == "play"))
+    release_evidence = evidence_check(
+        source_commit,
+        physical_report,
+        startup_report,
+        orca_report,
+        verifier,
     )
+    if release_evidence.passed:
+        checks.append(
+            passed(
+                "physical-device",
+                "검증된 실기기 증거가 있어 현재 기기 연결은 필요하지 않음",
+            )
+        )
+    else:
+        checks.append(physical_device_check(runner, identity_query))
+    checks.append(release_evidence)
     return ReadinessReport(
+        target=target,
         source_commit=source_commit,
         ready=all(check.passed for check in checks),
         checks=tuple(checks),
@@ -294,9 +382,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--physical-report", type=Path, default=PHYSICAL_REPORT)
     parser.add_argument("--startup-report", type=Path, default=STARTUP_REPORT)
     parser.add_argument("--orca-report", type=Path, default=ORCA_REPORT)
+    parser.add_argument("--target", choices=RELEASE_TARGETS, default="github")
     parser.add_argument("--json", action="store_true", dest="json_output")
     args = parser.parse_args(argv)
     report = audit(
+        target=args.target,
         physical_report=args.physical_report,
         startup_report=args.startup_report,
         orca_report=args.orca_report,

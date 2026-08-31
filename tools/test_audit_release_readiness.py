@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,6 +23,19 @@ from tools.run_physical_qualification import DeviceIdentity
 COMMIT = "a" * 40
 ORIGIN_URL = "https://github.com/ashcastle/duckyslicer.git"
 REPOSITORY = "ashcastle/duckyslicer"
+CI_RUN_COMMAND = (
+    "gh",
+    "run",
+    "list",
+    "--repo",
+    REPOSITORY,
+    "--commit",
+    COMMIT,
+    "--limit",
+    "20",
+    "--json",
+    "name,status,conclusion,headSha",
+)
 
 
 def identity(serial: str, *, emulator: bool = False) -> DeviceIdentity:
@@ -90,6 +104,25 @@ def ready_runner() -> FakeRunner:
                 "--jq",
                 ".[].name",
             ): CommandResult(0, "\n".join(sorted(PLAY_VARIABLES))),
+            CI_RUN_COMMAND: CommandResult(
+                0,
+                json.dumps(
+                    [
+                        {
+                            "name": "Android",
+                            "status": "completed",
+                            "conclusion": "success",
+                            "headSha": COMMIT,
+                        },
+                        {
+                            "name": "Dependency vulnerability audit",
+                            "status": "completed",
+                            "conclusion": "success",
+                            "headSha": COMMIT,
+                        },
+                    ]
+                ),
+            ),
             ("adb", "devices", "-l"): CommandResult(
                 0,
                 "List of devices attached\nphone-1 device product:test model:Phone",
@@ -122,15 +155,44 @@ class AuditReleaseReadinessTest(unittest.TestCase):
         self.assertFalse(next(check for check in checks if check.name == "origin-sync").passed)
 
     def test_github_check_never_requires_secret_values(self) -> None:
-        checks = github_checks(ready_runner())
+        checks = github_checks(COMMIT, ready_runner())
         self.assertTrue(all(check.passed for check in checks))
-        self.assertEqual({"github-auth", "play-wif"}, {check.name for check in checks})
+        self.assertEqual({"github-auth", "github-ci"}, {check.name for check in checks})
         self.assertIn(REPOSITORY, checks[-1].detail)
+
+        play_checks = github_checks(COMMIT, ready_runner(), require_play=True)
+        self.assertTrue(all(check.passed for check in play_checks))
+        self.assertEqual(
+            {"github-auth", "github-ci", "play-wif"},
+            {check.name for check in play_checks},
+        )
 
         runner = ready_runner()
         runner.results[("gh", "auth", "status", "-h", "github.com")] = CommandResult(1)
-        self.assertEqual("github-auth", github_checks(runner)[0].name)
-        self.assertFalse(github_checks(runner)[0].passed)
+        self.assertEqual("github-auth", github_checks(COMMIT, runner)[0].name)
+        self.assertFalse(github_checks(COMMIT, runner)[0].passed)
+
+    def test_github_check_requires_both_successful_source_commit_runs(self) -> None:
+        runner = ready_runner()
+        runner.results[CI_RUN_COMMAND] = CommandResult(
+            0,
+            json.dumps(
+                [
+                    {
+                        "name": "Android",
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "headSha": COMMIT,
+                    }
+                ]
+            ),
+        )
+        check = next(
+            check for check in github_checks(COMMIT, runner) if check.name == "github-ci"
+        )
+        self.assertFalse(check.passed)
+        self.assertIn("Android: completed/failure", check.detail)
+        self.assertIn("Dependency vulnerability audit: 누락", check.detail)
 
     def test_physical_check_rejects_emulator_and_accepts_phone(self) -> None:
         runner = FakeRunner(
@@ -172,7 +234,9 @@ class AuditReleaseReadinessTest(unittest.TestCase):
     def test_complete_audit_is_ready_only_when_every_gate_passes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            reports = tuple(root / name for name in ("physical.json", "startup.json", "orca.json"))
+            reports = tuple(
+                root / name for name in ("physical.json", "startup.json", "orca.json")
+            )
             for report in reports:
                 report.write_text("{}", encoding="utf-8")
             verified: list[str] = []
@@ -189,8 +253,67 @@ class AuditReleaseReadinessTest(unittest.TestCase):
                 verifier=verifier,
             )
             self.assertTrue(report.ready)
+            self.assertEqual("github", report.target)
+            self.assertEqual(2, report.document()["schemaVersion"])
             self.assertEqual([COMMIT], verified)
             self.assertTrue(all(check.passed for check in report.checks))
+
+    def test_play_readiness_is_an_explicit_optional_target(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = tuple(
+                root / name for name in ("physical.json", "startup.json", "orca.json")
+            )
+            for report in reports:
+                report.write_text("{}", encoding="utf-8")
+            runner = ready_runner()
+            play_command = next(
+                command
+                for command in runner.results
+                if command[:3] == ("gh", "variable", "list")
+            )
+            runner.results[play_command] = CommandResult(0, "")
+
+            report = audit(
+                target="play",
+                physical_report=reports[0],
+                startup_report=reports[1],
+                orca_report=reports[2],
+                runner=runner,
+                identity_query=lambda serial: identity(serial),
+                verifier=lambda *_args: None,
+            )
+            self.assertFalse(report.ready)
+            self.assertEqual("play", report.target)
+            self.assertFalse(
+                next(check for check in report.checks if check.name == "play-wif").passed
+            )
+
+    def test_verified_evidence_does_not_require_a_live_phone(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = tuple(
+                root / name for name in ("physical.json", "startup.json", "orca.json")
+            )
+            for report in reports:
+                report.write_text("{}", encoding="utf-8")
+            runner = ready_runner()
+            runner.results[("adb", "devices", "-l")] = CommandResult(1)
+
+            report = audit(
+                physical_report=reports[0],
+                startup_report=reports[1],
+                orca_report=reports[2],
+                runner=runner,
+                identity_query=lambda _serial: self.fail("identity query must not run"),
+                verifier=lambda *_args: None,
+            )
+            self.assertTrue(report.ready)
+            device = next(
+                check for check in report.checks if check.name == "physical-device"
+            )
+            self.assertTrue(device.passed)
+            self.assertIn("현재 기기 연결은 필요하지 않음", device.detail)
 
 
 if __name__ == "__main__":
