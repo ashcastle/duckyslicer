@@ -9,9 +9,10 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use jni::JNIEnv;
+use jni::errors::LogErrorAndDefault;
 use jni::objects::{JByteBuffer, JClass, JFloatArray, JIntArray, JString};
 use jni::sys::{jboolean, jfloat, jfloatArray, jint, jstring};
+use jni::{Env, EnvUnowned};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -2621,10 +2622,8 @@ fn write_preview_payload(
     Ok(write_index)
 }
 
-fn make_java_string(env: &JNIEnv<'_>, value: &str) -> jstring {
-    env.new_string(value)
-        .map(JString::into_raw)
-        .unwrap_or(std::ptr::null_mut())
+fn make_java_string(env: &mut Env<'_>, value: &str) -> jni::errors::Result<jstring> {
+    env.new_string(value).map(JString::into_raw)
 }
 
 fn guarded_json<T, F>(operation: F) -> String
@@ -2648,277 +2647,289 @@ where
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_version(
-    env: JNIEnv<'_>,
-    _class: JClass<'_>,
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_version<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
 ) -> jstring {
-    let version = catch_unwind(AssertUnwindSafe(|| {
-        let pointer = unsafe { duckyslicer_core_version() };
-        if pointer.is_null() {
-            "DuckySlicer native bridge unavailable"
-        } else {
-            unsafe { CStr::from_ptr(pointer) }
-                .to_str()
-                .unwrap_or("DuckySlicer native bridge")
-        }
-    }))
-    .unwrap_or("DuckySlicer native bridge unavailable");
-    make_java_string(&env, version)
+    env.with_env(|env| {
+        let version = catch_unwind(AssertUnwindSafe(|| {
+            let pointer = unsafe { duckyslicer_core_version() };
+            if pointer.is_null() {
+                "DuckySlicer native bridge unavailable"
+            } else {
+                unsafe { CStr::from_ptr(pointer) }
+                    .to_str()
+                    .unwrap_or("DuckySlicer native bridge")
+            }
+        }))
+        .unwrap_or("DuckySlicer native bridge unavailable");
+        make_java_string(env, version)
+    })
+    .resolve::<LogErrorAndDefault>()
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_vulkanCapabilities(
-    env: JNIEnv<'_>,
-    _class: JClass<'_>,
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_vulkanCapabilities<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
 ) -> jstring {
-    let response = catch_unwind(AssertUnwindSafe(|| serde_json::to_string(&probe_vulkan())))
+    env.with_env(|env| {
+        let response = catch_unwind(AssertUnwindSafe(|| serde_json::to_string(&probe_vulkan())))
+            .ok()
+            .and_then(Result::ok)
+            .unwrap_or_else(|| INTERNAL_ERROR_JSON.to_owned());
+        make_java_string(env, &response)
+    })
+    .resolve::<LogErrorAndDefault>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_inspectStlPayload<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    path: JString<'local>,
+) -> jfloatArray {
+    env.with_env(|env| -> Result<jfloatArray, EngineError> {
+        let payload = catch_unwind(AssertUnwindSafe(|| {
+            let path = path.try_to_string(env).map_err(|error| {
+                EngineError::Parse(format!("Unable to read file path: {error}"))
+            })?;
+            model_preview_payload(inspect_stl(&path)?)
+        }))
         .ok()
         .and_then(Result::ok)
-        .unwrap_or_else(|| INTERNAL_ERROR_JSON.to_owned());
-    make_java_string(&env, &response)
+        .ok_or_else(|| EngineError::Parse("Unable to inspect STL payload".to_owned()))?;
+        let output = env.new_float_array(payload.len())?;
+        output.set_region(env, 0, &payload)?;
+        Ok(output.into_raw())
+    })
+    .resolve::<LogErrorAndDefault>()
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_inspectStlPayload(
-    mut env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    path: JString<'_>,
-) -> jfloatArray {
-    let payload = catch_unwind(AssertUnwindSafe(|| {
-        let path = env
-            .get_string(&path)
-            .map(|path| path.to_string_lossy().into_owned())
-            .map_err(|error| EngineError::Parse(format!("Unable to read file path: {error}")))?;
-        model_preview_payload(inspect_stl(&path)?)
-    }))
-    .ok()
-    .and_then(Result::ok);
-    let Some(payload) = payload else {
-        return std::ptr::null_mut();
-    };
-    catch_unwind(AssertUnwindSafe(|| {
-        let output = env.new_float_array(payload.len() as jint)?;
-        env.set_float_array_region(&output, 0, &payload)?;
-        Ok::<jfloatArray, jni::errors::Error>(output.into_raw())
-    }))
-    .ok()
-    .and_then(Result::ok)
-    .unwrap_or(std::ptr::null_mut())
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_transformStl(
-    mut env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    input_path: JString<'_>,
-    output_path: JString<'_>,
-    transform_json: JString<'_>,
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_transformStl<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    input_path: JString<'local>,
+    output_path: JString<'local>,
+    transform_json: JString<'local>,
 ) -> jstring {
-    let response = guarded_json(|| {
-        let read_string = |env: &mut JNIEnv<'_>, value: &JString<'_>| {
-            env.get_string(value)
-                .map(|text| text.to_string_lossy().into_owned())
-                .map_err(|error| EngineError::Parse(error.to_string()))
-        };
-        let input_path = read_string(&mut env, &input_path)?;
-        let output_path = read_string(&mut env, &output_path)?;
-        let transform_json = read_string(&mut env, &transform_json)?;
-        let transform: StlTransform = serde_json::from_str(&transform_json)
-            .map_err(|error| EngineError::Parse(error.to_string()))?;
-        let frame = transform_stl(&input_path, &output_path, &transform)?;
-        Ok(StlTransformResponse {
-            ok: true,
-            source_center_mm: frame.source_center_mm,
-            transformed_min_z: frame.transformed_min_z,
-        })
-    });
-    make_java_string(&env, &response)
+    env.with_env(|env| {
+        let response = guarded_json(|| {
+            let read_string = |env: &mut Env<'_>, value: &JString<'_>| {
+                value
+                    .try_to_string(env)
+                    .map_err(|error| EngineError::Parse(error.to_string()))
+            };
+            let input_path = read_string(env, &input_path)?;
+            let output_path = read_string(env, &output_path)?;
+            let transform_json = read_string(env, &transform_json)?;
+            let transform: StlTransform = serde_json::from_str(&transform_json)
+                .map_err(|error| EngineError::Parse(error.to_string()))?;
+            let frame = transform_stl(&input_path, &output_path, &transform)?;
+            Ok(StlTransformResponse {
+                ok: true,
+                source_center_mm: frame.source_center_mm,
+                transformed_min_z: frame.transformed_min_z,
+            })
+        });
+        make_java_string(env, &response)
+    })
+    .resolve::<LogErrorAndDefault>()
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_transformStlGroup(
-    mut env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    request_json: JString<'_>,
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_transformStlGroup<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    request_json: JString<'local>,
 ) -> jstring {
-    let response = guarded_json(|| {
-        let request_json = env
-            .get_string(&request_json)
-            .map(|text| text.to_string_lossy().into_owned())
-            .map_err(|error| EngineError::Parse(error.to_string()))?;
-        let request: StlGroupTransformRequest = serde_json::from_str(&request_json)
-            .map_err(|error| EngineError::Parse(error.to_string()))?;
-        let frame = transform_stl_group(
-            &request.input_paths,
-            &request.output_paths,
-            request.bounds_mask.as_deref(),
-            &request.transform,
-        )?;
-        Ok(StlTransformResponse {
-            ok: true,
-            source_center_mm: frame.source_center_mm,
-            transformed_min_z: frame.transformed_min_z,
-        })
-    });
-    make_java_string(&env, &response)
+    env.with_env(|env| {
+        let response = guarded_json(|| {
+            let request_json = request_json
+                .try_to_string(env)
+                .map_err(|error| EngineError::Parse(error.to_string()))?;
+            let request: StlGroupTransformRequest = serde_json::from_str(&request_json)
+                .map_err(|error| EngineError::Parse(error.to_string()))?;
+            let frame = transform_stl_group(
+                &request.input_paths,
+                &request.output_paths,
+                request.bounds_mask.as_deref(),
+                &request.transform,
+            )?;
+            Ok(StlTransformResponse {
+                ok: true,
+                source_center_mm: frame.source_center_mm,
+                transformed_min_z: frame.transformed_min_z,
+            })
+        });
+        make_java_string(env, &response)
+    })
+    .resolve::<LogErrorAndDefault>()
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_layOnFace(
-    mut env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    request_json: JString<'_>,
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_layOnFace<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    request_json: JString<'local>,
 ) -> jstring {
-    let response = guarded_json(|| {
-        let request_json = env
-            .get_string(&request_json)
-            .map(|text| text.to_string_lossy().into_owned())
-            .map_err(|error| EngineError::Parse(error.to_string()))?;
-        let request: LayOnFaceRequest = serde_json::from_str(&request_json)
-            .map_err(|error| EngineError::Parse(error.to_string()))?;
-        lay_on_face(&request)
-    });
-    make_java_string(&env, &response)
+    env.with_env(|env| {
+        let response = guarded_json(|| {
+            let request_json = request_json
+                .try_to_string(env)
+                .map_err(|error| EngineError::Parse(error.to_string()))?;
+            let request: LayOnFaceRequest = serde_json::from_str(&request_json)
+                .map_err(|error| EngineError::Parse(error.to_string()))?;
+            lay_on_face(&request)
+        });
+        make_java_string(env, &response)
+    })
+    .resolve::<LogErrorAndDefault>()
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRangeInto(
-    mut env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    path: JString<'_>,
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRangeInto<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    path: JString<'local>,
     start_layer: jint,
     end_layer: jint,
-    output: JByteBuffer<'_>,
+    output: JByteBuffer<'local>,
 ) -> jint {
-    catch_unwind(AssertUnwindSafe(|| {
-        let output_capacity = env.get_direct_buffer_capacity(&output)?;
-        if output_capacity % std::mem::size_of::<f32>() != 0 {
-            return Err(EngineError::Parse(
-                "G-code preview direct buffer has invalid alignment".to_owned(),
-            ));
-        }
-        let output_address = env.get_direct_buffer_address(&output)?;
-        if output_address.align_offset(std::mem::align_of::<f32>()) != 0 {
-            return Err(EngineError::Parse(
-                "G-code preview direct buffer has invalid alignment".to_owned(),
-            ));
-        }
-        let float_capacity = output_capacity / std::mem::size_of::<f32>();
-        if !(PREVIEW_HEADER_FLOATS..=PREVIEW_MAX_PAYLOAD_FLOATS).contains(&float_capacity) {
-            return Err(EngineError::Parse(
-                "G-code preview direct buffer is outside its bound".to_owned(),
-            ));
-        }
-        // SAFETY: JNI keeps the direct ByteBuffer alive for this call, its byte capacity and
-        // f32 alignment are checked above, and no other Rust reference aliases this output.
-        let output_floats =
-            unsafe { std::slice::from_raw_parts_mut(output_address.cast::<f32>(), float_capacity) };
-        let path = env
-            .get_string(&path)
-            .map(|path| path.to_string_lossy().into_owned())
-            .map_err(|error| EngineError::Parse(format!("Unable to read file path: {error}")))?;
-        let preview = preview_gcode(
-            &path,
-            start_layer.max(0) as usize,
-            end_layer.max(0) as usize,
-        )?;
-        let used = write_preview_payload(preview, output_floats)?;
-        jint::try_from(used)
-            .map_err(|_| EngineError::Parse("G-code preview size overflow".to_owned()))
-    }))
-    .ok()
-    .and_then(Result::ok)
-    .unwrap_or(-1)
+    env.with_env(|env| -> Result<jint, EngineError> {
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            let output_capacity = env.get_direct_buffer_capacity(&output)?;
+            if output_capacity % std::mem::size_of::<f32>() != 0 {
+                return Err(EngineError::Parse(
+                    "G-code preview direct buffer has invalid alignment".to_owned(),
+                ));
+            }
+            let output_address = env.get_direct_buffer_address(&output)?;
+            if output_address.align_offset(std::mem::align_of::<f32>()) != 0 {
+                return Err(EngineError::Parse(
+                    "G-code preview direct buffer has invalid alignment".to_owned(),
+                ));
+            }
+            let float_capacity = output_capacity / std::mem::size_of::<f32>();
+            if !(PREVIEW_HEADER_FLOATS..=PREVIEW_MAX_PAYLOAD_FLOATS).contains(&float_capacity) {
+                return Err(EngineError::Parse(
+                    "G-code preview direct buffer is outside its bound".to_owned(),
+                ));
+            }
+            // SAFETY: JNI keeps the direct ByteBuffer alive for this call, its byte capacity and
+            // f32 alignment are checked above, and no other Rust reference aliases this output.
+            let output_floats = unsafe {
+                std::slice::from_raw_parts_mut(output_address.cast::<f32>(), float_capacity)
+            };
+            let path = path.try_to_string(env).map_err(|error| {
+                EngineError::Parse(format!("Unable to read file path: {error}"))
+            })?;
+            let preview = preview_gcode(
+                &path,
+                start_layer.max(0) as usize,
+                end_layer.max(0) as usize,
+            )?;
+            let used = write_preview_payload(preview, output_floats)?;
+            jint::try_from(used)
+                .map_err(|_| EngineError::Parse("G-code preview size overflow".to_owned()))
+        }))
+        .ok()
+        .and_then(Result::ok)
+        .unwrap_or(-1);
+        Ok(result)
+    })
+    .resolve::<LogErrorAndDefault>()
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_packToolpathGeometry(
-    env: JNIEnv<'_>,
-    _class: JClass<'_>,
-    segments: JFloatArray<'_>,
-    path_starts: JIntArray<'_>,
-    path_ends_exclusive: JIntArray<'_>,
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_packToolpathGeometry<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    segments: JFloatArray<'local>,
+    path_starts: JIntArray<'local>,
+    path_ends_exclusive: JIntArray<'local>,
     bed_origin_x: jfloat,
     bed_origin_y: jfloat,
     min_z_mm: jfloat,
     max_z_mm: jfloat,
     opacity: jfloat,
     depth_contrast: jfloat,
-    filament_colors: JIntArray<'_>,
+    filament_colors: JIntArray<'local>,
     color_by_filament: jboolean,
     reverse_for_early_z: jboolean,
     render_as_lines: jboolean,
-    output: JByteBuffer<'_>,
+    output: JByteBuffer<'local>,
 ) -> jint {
-    catch_unwind(AssertUnwindSafe(|| {
-        let segment_float_count = usize::try_from(env.get_array_length(&segments)?)
-            .map_err(|_| EngineError::Parse("Toolpath segment array is invalid".to_owned()))?;
-        let path_count = usize::try_from(env.get_array_length(&path_starts)?)
-            .map_err(|_| EngineError::Parse("Toolpath path array is invalid".to_owned()))?;
-        let path_end_count = usize::try_from(env.get_array_length(&path_ends_exclusive)?)
-            .map_err(|_| EngineError::Parse("Toolpath path array is invalid".to_owned()))?;
-        let filament_color_count = usize::try_from(env.get_array_length(&filament_colors)?)
-            .map_err(|_| EngineError::Parse("Toolpath filament palette is invalid".to_owned()))?;
-        if segment_float_count > MAX_PREVIEW_SEGMENTS * TOOLPATH_SEGMENT_FLOATS
-            || path_count > MAX_PREVIEW_SEGMENTS
-            || path_end_count != path_count
-            || filament_color_count != TOOLPATH_TOOL_COUNT
-        {
-            return Err(EngineError::Parse(
-                "Toolpath JNI payload exceeds its bound".to_owned(),
-            ));
-        }
-        let mut segment_values = vec![0.0f32; segment_float_count];
-        let mut path_start_values = vec![0i32; path_count];
-        let mut path_end_values = vec![0i32; path_count];
-        let mut filament_color_values = vec![0i32; filament_color_count];
-        env.get_float_array_region(&segments, 0, &mut segment_values)?;
-        env.get_int_array_region(&path_starts, 0, &mut path_start_values)?;
-        env.get_int_array_region(&path_ends_exclusive, 0, &mut path_end_values)?;
-        env.get_int_array_region(&filament_colors, 0, &mut filament_color_values)?;
-        let payload = pack_toolpath_geometry(ToolpathPackingRequest {
-            segments: &segment_values,
-            path_starts: &path_start_values,
-            path_ends_exclusive: &path_end_values,
-            bed_origin_x,
-            bed_origin_y,
-            min_z_mm,
-            max_z_mm,
-            opacity,
-            depth_contrast,
-            filament_colors: &filament_color_values,
-            color_by_filament: color_by_filament != 0,
-            reverse_for_early_z: reverse_for_early_z != 0,
-            render_as_lines: render_as_lines != 0,
-        })?;
-        let required_bytes = payload
-            .len()
-            .checked_mul(std::mem::size_of::<f32>())
-            .ok_or_else(|| EngineError::Parse("Toolpath output size overflow".to_owned()))?;
-        let output_capacity = env.get_direct_buffer_capacity(&output)?;
-        if output_capacity < required_bytes {
-            return Err(EngineError::Parse(
-                "Toolpath direct buffer is too small".to_owned(),
-            ));
-        }
-        let output_address = env.get_direct_buffer_address(&output)?;
-        if required_bytes > 0 {
-            // SAFETY: `output_address` belongs to the direct ByteBuffer retained by this JNI
-            // call, JNI reports at least `required_bytes` capacity above, the source Vec has
-            // exactly that many initialized bytes, and the two allocations cannot overlap.
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    payload.as_ptr().cast::<u8>(),
-                    output_address,
-                    required_bytes,
-                );
+    env.with_env(|env| -> Result<jint, EngineError> {
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            let segment_float_count = segments.len(env)?;
+            let path_count = path_starts.len(env)?;
+            let path_end_count = path_ends_exclusive.len(env)?;
+            let filament_color_count = filament_colors.len(env)?;
+            if segment_float_count > MAX_PREVIEW_SEGMENTS * TOOLPATH_SEGMENT_FLOATS
+                || path_count > MAX_PREVIEW_SEGMENTS
+                || path_end_count != path_count
+                || filament_color_count != TOOLPATH_TOOL_COUNT
+            {
+                return Err(EngineError::Parse(
+                    "Toolpath JNI payload exceeds its bound".to_owned(),
+                ));
             }
-        }
-        Ok::<jint, EngineError>((payload.len() / PACKED_TOOLPATH_FLOATS) as jint)
-    }))
-    .ok()
-    .and_then(Result::ok)
-    .unwrap_or(-1)
+            let mut segment_values = vec![0.0f32; segment_float_count];
+            let mut path_start_values = vec![0i32; path_count];
+            let mut path_end_values = vec![0i32; path_count];
+            let mut filament_color_values = vec![0i32; filament_color_count];
+            segments.get_region(env, 0, &mut segment_values)?;
+            path_starts.get_region(env, 0, &mut path_start_values)?;
+            path_ends_exclusive.get_region(env, 0, &mut path_end_values)?;
+            filament_colors.get_region(env, 0, &mut filament_color_values)?;
+            let payload = pack_toolpath_geometry(ToolpathPackingRequest {
+                segments: &segment_values,
+                path_starts: &path_start_values,
+                path_ends_exclusive: &path_end_values,
+                bed_origin_x,
+                bed_origin_y,
+                min_z_mm,
+                max_z_mm,
+                opacity,
+                depth_contrast,
+                filament_colors: &filament_color_values,
+                color_by_filament,
+                reverse_for_early_z,
+                render_as_lines,
+            })?;
+            let required_bytes = payload
+                .len()
+                .checked_mul(std::mem::size_of::<f32>())
+                .ok_or_else(|| EngineError::Parse("Toolpath output size overflow".to_owned()))?;
+            let output_capacity = env.get_direct_buffer_capacity(&output)?;
+            if output_capacity < required_bytes {
+                return Err(EngineError::Parse(
+                    "Toolpath direct buffer is too small".to_owned(),
+                ));
+            }
+            let output_address = env.get_direct_buffer_address(&output)?;
+            if required_bytes > 0 {
+                // SAFETY: `output_address` belongs to the direct ByteBuffer retained by this JNI
+                // call, JNI reports at least `required_bytes` capacity above, the source Vec has
+                // exactly that many initialized bytes, and the two allocations cannot overlap.
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        payload.as_ptr().cast::<u8>(),
+                        output_address,
+                        required_bytes,
+                    );
+                }
+            }
+            Ok::<jint, EngineError>((payload.len() / PACKED_TOOLPATH_FLOATS) as jint)
+        }))
+        .ok()
+        .and_then(Result::ok)
+        .unwrap_or(-1);
+        Ok(result)
+    })
+    .resolve::<LogErrorAndDefault>()
 }
 
 #[cfg(test)]
