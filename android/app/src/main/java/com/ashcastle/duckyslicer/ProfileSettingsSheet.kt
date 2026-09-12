@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
@@ -9041,7 +9043,6 @@ private fun <T> ProfileChooserSheet(
                 .fillMaxWidth()
                 .height(sheetHeight)
                 .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -9052,6 +9053,7 @@ private fun <T> ProfileChooserSheet(
                 fontWeight = FontWeight.Bold,
             )
             SearchableGroupedProfileChoices(
+                modifier = Modifier.weight(1f),
                 entries = entries,
                 selected = selected,
                 recentIds = recentIds,
@@ -9298,6 +9300,7 @@ internal fun <T> SearchableGroupedProfileChoices(
     onSelected: (T) -> Unit,
     onDelete: ((T) -> Unit)? = null,
     onRename: ((T) -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
     val myProfiles = stringResource(R.string.my_profiles)
     val otherProfiles = stringResource(R.string.other_profiles)
@@ -9317,12 +9320,11 @@ internal fun <T> SearchableGroupedProfileChoices(
         mutableStateOf(setOf(recentProfilesKey, selectedGroupKey))
     }
     val normalizedQuery = query.trim().lowercase(Locale.ROOT)
-    val matchingEntries = if (normalizedQuery.isBlank()) {
-        uniqueEntries
-    } else {
-        uniqueEntries.filter { entry ->
-            searchTerms(entry).any { value -> value.lowercase(Locale.ROOT).contains(normalizedQuery) }
-        }
+    val searchIndex = remember(uniqueEntries, searchTerms) {
+        ProfileSearchIndex(uniqueEntries, searchTerms)
+    }
+    val matchingEntries = remember(searchIndex, normalizedQuery) {
+        searchIndex.matching(normalizedQuery)
     }
     val groupedProfiles = matchingEntries
         .groupBy { entry ->
@@ -9356,49 +9358,57 @@ internal fun <T> SearchableGroupedProfileChoices(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    if (groups.isEmpty()) {
-        Text(
-            stringResource(R.string.no_profiles_found),
-            color = Color(0xFFC8C9C2),
-            modifier = Modifier.padding(vertical = 8.dp),
-        )
-    } else {
-        groups.forEach { group ->
-            val expanded = normalizedQuery.isNotBlank() || group.key in expandedGroups
-            val groupState = stringResource(
-                if (expanded) R.string.expanded_state else R.string.collapsed_state,
-            )
-            Column(Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .clickable(
-                            enabled = normalizedQuery.isBlank(),
-                            role = Role.Button,
-                        ) {
-                            expandedGroups = if (expanded) {
-                                expandedGroups - group.key
-                            } else {
-                                expandedGroups + group.key
+    LazyColumn(modifier = modifier.fillMaxWidth()) {
+        if (groups.isEmpty()) {
+            item(contentType = "empty") {
+                Text(
+                    stringResource(R.string.no_profiles_found),
+                    color = Color(0xFFC8C9C2),
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
+        } else {
+            groups.forEach { group ->
+                val expanded = normalizedQuery.isNotBlank() || group.key in expandedGroups
+                item(key = "header:${group.key}", contentType = "header") {
+                    val groupState = stringResource(
+                        if (expanded) R.string.expanded_state else R.string.collapsed_state,
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clickable(
+                                enabled = normalizedQuery.isBlank(),
+                                role = Role.Button,
+                            ) {
+                                expandedGroups = if (expanded) {
+                                    expandedGroups - group.key
+                                } else {
+                                    expandedGroups + group.key
+                                }
                             }
-                        }
-                        .semantics { stateDescription = groupState }
-                        .padding(vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        if (expanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
-                        contentDescription = null,
-                    )
-                    Text(
-                        "${group.title} · ${group.entries.size}",
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(start = 6.dp),
-                    )
+                            .semantics { stateDescription = groupState }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            if (expanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
+                            contentDescription = null,
+                        )
+                        Text(
+                            "${group.title} · ${group.entries.size}",
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(start = 6.dp),
+                        )
+                    }
                 }
                 if (expanded) {
-                    group.entries.forEach { entry ->
+                    items(
+                        items = group.entries,
+                        key = { entry -> "profile:${group.key}:${id(entry)}" },
+                        contentType = { "profile" },
+                    ) { entry ->
                         val selectedEntry = entry == selected
                         Row(
                             modifier = Modifier
@@ -9453,7 +9463,9 @@ internal fun <T> SearchableGroupedProfileChoices(
                         }
                     }
                 }
-                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                item(key = "divider:${group.key}", contentType = "divider") {
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                }
             }
         }
     }

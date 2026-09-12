@@ -3265,7 +3265,6 @@ private fun FilamentAssignmentSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 680.dp)
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -3276,6 +3275,7 @@ private fun FilamentAssignmentSheet(
                 style = MaterialTheme.typography.titleLarge,
             )
             SearchableGroupedProfileChoices(
+                modifier = Modifier.weight(1f),
                 entries = profiles,
                 selected = selected,
                 recentIds = recentIds,
