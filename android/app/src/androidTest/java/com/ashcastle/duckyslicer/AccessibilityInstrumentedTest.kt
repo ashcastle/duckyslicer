@@ -1158,6 +1158,35 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun closingProfileEditorPreservesUnappliedChanges() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val slicing = context.getString(R.string.slicing_profile)
+        val notes = context.getString(R.string.configuration_notes)
+        val search = context.getString(R.string.search_settings)
+        val close = context.getString(R.string.close)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
+            assertTrue(waitForNode(slicing) { it.isClickable }
+                .performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            replaceEditableText(search, notes)
+            val field = scrollUntilNode(notes, scrollAnchorLabel = search) {
+                it.isEditable && !it.effectiveLabel().contains(search)
+            }
+            assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "Retain my draft")
+            }))
+            waitForNode("Retain my draft") { it.isEditable }
+            clickNamedAction(close)
+            assertTrue(waitForNode(slicing) { it.isClickable }
+                .performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            replaceEditableText(search, notes)
+            scrollUntilNode(notes, scrollAnchorLabel = search) {
+                it.isEditable && !it.effectiveLabel().contains(search)
+            }
+            waitForNode("Retain my draft") { it.isEditable && it.text?.toString() == "Retain my draft" }
+        }
+    }
+
+    @Test
     fun collapsedWorkspaceProfilesHideAllCurrentProfileSummaries() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val profiles = context.getString(R.string.profiles)

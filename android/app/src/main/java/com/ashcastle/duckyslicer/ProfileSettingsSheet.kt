@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -75,7 +76,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import java.util.Locale
 
-private enum class ProfileSettingsKind {
+internal enum class ProfileSettingsKind {
     PRINTER,
     FILAMENT,
     SLICING,
@@ -244,10 +245,23 @@ internal data class ProfileEditSession(
     fun applied(): ProfileEditSession = copy(opening = working)
 }
 
-private data class ProfileEditorState(
+internal data class ProfileEditorState(
     val kind: ProfileSettingsKind,
     val session: ProfileEditSession,
 )
+
+internal class ProfileEditorDraft {
+    var editor by mutableStateOf<ProfileEditorState?>(null)
+    var visible by mutableStateOf(false)
+
+    fun open(kind: ProfileSettingsKind, options: SliceOptions) {
+        val retained = editor?.session?.takeIf { it.isDirty }
+        editor = ProfileEditorState(kind, retained ?: ProfileEditSession(options))
+        visible = true
+    }
+
+    fun dismiss() { visible = false }
+}
 
 internal enum class SlicingSettingsSection(val titleResource: Int) {
     QUALITY(R.string.quality),
@@ -278,11 +292,12 @@ internal fun ProfileSettings(
     onDeleteFilament: (String) -> Unit,
     onDeleteSlicing: (String) -> Unit,
 ) {
-    var editor by remember { mutableStateOf<ProfileEditorState?>(null) }
+    val editorModel = remember { ProfileEditorDraft() }
+    var editor by editorModel::editor
     var expanded by rememberSaveable { mutableStateOf(true) }
 
     fun open(kind: ProfileSettingsKind) {
-        editor = ProfileEditorState(kind, ProfileEditSession(options))
+        editorModel.open(kind, options)
     }
 
     fun updateEditor(options: SliceOptions) {
@@ -298,6 +313,11 @@ internal fun ProfileSettings(
             onOptionsChanged(it.session.working)
             it.copy(session = it.session.applied())
         }
+    }
+
+    fun acceptEditor(staged: SliceOptions) {
+        onOptionsChanged(staged)
+        editor = editor?.let { it.copy(session = ProfileEditSession(staged)) }
     }
 
     val profileState = stringResource(
@@ -387,7 +407,7 @@ internal fun ProfileSettings(
         )
     }
 
-    val activeEditor = editor
+    val activeEditor = editor.takeIf { editorModel.visible }
     when (activeEditor?.kind) {
         ProfileSettingsKind.PRINTER -> PrinterSettingsSheet(
             options = activeEditor.session.working,
@@ -398,11 +418,11 @@ internal fun ProfileSettings(
             },
             onOptionsChanged = ::updateEditor,
             onSave = { name, staged ->
-                onOptionsChanged(staged)
+                acceptEditor(staged)
                 onSavePrinter(name, staged)
             },
             onUpdate = { staged ->
-                onOptionsChanged(staged)
+                acceptEditor(staged)
                 onUpdatePrinter(staged.printerProfile.id, staged)
             },
             onRename = { profile, name ->
@@ -412,7 +432,7 @@ internal fun ProfileSettings(
             dirty = activeEditor.session.isDirty,
             onRevert = ::revertEditor,
             onApply = ::applyEditor,
-            onDismiss = { editor = null },
+            onDismiss = editorModel::dismiss,
         )
 
         ProfileSettingsKind.FILAMENT -> FilamentSettingsSheet(
@@ -427,11 +447,11 @@ internal fun ProfileSettings(
             },
             onOptionsChanged = ::updateEditor,
             onSave = { name, staged, slot ->
-                onOptionsChanged(staged)
+                acceptEditor(staged)
                 onSaveFilament(name, staged, slot)
             },
             onUpdate = { staged, slot ->
-                onOptionsChanged(staged)
+                acceptEditor(staged)
                 onUpdateFilament(
                     staged.resolvedFilamentSlots()[slot].id,
                     staged,
@@ -445,7 +465,7 @@ internal fun ProfileSettings(
             dirty = activeEditor.session.isDirty,
             onRevert = ::revertEditor,
             onApply = ::applyEditor,
-            onDismiss = { editor = null },
+            onDismiss = editorModel::dismiss,
         )
 
         ProfileSettingsKind.SLICING -> SlicingSettingsSheet(
@@ -461,11 +481,11 @@ internal fun ProfileSettings(
             },
             onOptionsChanged = ::updateEditor,
             onSave = { name, staged ->
-                onOptionsChanged(staged)
+                acceptEditor(staged)
                 onSaveSlicing(name, staged)
             },
             onUpdate = { staged ->
-                onOptionsChanged(staged)
+                acceptEditor(staged)
                 onUpdateSlicing(staged.quality.id, staged)
             },
             onRename = { profile, name ->
@@ -475,7 +495,7 @@ internal fun ProfileSettings(
             dirty = activeEditor.session.isDirty,
             onRevert = ::revertEditor,
             onApply = ::applyEditor,
-            onDismiss = { editor = null },
+            onDismiss = editorModel::dismiss,
         )
 
         null -> Unit
@@ -7981,7 +8001,7 @@ private fun GcodeThumbnailSetting(
             }
         },
         label = { Text(label) },
-        placeholder = { Text("48x48/PNG,300x300/PNG") },
+        placeholder = { Text("32x32/PNG,300x300/PNG") },
         supportingText = {
             Text(
                 stringResource(
@@ -9177,12 +9197,17 @@ private fun SettingsSheet(
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(
-                    title,
-                    modifier = Modifier.semantics { heading() },
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        title,
+                        modifier = Modifier.weight(1f).semantics { heading() },
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
+                    }
+                }
                 header()
                 OutlinedTextField(
                     value = settingQuery,
@@ -9196,14 +9221,6 @@ private fun SettingsSheet(
                     LocalSettingsQuery provides settingQuery.trim().lowercase(Locale.ROOT),
                 ) {
                     content()
-                }
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp),
-                ) {
-                    Text(stringResource(R.string.done))
                 }
             }
             if (dirty) {

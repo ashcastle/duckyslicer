@@ -2580,6 +2580,9 @@ data class SliceOptions(
             native.adaptiveBedMeshMargin = printerProfile.adaptiveBedMeshMargin
             native.gcodeThumbnails = canonicalGcodeThumbnailDefinitions(printerProfile.gcodeThumbnails)
                 ?: printerProfile.gcodeThumbnails
+            if (native.gcodeThumbnails.isBlank()) {
+                native.gcodeThumbnails = "32x32/PNG,300x300/PNG"
+            }
             native.printerStructure = printerStructure
             native.skirtType = quality.skirtType
             native.singleLoopDraftShield = quality.singleLoopDraftShield

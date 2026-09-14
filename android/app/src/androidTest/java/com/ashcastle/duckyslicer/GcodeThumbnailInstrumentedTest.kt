@@ -6,7 +6,6 @@ import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -17,7 +16,7 @@ import java.nio.ByteOrder
 @RunWith(AndroidJUnit4::class)
 class GcodeThumbnailInstrumentedTest {
     @Test
-    fun configuredPngThumbnailIsEmbeddedAndEmptyConfigurationEmitsNoBlock() {
+    fun configuredPngThumbnailAndAutomaticDefaultsAreEmbedded() {
         val model = fixtureModel()
         val configured = PrinterProfile.CUSTOM_CARTESIAN.copy(
             gcodeThumbnails = "64x48/PNG",
@@ -26,7 +25,7 @@ class GcodeThumbnailInstrumentedTest {
             model,
             SliceOptions().selectPrinter(configured),
         )
-        val withoutThumbnail = OnDeviceSlicer.slice(
+        val automaticThumbnail = OnDeviceSlicer.slice(
             model,
             SliceOptions().selectPrinter(configured.copy(gcodeThumbnails = "")),
         )
@@ -72,12 +71,12 @@ class GcodeThumbnailInstrumentedTest {
             assertTrue(gcode.contains("; THUMBNAIL_BLOCK_START"))
             assertTrue(gcode.contains("; THUMBNAIL_BLOCK_END"))
 
-            val emptyGcode = withoutThumbnail.output.readText()
-            assertFalse(emptyGcode.contains("; THUMBNAIL_BLOCK_START"))
-            assertFalse(emptyGcode.contains("; thumbnail begin"))
+            val automaticGcode = automaticThumbnail.output.readText()
+            assertTrue(automaticGcode.contains("; thumbnail begin 32x32 "))
+            assertTrue(automaticGcode.contains("; thumbnail begin 300x300 "))
         } finally {
             withThumbnail.output.delete()
-            withoutThumbnail.output.delete()
+            automaticThumbnail.output.delete()
         }
     }
 

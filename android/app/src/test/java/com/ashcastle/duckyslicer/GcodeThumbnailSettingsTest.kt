@@ -14,6 +14,13 @@ class GcodeThumbnailSettingsTest {
     )
 
     @Test
+    fun emptyThumbnailSettingUsesCompatiblePngDefaults() {
+        val options = SliceOptions().selectPrinter(printer.copy(gcodeThumbnails = ""))
+        assertEquals("32x32/PNG,300x300/PNG", options.toNativeConfig().gcodeThumbnails)
+        assertEquals("", options.printerProfile.gcodeThumbnails)
+    }
+
+    @Test
     fun validationMatchesOrcaThumbnailBounds() {
         assertTrue(gcodeThumbnailDefinitionsAreValid(""))
         assertTrue(gcodeThumbnailDefinitionsAreValid(definitions))

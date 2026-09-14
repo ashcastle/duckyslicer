@@ -7,6 +7,32 @@ import org.junit.Test
 
 class ProfileEditSessionTest {
     @Test
+    fun dismissAndReopenRetainsDraftAcrossProfileKinds() {
+        val options = SliceOptions()
+        val model = ProfileEditorDraft()
+        model.open(ProfileSettingsKind.SLICING, options)
+        val draft = options.copy(fillDensity = 0.35f)
+        model.editor = model.editor!!.copy(session = model.editor!!.session.update(draft))
+        model.dismiss()
+        assertFalse(model.visible)
+        model.open(ProfileSettingsKind.FILAMENT, options)
+        assertTrue(model.visible)
+        assertEquals(draft, model.editor!!.session.working)
+        assertEquals(options, model.editor!!.session.revert().working)
+    }
+
+    @Test
+    fun cleanDraftReopensWithLatestAppliedOptions() {
+        val model = ProfileEditorDraft()
+        model.open(ProfileSettingsKind.SLICING, SliceOptions())
+        model.dismiss()
+        val latest = SliceOptions().copy(fillDensity = 0.45f)
+        model.open(ProfileSettingsKind.SLICING, latest)
+        assertEquals(latest, model.editor!!.session.working)
+        assertFalse(model.editor!!.session.isDirty)
+    }
+
+    @Test
     fun changesStayStagedUntilApplied() {
         val opening = SliceOptions()
         val changed = opening.copy(layerHeight = 0.24f)
