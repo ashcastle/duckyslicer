@@ -1,0 +1,29 @@
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -1532,17 +1532,10 @@
+     double nd = config.nozzle_diameter;
+-    const double outer_wall_width = config.outer_wall_line_width > 0.0f
+-        ? config.outer_wall_line_width : nd * 1.05;
++    const double outer_wall_width = config.outer_wall_line_width;
+-    const double inner_wall_width = config.inner_wall_line_width > 0.0f
+-        ? config.inner_wall_line_width : nd * 1.125;
++    const double inner_wall_width = config.inner_wall_line_width;
+-    const double top_surface_width = config.top_surface_line_width > 0.0f
+-        ? config.top_surface_line_width : nd * 1.05;
++    const double top_surface_width = config.top_surface_line_width;
+-    const double sparse_infill_width = config.sparse_infill_line_width > 0.0f
+-        ? config.sparse_infill_line_width : nd * 1.125;
++    const double sparse_infill_width = config.sparse_infill_line_width;
+-    const double internal_solid_infill_width = config.internal_solid_infill_line_width > 0.0f
+-        ? config.internal_solid_infill_line_width : nd * 1.125;
++    const double internal_solid_infill_width = config.internal_solid_infill_line_width;
+-    const double support_width = config.support_line_width > 0.0f
+-        ? config.support_line_width : nd * 1.05;
++    const double support_width = config.support_line_width;
+-    const double initial_layer_width = config.initial_layer_line_width > 0.0f
+-        ? config.initial_layer_line_width : nd * 1.25;
++    const double initial_layer_width = config.initial_layer_line_width;
+-    dpc.set_key_value("line_width",              new Slic3r::ConfigOptionFloatOrPercent(nd * 1.125, false));
++    dpc.set_key_value("line_width",              new Slic3r::ConfigOptionFloatOrPercent(0., false));
+     dpc.set_key_value("outer_wall_line_width",   new Slic3r::ConfigOptionFloatOrPercent(outer_wall_width, false));

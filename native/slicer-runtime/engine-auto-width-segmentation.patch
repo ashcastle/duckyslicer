@@ -1,0 +1,10 @@
+diff --git a/src/libslic3r/MultiMaterialSegmentation.cpp b/src/libslic3r/MultiMaterialSegmentation.cpp
+--- a/src/libslic3r/MultiMaterialSegmentation.cpp
++++ b/src/libslic3r/MultiMaterialSegmentation.cpp
+@@ -1350,4 +1350,6 @@
+                 const double nozzle_diameter = print_object.print()->config().nozzle_diameter.get_at(0);
+                 double outer_wall_line_width = config.get_abs_value("outer_wall_line_width", nozzle_diameter);
++                if (outer_wall_line_width == 0.)
++                    outer_wall_line_width = region->flow(frExternalPerimeter).width();
+                 out.extrusion_width     = std::max<float>(out.extrusion_width, outer_wall_line_width);
+                 out.top_shell_layers    = std::max<int>(out.top_shell_layers, config.top_shell_layers);

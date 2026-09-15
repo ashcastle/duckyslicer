@@ -2,6 +2,10 @@ package com.ashcastle.duckyslicer
 
 import android.net.Uri
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -75,6 +79,8 @@ import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -475,6 +481,7 @@ enum class WorkspaceTab {
 
 @Composable
 internal fun WorkspaceScreen(
+    draftScope: String = "",
     selectedTab: WorkspaceTab,
     projectPlates: List<ProjectPlate>,
     selectedPlateId: String,
@@ -581,6 +588,7 @@ internal fun WorkspaceScreen(
     onSeamPaintCommitted: (String, String, SeamPaint, OrcaFacetAnnotation) -> Unit,
     onBrimPointsChanged: (String, BrimPoints) -> Unit,
     onMultiColorPaintPreview: (String, String, List<FacetPaintTarget>, Int?) -> Unit,
+    onConnectedColorFill: (String, String, Int, Int?, Float) -> Unit,
     onMultiColorPaintCommitted: (String, String, MultiColorPaint, OrcaFacetAnnotation) -> Unit,
     onVariableLayerHeightsChanged: (VariableLayerHeights) -> Unit,
     onObjectProcessOverridesChanged: (ObjectProcessOverrides) -> Unit,
@@ -594,6 +602,7 @@ internal fun WorkspaceScreen(
     onCancelGcodeExport: () -> Unit,
     onSliceOptionsChanged: (SliceOptions) -> Unit,
     onSavePrinterProfile: (String, SliceOptions) -> Unit,
+    completedProfileSave: ProfileEditorSaveApplied? = null,
     onSaveFilamentProfile: (String, SliceOptions, Int) -> Unit,
     onSaveSlicingProfile: (String, SliceOptions) -> Unit,
     onUpdatePrinterProfile: (String, SliceOptions) -> Unit,
@@ -669,7 +678,10 @@ internal fun WorkspaceScreen(
     ) ||
         splitting || cutting || simplifying
     val tabletLayout = useWorkspaceNavigationRail(maxWidth.value, maxHeight.value)
-    val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
+    val dockedLayout = maxWidth >= 720.dp
+    var dockPanelExpanded by rememberSaveable { mutableStateOf(true) }
+    var dockPanelWidthDp by rememberSaveable { mutableFloatStateOf(360f) }
+    val panelAlignment = if (dockedLayout) Alignment.TopStart else Alignment.BottomCenter
     var showModelTools by remember { mutableStateOf(false) }
     var transformGizmoMode by remember(selectedObjectId) {
         mutableStateOf(TransformGizmoMode.MOVE)
@@ -680,7 +692,9 @@ internal fun WorkspaceScreen(
     var showSplitPartsTool by remember { mutableStateOf(false) }
     var showVariableLayerHeightTool by remember { mutableStateOf(false) }
     var showObjectProcessSettings by remember { mutableStateOf(false) }
-    var showHeightRangeModifiers by remember { mutableStateOf(false) }
+    var showHeightRangeModifiers by rememberSaveable { mutableStateOf(false) }
+    val heightRangeDrafts = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
+    var heightRangeOwner by rememberSaveable { mutableStateOf("$draftScope/$selectedPlateId/$selectedObjectId") }
     var showPrimitivePicker by remember { mutableStateOf(false) }
     var showAuxiliaryVolumes by remember { mutableStateOf(false) }
     var showAuxiliaryPrimitivePicker by remember { mutableStateOf(false) }
@@ -692,8 +706,11 @@ internal fun WorkspaceScreen(
     var supportPaintTool by remember { mutableStateOf(SupportPaintTool.ENFORCE) }
     var seamPainting by remember { mutableStateOf(false) }
     var seamPaintTool by remember { mutableStateOf(SeamPaintTool.ENFORCE) }
-    var multiColorPainting by remember { mutableStateOf(false) }
-    var multiColorPaintSlot by remember { mutableStateOf<Int?>(1) }
+    var multiColorPainting by rememberSaveable { mutableStateOf(false) }
+    var multiColorPaintSlot by rememberSaveable { mutableStateOf<Int?>(1) }
+    var multiColorWholeFacet by rememberSaveable { mutableStateOf(false) }
+    var multiColorConnectedFill by rememberSaveable { mutableStateOf(false) }
+    var multiColorFillAngle by rememberSaveable { mutableFloatStateOf(30f) }
     var facetBrushRadiusDp by rememberSaveable {
         mutableFloatStateOf(DEFAULT_FACET_BRUSH_RADIUS_DP)
     }
@@ -750,12 +767,16 @@ internal fun WorkspaceScreen(
         cameraRequest = WorkspaceCameraRequest(cameraRequestSequence, preset)
     }
 
-    LaunchedEffect(selectedPlateId, selectedObjectId, selectedTab) {
+    LaunchedEffect(draftScope, selectedPlateId, selectedObjectId, selectedTab) {
         plateRemovalRequested = false
         showAuxiliaryVolumes = false
         showAuxiliaryPrimitivePicker = false
         editingAuxiliaryVolumeId = null
-        showHeightRangeModifiers = false
+        val currentHeightOwner = "$draftScope/$selectedPlateId/$selectedObjectId"
+        if (heightRangeOwner != currentHeightOwner || selectedTab != WorkspaceTab.SLICE) {
+            showHeightRangeModifiers = false
+            heightRangeOwner = currentHeightOwner
+        }
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) layingOnFace = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) {
             measuring = false
@@ -794,10 +815,20 @@ internal fun WorkspaceScreen(
     ) { padding ->
         Row(Modifier.fillMaxSize().padding(padding)) {
             if (tabletLayout) WorkspaceNavigationRail(selectedTab = selectedTab, onSelected = onTabSelected)
-            BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxSize()) {
+            BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxSize().clipToBounds()) {
                 // Measure below Scaffold insets and navigation. This keeps the menu and
                 // export actions reachable when large text makes a bottom sheet fill its height.
                 val panelMaxHeight = workspacePanelMaxHeightDp(maxHeight.value).dp
+                val maximumDockWidth = (maxWidth.value - 320f).coerceIn(280f, 560f)
+                val expandedDockWidth = dockPanelWidthDp.coerceIn(280f, maximumDockWidth).dp
+                val panelDensity = LocalDensity.current.density
+                val dockWidth = if (dockedLayout && dockPanelExpanded) expandedDockWidth else 0.dp
+                val settingsPanelModifier = if (dockedLayout) {
+                    Modifier.align(panelAlignment).width(expandedDockWidth).fillMaxHeight()
+                        .offset(x = if (dockPanelExpanded) 0.dp else -expandedDockWidth)
+                        .then(if (dockPanelExpanded) Modifier else Modifier.clearAndSetSemantics { })
+                } else Modifier.align(panelAlignment).heightIn(max = panelMaxHeight)
+                Box(Modifier.fillMaxSize().padding(start = dockWidth)) {
                 BedScene(
                     projectObjects = projectObjects,
                     selectedObjectId = selectedObjectId,
@@ -832,6 +863,9 @@ internal fun WorkspaceScreen(
                     multiColorPaintObjectId = selectedObjectId.takeIf { multiColorPainting },
                     multiColorPaintSlot = multiColorPaintSlot,
                     facetBrushRadiusDp = facetBrushRadiusDp,
+                    multiColorWholeFacet = multiColorWholeFacet,
+                    multiColorConnectedFill = multiColorConnectedFill,
+                    multiColorFillAngle = multiColorFillAngle,
                     brimEditObjectId = selectedObjectId.takeIf { brimEditing },
                     brimPoints = brimDraft,
                     selectedBrimPointIndex = selectedBrimPointIndex,
@@ -870,6 +904,7 @@ internal fun WorkspaceScreen(
                         brimEditMessage = stringResourceBrimPlacementHint
                     },
                     onMultiColorPaintPreview = onMultiColorPaintPreview,
+                    onConnectedColorFill = onConnectedColorFill,
                     onMultiColorPaintCommitted = onMultiColorPaintCommitted,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -1056,6 +1091,13 @@ internal fun WorkspaceScreen(
 
             if (selectedObject != null && selectedTab == WorkspaceTab.SLICE && multiColorPainting) {
                 MultiColorPaintPalette(
+                    onHeightRanges = { multiColorPainting = false; showHeightRangeModifiers = true },
+                    wholeFacet = multiColorWholeFacet,
+                    onWholeFacetChanged = { multiColorWholeFacet = it; multiColorConnectedFill = false },
+                    connectedFill = multiColorConnectedFill,
+                    onConnectedFillSelected = { multiColorConnectedFill = true; multiColorWholeFacet = false },
+                    fillAngle = multiColorFillAngle,
+                    onFillAngleChanged = { multiColorFillAngle = it },
                     filaments = availableFilaments,
                     filamentColors = filamentColors,
                     selectedSlot = multiColorPaintSlot,
@@ -1144,8 +1186,11 @@ internal fun WorkspaceScreen(
                 }
             }
 
+                }
+            androidx.compose.runtime.CompositionLocalProvider(LocalDockedProfileEditor provides dockedLayout) {
             when (selectedTab) {
                 WorkspaceTab.SLICE -> SliceSheet(
+                    draftScope = "$draftScope/$selectedPlateId",
                     modelDimensions = modelDimensions,
                     options = sliceOptions,
                     catalog = profileCatalog,
@@ -1175,6 +1220,7 @@ internal fun WorkspaceScreen(
                     onCancelProjectEdit = onCancelProjectEdit,
                     onOptionsChanged = onSliceOptionsChanged,
                     onSavePrinter = onSavePrinterProfile,
+                    completedSave = completedProfileSave,
                     onSaveFilament = onSaveFilamentProfile,
                     onSaveSlicing = onSaveSlicingProfile,
                     onUpdatePrinter = onUpdatePrinterProfile,
@@ -1186,7 +1232,7 @@ internal fun WorkspaceScreen(
                     onDeletePrinter = onDeletePrinterProfile,
                     onDeleteFilament = onDeleteFilamentProfile,
                     onDeleteSlicing = onDeleteSlicingProfile,
-                    modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
+                    modifier = settingsPanelModifier,
                 )
 
                 WorkspaceTab.PREVIEW -> PreviewSheet(
@@ -1240,7 +1286,7 @@ internal fun WorkspaceScreen(
                     onRemoveLayerCustomGCode = onRemoveLayerCustomGCode,
                     onGoToSlice = { onTabSelected(WorkspaceTab.SLICE) },
                     onOpenGcode = importedGcode.openPicker,
-                    modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
+                    modifier = settingsPanelModifier,
                 )
 
                 WorkspaceTab.DEVICE -> DeviceSheet(
@@ -1267,7 +1313,7 @@ internal fun WorkspaceScreen(
                     onPause = onRemotePause,
                     onResume = onRemoteResume,
                     onCancel = onRemoteCancel,
-                    modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
+                    modifier = settingsPanelModifier,
                 )
 
                 WorkspaceTab.PROJECT -> ProjectSheet(
@@ -1303,7 +1349,7 @@ internal fun WorkspaceScreen(
                     onShareProject = onShareProject,
                     onCancelProjectImport = onCancelProjectImport,
                     onCancelProjectExport = onCancelProjectExport,
-                    modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
+                    modifier = settingsPanelModifier,
                 )
 
                 WorkspaceTab.SETTINGS -> AppSettingsSheet(
@@ -1313,8 +1359,57 @@ internal fun WorkspaceScreen(
                     onSettingsChanged = onAppSettingsChanged,
                     onSupportReportExport = onSupportReportExport,
                     onCancelSupportReportExport = onCancelSupportReportExport,
-                    modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
+                    modifier = settingsPanelModifier,
                 )
+            }
+            }
+            if (dockedLayout) {
+                if (dockPanelExpanded) {
+                    val resizeLabel = stringResource(R.string.resize_settings_panel)
+                    Box(
+                        Modifier.align(Alignment.CenterStart).offset(x = dockWidth - 12.dp)
+                            .width(24.dp).fillMaxHeight()
+                            .draggable(
+                                orientation = Orientation.Horizontal,
+                                state = rememberDraggableState { delta ->
+                                    dockPanelWidthDp = (dockPanelWidthDp.coerceIn(280f, maximumDockWidth) + delta / panelDensity)
+                                        .coerceIn(280f, maximumDockWidth)
+                                },
+                            )
+                            .semantics {
+                                contentDescription = resizeLabel
+                                progressBarRangeInfo = ProgressBarRangeInfo(
+                                    expandedDockWidth.value, 280f..maximumDockWidth,
+                                )
+                                setProgress { requested ->
+                                    if (!requested.isFinite()) false else {
+                                        dockPanelWidthDp = requested.coerceIn(280f, maximumDockWidth)
+                                        true
+                                    }
+                                }
+                            }.focusable(),
+                    ) {
+                        Surface(
+                            color = WorkspaceYellow.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(2.dp),
+                            modifier = Modifier.align(Alignment.Center).width(3.dp).height(72.dp),
+                        ) { }
+                    }
+                }
+                IconButton(
+                    onClick = { dockPanelExpanded = !dockPanelExpanded },
+                    modifier = Modifier.align(Alignment.CenterStart).offset(x = dockWidth)
+                        .size(48.dp),
+                ) {
+                    Icon(
+                        if (dockPanelExpanded) Icons.AutoMirrored.Filled.KeyboardArrowLeft
+                        else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = stringResource(
+                            if (dockPanelExpanded) R.string.hide_settings_panel else R.string.show_settings_panel,
+                        ),
+                        tint = WorkspaceYellow,
+                    )
+                }
             }
         }
     }
@@ -1516,17 +1611,21 @@ internal fun WorkspaceScreen(
         )
     }
     if (showHeightRangeModifiers && selectedObject != null) {
-        HeightRangeModifiersSheet(
-            current = selectedObject.heightRangeModifiers,
-            objectOverrides = selectedObject.processOverrides,
-            objectHeightMm = selectedObject.transform.placedHeight(selectedObject),
-            options = sliceOptions,
-            onApply = {
-                showHeightRangeModifiers = false
-                onHeightRangeModifiersChanged(it)
-            },
-            onDismiss = { showHeightRangeModifiers = false },
-        )
+        val editorKey = "$draftScope/$selectedPlateId/${selectedObject.id}/${selectedObject.heightRangeModifiers.toProjectJson()}"
+        heightRangeDrafts.SaveableStateProvider(editorKey) {
+            HeightRangeModifiersSheet(
+                current = selectedObject.heightRangeModifiers,
+                objectOverrides = selectedObject.processOverrides,
+                objectHeightMm = selectedObject.transform.placedHeight(selectedObject),
+                options = sliceOptions,
+                onApply = {
+                    showHeightRangeModifiers = false
+                    onHeightRangeModifiersChanged(it)
+                    heightRangeDrafts.removeState(editorKey)
+                },
+                onDismiss = { showHeightRangeModifiers = false },
+            )
+        }
     }
     if (showAuxiliaryVolumes && selectedObject != null) {
         AuxiliaryVolumesSheet(
@@ -1976,6 +2075,7 @@ internal fun AuxiliaryShapeSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = Color(0xFF282925),
         contentColor = Color(0xFFF4F4EE),
     ) {
@@ -4149,6 +4249,9 @@ private fun BedScene(
     multiColorPaintObjectId: String?,
     multiColorPaintSlot: Int?,
     facetBrushRadiusDp: Float,
+    multiColorWholeFacet: Boolean,
+    multiColorConnectedFill: Boolean,
+    multiColorFillAngle: Float,
     brimEditObjectId: String?,
     brimPoints: BrimPoints,
     selectedBrimPointIndex: Int?,
@@ -4167,6 +4270,7 @@ private fun BedScene(
     onBrimPointMoved: (Int, BrimPoint) -> Unit,
     onBrimPointInvalid: () -> Unit,
     onMultiColorPaintPreview: (String, String, List<FacetPaintTarget>, Int?) -> Unit,
+    onConnectedColorFill: (String, String, Int, Int?, Float) -> Unit,
     onMultiColorPaintCommitted: (String, String, MultiColorPaint, OrcaFacetAnnotation) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -4206,20 +4310,26 @@ private fun BedScene(
         )
         return
     }
-    var yaw by remember { mutableFloatStateOf(-45f) }
-    var pitch by remember { mutableFloatStateOf(55f) }
-    var zoom by remember { mutableFloatStateOf(1f) }
-    var pan by remember { mutableStateOf(Offset.Zero) }
+    var yaw by rememberSaveable { mutableFloatStateOf(-45f) }
+    var pitch by rememberSaveable { mutableFloatStateOf(55f) }
+    var zoom by rememberSaveable { mutableFloatStateOf(1f) }
+    var pan by rememberSaveable(stateSaver = androidx.compose.runtime.saveable.listSaver<Offset, Float>(
+        save = { listOf(it.x, it.y) },
+        restore = { Offset(it[0], it[1]) },
+    )) { mutableStateOf(Offset.Zero) }
+    var appliedCameraRequest by rememberSaveable { mutableStateOf<Long?>(null) }
     var interactionActive by remember { mutableStateOf(false) }
     var refinedPreview by remember { mutableStateOf(true) }
 
     LaunchedEffect(cameraRequest?.id) {
         val request = cameraRequest ?: return@LaunchedEffect
+        if (appliedCameraRequest == request.id) return@LaunchedEffect
         val pose = cameraPoseForPreset(request.preset)
         yaw = pose.yawDegrees
         pitch = pose.elevationDegrees
         zoom = pose.zoom
         pan = Offset(pose.panX, pose.panY)
+        appliedCameraRequest = request.id
     }
     val useDepthTestedPrepare = preview == null && projectObjects.isNotEmpty() &&
         depthPreviewSupported && prepareRendererRuntimeAvailable
@@ -4414,6 +4524,7 @@ private fun BedScene(
     val currentBrimPointMovedCallback by rememberUpdatedState(onBrimPointMoved)
     val currentBrimPointInvalidCallback by rememberUpdatedState(onBrimPointInvalid)
     val currentMultiColorPaintPreviewCallback by rememberUpdatedState(onMultiColorPaintPreview)
+    val currentConnectedColorFill by rememberUpdatedState(onConnectedColorFill)
     val currentMultiColorPaintCommitCallback by rememberUpdatedState(onMultiColorPaintCommitted)
     val effectiveBedPolygon = remember(bedPolygon, bedSizeX, bedSizeY) {
         bedPolygon.takeIf { bedPolygonIsValid(it, bedSizeX, bedSizeY) }
@@ -4532,6 +4643,9 @@ private fun BedScene(
             seamPaintState,
             multiColorPaintObjectId,
             multiColorPaintSlot,
+            multiColorWholeFacet,
+            multiColorConnectedFill,
+            multiColorFillAngle,
             brimEditObjectId,
             brimAddMode,
             useDepthTestedPrepare,
@@ -4565,7 +4679,9 @@ private fun BedScene(
                 val brushRadiusPx = facetBrushRadiusDp
                     .coerceIn(FACET_BRUSH_MIN_RADIUS_DP, FACET_BRUSH_MAX_RADIUS_DP)
                     .dp.toPx()
-                val brushSampleOffsets = facetBrushSampleOffsets(brushRadiusPx)
+                val wholeFacet = multiColorPaintingObject != null && multiColorWholeFacet
+                val brushSampleOffsets = if (wholeFacet) listOf(Offset.Zero)
+                    else facetBrushSampleOffsets(brushRadiusPx)
                 val brushSampleHitRadiusPx = max(
                     3.dp.toPx(),
                     brushRadiusPx * FACET_BRUSH_SAMPLE_HIT_RADIUS_RATIO,
@@ -4799,6 +4915,49 @@ private fun BedScene(
                     }
                     return@awaitEachGesture
                 }
+                if (multiColorPaintingObject != null && multiColorConnectedFill) {
+                    var movement = 0f
+                    var multiplePointers = false
+                    interactionActive = true
+                    try {
+                        do {
+                            val event = awaitPointerEvent()
+                            val pressed = event.changes.filter { it.pressed }
+                            if (pressed.size >= 2) {
+                                multiplePointers = true
+                                panAndZoomBy(event, size.width, size.height)
+                            } else if (pressed.size == 1) {
+                                val delta = pressed.first().position - pressed.first().previousPosition
+                                movement += delta.getDistance()
+                                orbitBy(delta, size.width, size.height)
+                            }
+                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+                        } while (event.changes.any { it.pressed })
+                    } finally {
+                        interactionActive = false
+                    }
+                    if (!multiplePointers && movement < 12f) {
+                        val placement = currentModelPlacements[multiColorPaintingObject.id]
+                        val hit = placement?.let {
+                            findPrepareFacetsAtScreenSamples(
+                                projectObject = multiColorPaintingObject,
+                                placement = it,
+                                viewport = paintViewport,
+                                centerX = down.position.x,
+                                centerY = down.position.y,
+                                samplePositions = listOf(down.position),
+                                touchRadiusPx = 3.dp.toPx(),
+                                selectableVolumeIds = paintableVolumeIds,
+                                pickingIndices = currentModelPickingIndices,
+                            ).firstOrNull()
+                        }
+                        if (hit != null) currentConnectedColorFill(
+                            multiColorPaintingObject.id, hit.triangle.volumeId,
+                            hit.triangle.sourceFacetIndex, multiColorPaintSlot, multiColorFillAngle,
+                        )
+                    }
+                    return@awaitEachGesture
+                }
                 val selectedManipulationObject = if (
                     objectManipulationEnabled && paintingObject == null
                 ) {
@@ -4906,7 +5065,9 @@ private fun BedScene(
                         }
                     }
                     if (paintedVolumeId != hit.volumeId) return null
-                    val target = facetPaintTarget(hit, position, brushRadiusPx)
+                    val target = if (wholeFacet) {
+                        FacetPaintTarget(hit.sourceFacetIndex, 1f, 0f, 0f, subdivisionDepth = 0)
+                    } else facetPaintTarget(hit, position, brushRadiusPx)
                     return target.takeIf(paintedTargets::add)
                 }
                 fun paintFootprintsAt(centers: List<Offset>) {
@@ -6611,6 +6772,13 @@ private fun SeamPaintPalette(
 
 @Composable
 private fun MultiColorPaintPalette(
+    onHeightRanges: () -> Unit,
+    wholeFacet: Boolean,
+    onWholeFacetChanged: (Boolean) -> Unit,
+    connectedFill: Boolean,
+    onConnectedFillSelected: () -> Unit,
+    fillAngle: Float,
+    onFillAngleChanged: (Float) -> Unit,
     filaments: List<FilamentProfile>,
     filamentColors: List<Int>,
     selectedSlot: Int?,
@@ -6689,9 +6857,48 @@ private fun MultiColorPaintPalette(
                     Text(stringResource(R.string.color_paint_erase))
                 }
             }
-            FacetBrushSizeControl(brushRadiusDp, onBrushRadiusChanged)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val toolColors = FilterChipDefaults.filterChipColors(
+                    labelColor = Color(0xFFF4F4EE),
+                    selectedContainerColor = WorkspaceYellow,
+                    selectedLabelColor = Color.Black,
+                )
+                FilterChip(
+                    selected = !wholeFacet && !connectedFill,
+                    colors = toolColors,
+                    onClick = { onWholeFacetChanged(false) },
+                    label = { Text(stringResource(R.string.paint_tool_brush)) },
+                )
+                FilterChip(
+                    selected = wholeFacet,
+                    colors = toolColors,
+                    onClick = { onWholeFacetChanged(true) },
+                    label = { Text(stringResource(R.string.paint_tool_triangle)) },
+                )
+                FilterChip(
+                    selected = connectedFill,
+                    colors = toolColors,
+                    onClick = onConnectedFillSelected,
+                    label = { Text(stringResource(R.string.paint_tool_connected)) },
+                )
+            }
+            TextButton(onClick = onHeightRanges) { Text(stringResource(R.string.height_range_modifiers), color = WorkspaceYellow) }
+            if (connectedFill) {
+                SettingSlider(
+                    label = stringResource(R.string.paint_fill_angle),
+                    valueText = "$fillAngle°",
+                    value = fillAngle,
+                    range = 0f..90f,
+                    steps = 89,
+                    onValueChange = onFillAngleChanged,
+                )
+            } else if (!wholeFacet) FacetBrushSizeControl(brushRadiusDp, onBrushRadiusChanged)
             Text(
-                stringResource(R.string.color_paint_hint),
+                stringResource(when {
+                    connectedFill -> R.string.paint_connected_hint
+                    wholeFacet -> R.string.paint_triangle_hint
+                    else -> R.string.color_paint_hint
+                }),
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                 color = Color(0xFFC8C9C2),
                 style = MaterialTheme.typography.bodySmall,
@@ -6894,6 +7101,7 @@ private fun ObjectToolRail(
 
 @Composable
 private fun SliceSheet(
+    draftScope: String,
     modelDimensions: List<Float>?,
     options: SliceOptions,
     catalog: ProfileCatalog,
@@ -6917,6 +7125,7 @@ private fun SliceSheet(
     onCancelProjectEdit: () -> Unit,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSavePrinter: (String, SliceOptions) -> Unit,
+    completedSave: ProfileEditorSaveApplied? = null,
     onSaveFilament: (String, SliceOptions, Int) -> Unit,
     onSaveSlicing: (String, SliceOptions) -> Unit,
     onUpdatePrinter: (String, SliceOptions) -> Unit,
@@ -6930,8 +7139,11 @@ private fun SliceSheet(
     onDeleteSlicing: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    WorkspaceCard(modifier) {
+    var profileEditorVisible by remember { mutableStateOf(false) }
+    val inlineEditing = LocalDockedProfileEditor.current && profileEditorVisible
+    WorkspaceCard(modifier, scrollable = !inlineEditing) {
         ProfileSettings(
+            draftScope = draftScope,
             options = options,
             catalog = catalog,
             bundledCatalogUnavailable = bundledCatalogUnavailable,
@@ -6939,6 +7151,8 @@ private fun SliceSheet(
             enabled = !profileBusy && !slicing && !importing && !previewLoading,
             onOptionsChanged = onOptionsChanged,
             onSavePrinter = onSavePrinter,
+            completedSave = completedSave,
+            onEditorVisibilityChanged = { profileEditorVisible = it },
             onSaveFilament = onSaveFilament,
             onSaveSlicing = onSaveSlicing,
             onUpdatePrinter = onUpdatePrinter,
@@ -6951,6 +7165,7 @@ private fun SliceSheet(
             onDeleteFilament = onDeleteFilament,
             onDeleteSlicing = onDeleteSlicing,
         )
+        if (inlineEditing) return@WorkspaceCard
         if (modelDimensions != null) {
             Text(
                 modelDimensions.joinToString(" × ") {
@@ -8534,10 +8749,12 @@ internal fun ProjectReplacementDialog(
 @Composable
 private fun WorkspaceCard(
     modifier: Modifier,
+    scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Card(
         modifier = modifier
+            .then(if (scrollable) Modifier else Modifier.fillMaxHeight())
             .padding(12.dp)
             .fillMaxWidth()
             .widthIn(max = 620.dp),
@@ -8550,7 +8767,7 @@ private fun WorkspaceCard(
         Column(
             modifier = Modifier
                 .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+                .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier.fillMaxHeight()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content,
         )

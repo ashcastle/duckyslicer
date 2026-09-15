@@ -1,5 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="height_color_layer_hint">Color changes follow slicing layers. The boundary may shift by up to half a layer.</string>
+    <string name="height_color_start">Start height</string>
+    <string name="height_color_end">End height</string>
+    <string name="height_color_inherit">Keep object material</string>
+    <string name="paint_tool_connected">Connected faces</string>
+    <string name="paint_fill_angle">Edge angle</string>
+    <string name="paint_connected_hint">Tap to fill across connected edges up to the chosen angle. Drag to rotate. Existing colors in the region will be replaced.</string>
+    <string name="color_fill_error">Could not fill this region. Large models or regions may exceed the paint limit. Try a smaller angle or use the brush. No changes were applied.</string>
+    <string name="paint_tool_brush">Brush</string>
+    <string name="paint_tool_triangle">Triangle</string>
+    <string name="paint_triangle_hint">Tap or drag to color whole triangles. Use two fingers to move the view.</string>
+    <string name="model_settings_review_notice">This file contains print settings. Importing them changes settings for the active plate, including existing models. Unmapped settings are not restored; missing values keep current defaults. Review the differences before continuing.</string>
+    <string name="import_model_and_settings">Model and settings</string>
+    <string name="import_model_only">Model only</string>
     <string name="preview_renderer">Preview display</string>
     <string name="preview_renderer_depth">Clear depth</string>
     <string name="preview_renderer_compatibility">Save battery</string>
@@ -77,6 +91,7 @@
     <string name="menu">Menu</string>
     <string name="import_model">Import model</string>
     <string name="import_profiles">Import profiles</string>
+    <string name="profile_import_review">Printers: %1$d\nFilaments: %2$d\nSlicing profiles: %3$d\nDuplicates skipped: %4$d\nName conflicts saved as copies: %5$d\n\nExisting profiles will not be overwritten. Nothing is saved until you confirm.</string>
     <string name="export_profiles">Export profiles</string>
     <string name="share_profiles">Share profiles</string>
     <string name="profile_share_error">Couldn’t share profiles.</string>
@@ -728,6 +743,16 @@
     <string name="search_profiles">Search profiles</string>
     <string name="profile_list">Profile list</string>
     <string name="search_settings">Search settings</string>
+    <string name="hide_settings_panel">Hide settings panel</string>
+    <string name="resize_settings_panel">Resize settings panel</string>
+    <string name="orca_import_baseline_notice">Select profiles to import. Unmapped settings are not imported. Other values retain the current project profile defaults; this is not an exact restoration.</string>
+    <string name="import_mapped_settings">Converted: %1$s</string>
+    <string name="import_unsupported_settings">Not supported: %1$s</string>
+    <string name="import_defaulted_settings">Using current defaults: %1$s</string>
+    <string name="import_name_conflict_notice">A profile with this name exists. Existing profiles will not be overwritten; the final review shows duplicates and renamed copies.</string>
+    <string name="import_accept_differences">I have reviewed these differences.</string>
+    <string name="import_skipped_archive_entry">This file is not a supported profile and will not be imported.</string>
+    <string name="show_settings_panel">Show settings panel</string>
     <string name="expanded_state">Expanded</string>
     <string name="collapsed_state">Collapsed</string>
     <string name="recent_profiles">Recent</string>
@@ -735,7 +760,9 @@
     <string name="other_profiles">Other</string>
     <string name="no_profiles_found">No matching profiles</string>
     <string name="save_as_new_profile">Save as new profile</string>
-    <string name="save_profile_changes">Save profile changes</string>
+    <string name="save_profile_changes">Overwrite saved profile</string>
+    <string name="expert_mode">Expert mode</string>
+    <string name="apply_to_project">Apply to project</string>
     <string name="rename_profile">Rename profile</string>
     <string name="rename_profile_named">Rename %1$s</string>
     <string name="revert_changes">Revert</string>

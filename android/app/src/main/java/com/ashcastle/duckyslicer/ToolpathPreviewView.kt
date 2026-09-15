@@ -14,6 +14,8 @@ import android.view.SurfaceHolder
 import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import java.nio.ByteBuffer
@@ -35,6 +37,32 @@ internal enum class PreviewColorMode {
     FEATURE,
     FILAMENT,
 }
+
+private class SavedToolpathCamera {
+    var pose = cameraPoseForPreset(WorkspaceCameraPreset.ISOMETRIC)
+    var requestId: Long? = null
+    var view: ToolpathSurfaceView? = null
+
+    fun capture() {
+        view?.let {
+            pose = it.cameraPose()
+            requestId = it.cameraRequestId()
+        }
+    }
+}
+
+private val ToolpathCameraSaver = listSaver<SavedToolpathCamera, Any>(
+    save = { state ->
+        state.capture()
+        listOf(state.pose.yawDegrees, state.pose.elevationDegrees, state.pose.zoom,
+            state.pose.panX, state.pose.panY, state.requestId ?: Long.MIN_VALUE)
+    },
+    restore = { values -> SavedToolpathCamera().apply {
+        pose = WorkspaceCameraPose(values[0] as Float, values[1] as Float, values[2] as Float,
+            values[3] as Float, values[4] as Float)
+        requestId = (values[5] as Long).takeUnless { it == Long.MIN_VALUE }
+    } },
+)
 
 private inline fun <T> traced(name: String, block: () -> T): T {
     Trace.beginSection(name)
@@ -65,9 +93,17 @@ internal fun DepthTestedToolpathScene(
     modifier: Modifier = Modifier,
 ) {
     val currentOnUnavailable = rememberUpdatedState(onUnavailable)
+    val savedCamera = rememberSaveable(saver = ToolpathCameraSaver) { SavedToolpathCamera() }
     AndroidView(
         factory = { context ->
-            ToolpathSurfaceView(context) { currentOnUnavailable.value() }
+            ToolpathSurfaceView(context) { currentOnUnavailable.value() }.also {
+                it.restoreCamera(savedCamera.pose, savedCamera.requestId)
+                savedCamera.view = it
+            }
+        },
+        onRelease = {
+            savedCamera.capture()
+            savedCamera.view = null
         },
         update = { view ->
             view.applyCameraRequest(cameraRequest)
@@ -220,7 +256,16 @@ internal class ToolpathSurfaceView(
         requestRender()
     }
 
-    internal fun cameraPoseForTest(): WorkspaceCameraPose = toolpathRenderer.cameraPoseForTest()
+    internal fun cameraPose(): WorkspaceCameraPose = toolpathRenderer.cameraPose()
+
+    internal fun cameraPoseForTest(): WorkspaceCameraPose = cameraPose()
+
+    internal fun cameraRequestId(): Long? = appliedCameraRequestId
+
+    internal fun restoreCamera(pose: WorkspaceCameraPose, requestId: Long?) {
+        toolpathRenderer.restoreCamera(pose)
+        appliedCameraRequestId = requestId ?: Long.MIN_VALUE
+    }
 
     override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
         super.onSizeChanged(width, height, oldWidth, oldHeight)
@@ -626,7 +671,9 @@ internal class ToolpathRenderer(
 
     internal fun effectiveDetailForTest(): PreviewDetail? = lastEffectiveDetail
 
-    internal fun cameraPoseForTest(): WorkspaceCameraPose = WorkspaceCameraPose(
+    internal fun cameraPoseForTest(): WorkspaceCameraPose = cameraPose()
+
+    internal fun cameraPose(): WorkspaceCameraPose = WorkspaceCameraPose(
         yawDegrees = yawDegrees,
         elevationDegrees = elevationDegrees,
         zoom = zoom,
@@ -703,7 +750,10 @@ internal class ToolpathRenderer(
     }
 
     fun applyCameraPreset(preset: WorkspaceCameraPreset) {
-        val pose = cameraPoseForPreset(preset)
+        restoreCamera(cameraPoseForPreset(preset))
+    }
+
+    fun restoreCamera(pose: WorkspaceCameraPose) {
         yawDegrees = pose.yawDegrees
         elevationDegrees = pose.elevationDegrees
         zoom = pose.zoom

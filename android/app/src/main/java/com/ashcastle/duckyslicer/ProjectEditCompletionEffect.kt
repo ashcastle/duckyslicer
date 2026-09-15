@@ -22,6 +22,7 @@ internal fun ProjectEditCompletionEffect(
             if (completed.sessionChanged) onSessionChanged()
             val notice = when (completed.kind) {
                 ProjectEditKind.MODEL_IMPORT -> null
+                ProjectEditKind.COLOR_FILL -> null
                 ProjectEditKind.PRIMITIVE -> resources.getString(
                     R.string.shape_added,
                     completed.displayName.orEmpty(),
@@ -91,6 +92,7 @@ internal fun ProjectEditCompletionEffect(
                         ProjectEditKind.SPLIT_PARTS -> R.string.split_parts_error
                         ProjectEditKind.CUT -> R.string.cut_error
                         ProjectEditKind.SIMPLIFY -> R.string.simplify_error
+                        ProjectEditKind.COLOR_FILL -> R.string.color_fill_error
                     },
                 )
             }

@@ -24,7 +24,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -39,6 +38,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +57,19 @@ import java.util.Locale
 
 private val ObjectSettingsYellow = Color(0xFFF6C945)
 private val ObjectSettingsPanel = Color(0xFF343530)
+
+internal val HeightRangesEditorSaver = Saver<HeightRangeModifiers, String>(
+    save = { it.toProjectJson().toString() },
+    restore = { runCatching { org.json.JSONArray(it).toHeightRangeModifiers() }.getOrNull() },
+)
+internal val ObjectOverridesEditorSaver = Saver<ObjectProcessOverrides, String>(
+    save = { it.toProjectJson().toString() },
+    restore = { runCatching { org.json.JSONObject(it).toObjectProcessOverrides() }.getOrNull() },
+)
+private val HeightBoundsEditorSaver = listSaver<ClosedFloatingPointRange<Float>, Float>(
+    save = { listOf(it.start, it.endInclusive) },
+    restore = { it[0]..it[1] },
+)
 
 private enum class ObjectSettingCategory(val label: Int) {
     QUALITY(R.string.quality),
@@ -227,21 +242,19 @@ internal fun HeightRangeModifiersSheet(
     onDismiss: () -> Unit,
 ) {
     val safeHeight = objectHeightMm.coerceAtLeast(HeightRangeModifiers.MIN_RANGE_MM)
-    var staged by remember(current) { mutableStateOf(current) }
-    var selectedIndex by remember(current) { mutableStateOf<Int?>(null) }
-    var selectedRange by remember(current, safeHeight) {
+    var staged by rememberSaveable(current, stateSaver = HeightRangesEditorSaver) { mutableStateOf(current) }
+    var selectedIndex by rememberSaveable(current) { mutableStateOf<Int?>(null) }
+    var selectedFilamentSlot by rememberSaveable(current) { mutableStateOf<Int?>(null) }
+    var selectedRange by rememberSaveable(current, safeHeight, stateSaver = HeightBoundsEditorSaver) {
         mutableStateOf((safeHeight * 0.25f)..(safeHeight * 0.75f))
     }
-    var selectedOverrides by remember(current) {
+    var selectedOverrides by rememberSaveable(current, stateSaver = ObjectOverridesEditorSaver) {
         mutableStateOf(
-            ObjectProcessOverrides(
-                sparseInfillDensityPercent = objectOverrides.sparseInfillDensityPercent
-                    ?: options.fillDensity * 100f,
-            ),
+            ObjectProcessOverrides(),
         )
     }
-    var category by remember { mutableStateOf(ObjectSettingCategory.STRENGTH) }
-    var rangeError by remember { mutableStateOf(false) }
+    var category by rememberSaveable { mutableStateOf(ObjectSettingCategory.STRENGTH) }
+    var rangeError by rememberSaveable { mutableStateOf(false) }
     val sheetHeight = with(LocalDensity.current) {
         LocalWindowInfo.current.containerSize.height.toDp()
     } * 0.94f
@@ -249,10 +262,8 @@ internal fun HeightRangeModifiersSheet(
     fun resetEditor() {
         selectedIndex = null
         selectedRange = (safeHeight * 0.25f)..(safeHeight * 0.75f)
-        selectedOverrides = ObjectProcessOverrides(
-            sparseInfillDensityPercent = objectOverrides.sparseInfillDensityPercent
-                ?: options.fillDensity * 100f,
-        )
+        selectedOverrides = ObjectProcessOverrides()
+        selectedFilamentSlot = null
         category = ObjectSettingCategory.STRENGTH
         rangeError = false
     }
@@ -263,6 +274,7 @@ internal fun HeightRangeModifiersSheet(
                 startZmm = selectedRange.start,
                 endZmm = selectedRange.endInclusive,
                 overrides = selectedOverrides,
+                filamentSlot = selectedFilamentSlot,
             )
         }.getOrElse {
             rangeError = true
@@ -327,6 +339,7 @@ internal fun HeightRangeModifiersSheet(
                                     selectedIndex = index
                                     selectedRange = range.startZmm..range.endZmm
                                     selectedOverrides = range.overrides
+                                    selectedFilamentSlot = range.filamentSlot
                                     rangeError = false
                                 },
                                 modifier = Modifier.weight(1f),
@@ -337,7 +350,7 @@ internal fun HeightRangeModifiersSheet(
                                         range.startZmm,
                                         range.endZmm,
                                         range.overrides.enabledSettingCount(),
-                                    ),
+                                    ) + (range.filamentSlot?.let { " · T${it + 1}" } ?: ""),
                                 )
                             }
                             IconButton(
@@ -387,19 +400,34 @@ internal fun HeightRangeModifiersSheet(
                         style = MaterialTheme.typography.titleMedium,
                         color = ObjectSettingsYellow,
                     )
-                    RangeSlider(
-                        value = selectedRange,
-                        onValueChange = {
-                            selectedRange = it
-                            rangeError = false
-                        },
-                        valueRange = 0f..safeHeight,
-                        colors = SliderDefaults.colors(
-                            thumbColor = ObjectSettingsYellow,
-                            activeTrackColor = ObjectSettingsYellow,
-                            inactiveTrackColor = Color(0xFF555650),
-                        ),
+                    SettingSlider(
+                        label = stringResource(R.string.height_color_start),
+                        valueText = "${selectedRange.start} mm",
+                        value = selectedRange.start,
+                        range = 0f..safeHeight,
+                        steps = 0,
+                        onValueChange = { selectedRange = it..selectedRange.endInclusive; rangeError = false },
                     )
+                    SettingSlider(
+                        label = stringResource(R.string.height_color_end),
+                        valueText = "${selectedRange.endInclusive} mm",
+                        value = selectedRange.endInclusive,
+                        range = 0f..safeHeight,
+                        steps = 0,
+                        onValueChange = { selectedRange = selectedRange.start..it; rangeError = false },
+                    )
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = selectedFilamentSlot == null,
+                            onClick = { selectedFilamentSlot = null },
+                            label = { Text(stringResource(R.string.height_color_inherit)) })
+                        options.resolvedFilamentSlots().forEachIndexed { index, profile ->
+                            FilterChip(selected = selectedFilamentSlot == index,
+                                onClick = { selectedFilamentSlot = index },
+                                label = { Text("T${index + 1} · ${profileLabel(profile)}") })
+                        }
+                    }
+                    if (selectedFilamentSlot != null) Text(stringResource(R.string.height_color_layer_hint),
+                        color = Color(0xFFC8C9C3), style = MaterialTheme.typography.bodySmall)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -440,7 +468,7 @@ internal fun HeightRangeModifiersSheet(
                         }
                         Button(
                             onClick = ::stageSelectedRange,
-                            enabled = !selectedOverrides.isEmpty,
+                            enabled = !selectedOverrides.isEmpty || selectedFilamentSlot != null,
                             modifier = Modifier.weight(0.7f),
                         ) {
                             Text(

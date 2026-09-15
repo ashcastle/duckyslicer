@@ -282,6 +282,17 @@ class SliceLifecycleInstrumentedTest {
                 assertFalse("Retained Preview range loading must finish", retained.state.value.previewLoading)
                 assertEquals(SliceTerminalStatus.NONE, retained.state.value.terminalStatus)
                 assertNotNull("Retained range loading must replace the Preview", retained.state.value.preview)
+                val selectedRange = requireNotNull(retained.state.value.preview)
+                assertEquals(outcome.layers / 2, selectedRange.endLayer)
+                scenario.recreate()
+                SystemClock.sleep(750)
+                val restoredPreviewDeadline = SystemClock.elapsedRealtime() + COMPLETION_TIMEOUT_MILLIS
+                while (retained.state.value.previewLoading && SystemClock.elapsedRealtime() < restoredPreviewDeadline) {
+                    SystemClock.sleep(50)
+                }
+                val restoredRange = requireNotNull(retained.state.value.preview)
+                assertEquals("Completed range start must survive another recreation", selectedRange.startLayer, restoredRange.startLayer)
+                assertEquals("Completed range must not reset to all layers", selectedRange.endLayer, restoredRange.endLayer)
 
                 scenario.onActivity {
                     retained.clearCompleted()

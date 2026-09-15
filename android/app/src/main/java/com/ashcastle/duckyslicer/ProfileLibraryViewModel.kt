@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -135,6 +136,8 @@ internal data class ProfileLibraryState(
     val activeTransferDirection: ProfileTransferDirection? = null,
     val transferCancellationRequested: Boolean = false,
     val transferCompletion: ProfileTransferCompletion? = null,
+    val importReview: ProfileBundleImportResult? = null,
+    val orcaImportReview: List<OrcaImportItem>? = null,
 )
 
 internal fun ProfileLibraryState.withStartedProfileTransfer(
@@ -439,11 +442,25 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
         profileStore.deleteSlicing(id)
     }
 
-    fun importBundle(uri: Uri): Boolean = launchTransfer(uri, ProfileTransferDirection.IMPORT)
+    @Volatile private var importApproval: CompletableDeferred<Boolean>? = null
+    @Volatile private var orcaImportApproval: CompletableDeferred<Pair<Set<Int>, Set<Int>>?>? = null
+
+    fun approveOrcaImport(selected: Set<Int>, acknowledged: Set<Int>) {
+        orcaImportApproval?.complete(selected to acknowledged)
+    }
+
+    fun approveImport(approved: Boolean) {
+        importApproval?.complete(approved)
+    }
+
+    fun importBundle(uri: Uri, baseline: SliceOptions = SliceOptions()): Boolean =
+        launchTransfer(uri, ProfileTransferDirection.IMPORT, baseline)
 
     fun exportBundle(uri: Uri): Boolean = launchTransfer(uri, ProfileTransferDirection.EXPORT)
 
     fun cancelTransfer(): Boolean {
+        importApproval?.complete(false)
+        orcaImportApproval?.complete(null)
         val active = synchronized(this) { activeTransfer } ?: return false
         if (!active.cancellation.cancel()) return false
         synchronized(this) {
@@ -545,7 +562,7 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
     }
 
     @Synchronized
-    private fun launchTransfer(uri: Uri, direction: ProfileTransferDirection): Boolean {
+    private fun launchTransfer(uri: Uri, direction: ProfileTransferDirection, baseline: SliceOptions = SliceOptions()): Boolean {
         if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
         val current = mutableState.value
         val operationId = ++nextOperationId
@@ -573,7 +590,7 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
                                 "profile_bundle_too_large"
                             }
                         }
-                        val bytes = descriptor.use {
+                        var bytes = descriptor.use {
                             descriptor.createInputStream().use { input ->
                                 cancellation.attachInput(input)
                                 try {
@@ -583,6 +600,53 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
                                 }
                             }
                         }
+                        val isDuckyBundle = runCatching {
+                            org.json.JSONObject(bytes.toString(Charsets.UTF_8)).optString("type") ==
+                                "com.ashcastle.duckyslicer.user-profiles"
+                        }.getOrDefault(false)
+                        if (!isDuckyBundle) {
+                            val catalog = current.catalog
+                            val names = catalog.printers.map { "machine" to it.name } +
+                                catalog.filaments.map { "filament" to it.name } +
+                                catalog.slicing.map { "process" to it.name }
+                            val incoming = readOrcaPresetArchive(bytes).presets
+                            val supplied = incoming.map { it.optString("type") to it.optString("name") }.toSet()
+                            val needsBundledParent = incoming.any {
+                                val parent = it.optString("inherits").trim()
+                                parent.isNotEmpty() && (it.optString("type") to parent) !in supplied
+                            }
+                            val parents = if (needsBundledParent) {
+                                application.assets.open("orca-import-parents.bin").use {
+                                    readOrcaBundledParents(it, incoming)
+                                }
+                            } else emptyList()
+                            val items = prepareOrcaImport(bytes, parents, baseline, names.toSet())
+                            val selection = CompletableDeferred<Pair<Set<Int>, Set<Int>>?>()
+                            synchronized(this@ProfileLibraryViewModel) {
+                                orcaImportApproval = selection
+                                mutableState.value = mutableState.value.copy(orcaImportReview = items)
+                            }
+                            if (cancellation.wasRequested()) selection.complete(null)
+                            val chosen = selection.await() ?: throw DocumentTransferCancelledException()
+                            cancellation.throwIfRequested()
+                            bytes = selectedOrcaImportBundle(items, chosen.first, chosen.second)
+                            synchronized(this@ProfileLibraryViewModel) {
+                                orcaImportApproval = null
+                                mutableState.value = mutableState.value.copy(orcaImportReview = null)
+                            }
+                        }
+                        val review = profileStore.reviewBundle(bytes)
+                        val approval = CompletableDeferred<Boolean>()
+                        synchronized(this@ProfileLibraryViewModel) {
+                            importApproval = approval
+                            mutableState.value = mutableState.value.copy(importReview = review)
+                        }
+                        if (cancellation.wasRequested()) approval.complete(false)
+                        if (!approval.await()) {
+                            cancellation.cancel()
+                            throw DocumentTransferCancelledException()
+                        }
+                        cancellation.throwIfRequested()
                         imported = profileStore.importBundle(bytes, cancellation::complete)
                     }
                     ProfileTransferDirection.EXPORT -> {
@@ -636,6 +700,11 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
                     ProfileTransferOutcome.FAILED
                 }
             } finally {
+                synchronized(this@ProfileLibraryViewModel) {
+                    importApproval = null
+                    orcaImportApproval = null
+                    mutableState.value = mutableState.value.copy(importReview = null, orcaImportReview = null)
+                }
                 cancellation.close()
             }
             val refreshedCatalog = if (

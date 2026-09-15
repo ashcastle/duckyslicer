@@ -1,5 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="height_color_layer_hint">색상은 슬라이싱 레이어 단위로 바뀌며, 경계는 최대 반 레이어만큼 달라질 수 있습니다.</string>
+    <string name="height_color_start">시작 높이</string>
+    <string name="height_color_end">끝 높이</string>
+    <string name="height_color_inherit">오브젝트 재료 유지</string>
+    <string name="paint_tool_connected">연결된 면</string>
+    <string name="paint_fill_angle">모서리 각도</string>
+    <string name="paint_connected_hint">탭하면 지정한 각도 이내로 연결된 면을 채웁니다. 드래그하면 회전합니다. 영역의 기존 색상은 교체됩니다.</string>
+    <string name="color_fill_error">이 영역을 채울 수 없습니다. 모델이나 영역이 페인트 한도를 넘었을 수 있습니다. 각도를 줄이거나 브러시를 사용하세요. 변경 사항은 적용되지 않았습니다.</string>
+    <string name="paint_tool_brush">브러시</string>
+    <string name="paint_tool_triangle">삼각면</string>
+    <string name="paint_triangle_hint">탭하거나 드래그해 삼각면 전체를 칠하세요. 두 손가락으로 화면을 조절할 수 있습니다.</string>
     <string name="preview_renderer">미리보기 표시</string>
     <string name="preview_renderer_depth">입체 보기</string>
     <string name="preview_renderer_compatibility">배터리 절약</string>
@@ -735,7 +746,7 @@
     <string name="other_profiles">기타</string>
     <string name="no_profiles_found">일치하는 프로필이 없습니다</string>
     <string name="save_as_new_profile">새 프로필로 저장</string>
-    <string name="save_profile_changes">프로필 변경사항 저장</string>
+    <string name="save_profile_changes">저장된 프로필 덮어쓰기</string>
     <string name="rename_profile">프로필 이름 변경</string>
     <string name="rename_profile_named">%1$s 이름 변경</string>
     <string name="revert_changes">되돌리기</string>
@@ -1268,4 +1279,20 @@
     <string name="layer_custom_gcode_height">%1$.2f mm의 G-code</string>
     <string name="remove_layer_custom_gcode_height">%1$.2f mm G-code 삭제</string>
     <string name="layer_custom_gcode_apply">적용</string>
+    <string name="apply_to_project">프로젝트에 적용</string>
+    <string name="expert_mode">전문가 모드</string>
+    <string name="hide_settings_panel">설정 패널 숨기기</string>
+    <string name="show_settings_panel">설정 패널 표시</string>
+    <string name="resize_settings_panel">설정 패널 크기 조절</string>
+    <string name="import_accept_differences">차이점을 확인했습니다.</string>
+    <string name="import_defaulted_settings">현재 기본값 유지: %1$s</string>
+    <string name="import_mapped_settings">변환된 설정: %1$s</string>
+    <string name="import_unsupported_settings">지원하지 않는 설정: %1$s</string>
+    <string name="import_model_and_settings">모델과 설정</string>
+    <string name="import_model_only">모델만</string>
+    <string name="import_name_conflict_notice">같은 이름의 프로필이 있습니다. 기존 프로필은 덮어쓰지 않으며, 마지막 확인 화면에서 중복 항목과 이름이 바뀐 사본을 확인할 수 있습니다.</string>
+    <string name="import_skipped_archive_entry">지원하는 프로필 파일이 아니므로 가져오지 않습니다.</string>
+    <string name="model_settings_review_notice">이 파일에는 출력 설정이 있습니다. 설정을 가져오면 기존 모델을 포함한 현재 플레이트의 설정이 바뀝니다. 변환할 수 없는 설정은 복원되지 않으며, 누락된 값은 현재 기본값을 유지합니다. 계속하기 전에 차이점을 확인하세요.</string>
+    <string name="orca_import_baseline_notice">가져올 프로필을 선택하세요. 변환할 수 없는 설정은 가져오지 않습니다. 나머지 값은 현재 프로젝트 프로필의 기본값을 유지하므로 원본과 완전히 같지는 않습니다.</string>
+    <string name="profile_import_review">프린터: %1$d개\n필라멘트: %2$d개\n슬라이싱 프로필: %3$d개\n건너뛴 중복 항목: %4$d개\n이름 충돌로 사본 저장: %5$d개\n\n기존 프로필은 덮어쓰지 않습니다. 확인하기 전에는 저장되지 않습니다.</string>
 </resources>

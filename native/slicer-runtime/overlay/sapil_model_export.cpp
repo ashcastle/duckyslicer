@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <iomanip>
+#include <sstream>
 #include <limits>
 #include <string>
 #include <utility>
@@ -100,6 +102,8 @@ struct ProjectExportRecord {
     std::string support_annotation_path;
     std::string seam_annotation_path;
     std::string multi_color_annotation_path;
+    std::string object_config_path;
+    std::string height_ranges;
 };
 
 struct ParsedAnnotation {
@@ -309,9 +313,10 @@ void apply_facet_annotation(
 bool append_volume_config(
     const std::string& directory,
     std::size_t file_index,
-    const Slic3r::ModelConfigObject& config,
+    const Slic3r::ModelConfig& config,
     std::string& path,
-    std::vector<std::string>& outputs)
+    std::vector<std::string>& outputs,
+    const char* prefix = "project-volume-config")
 {
     const std::vector<std::string> keys = config.keys();
     if (keys.empty()) {
@@ -337,7 +342,8 @@ bool append_volume_config(
     std::snprintf(
         file_name,
         sizeof(file_name),
-        "project-volume-config-%03zu.bin",
+        "%s-%03zu.bin",
+        prefix,
         file_index);
     path = directory + "/" + file_name;
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
@@ -478,7 +484,7 @@ jobjectArray encode_project_records(
             "\t" + std::to_string(record.object_ordinal) + "\t" +
             std::to_string(record.volume_type) + "\t" + record.config_path + "\t" +
             record.support_annotation_path + "\t" + record.seam_annotation_path + "\t" +
-            record.multi_color_annotation_path;
+            record.multi_color_annotation_path + "\t" + record.object_config_path + "\t" + record.height_ranges;
         jstring value = env->NewStringUTF(encoded.c_str());
         if (value == nullptr) {
             remove_outputs(outputs);
@@ -687,6 +693,29 @@ Java_com_u1_slicer_NativeLibrary_nativeExportLoadedProjectVolumes(
                 object_name += " " + std::to_string(instance_index + 1);
             }
             std::size_t volume_ordinal = 0;
+            std::string object_config_path;
+            if (!append_volume_config(directory, object_ordinal, object->config,
+                    object_config_path, outputs, "project-object-config")) {
+                remove_outputs(outputs);
+                return nullptr;
+            }
+            if (object->layer_config_ranges.size() > 128) {
+                remove_outputs(outputs);
+                return nullptr;
+            }
+            std::ostringstream range_metadata;
+            range_metadata << std::setprecision(17);
+            std::size_t range_index = 0;
+            for (const auto& range : object->layer_config_ranges) {
+                std::string config_path;
+                if (!append_volume_config(directory, object_ordinal * 128 + range_index,
+                        range.second, config_path, outputs, "project-height-config")) {
+                    remove_outputs(outputs);
+                    return nullptr;
+                }
+                if (range_index++ != 0) range_metadata << '\n';
+                range_metadata << range.first.first << '\t' << range.first.second << '\t' << config_path;
+            }
             for (std::size_t volume_index = 0; volume_index < object->volumes.size(); ++volume_index) {
                 const Slic3r::ModelVolume* volume = object->volumes[volume_index];
                 if (volume == nullptr || volume->mesh().empty()) continue;
@@ -780,6 +809,8 @@ Java_com_u1_slicer_NativeLibrary_nativeExportLoadedProjectVolumes(
                     std::move(support_annotation_path),
                     std::move(seam_annotation_path),
                     std::move(multi_color_annotation_path),
+                    object_config_path,
+                    range_metadata.str(),
                 });
                 ++volume_ordinal;
             }

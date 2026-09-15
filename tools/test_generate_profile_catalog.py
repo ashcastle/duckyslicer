@@ -398,6 +398,98 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "process",
             )
 
+    def test_process_density_uses_percentage_points_with_or_without_suffix(self) -> None:
+        for source, expected in [("1", 0.01), ("0.5", 0.005), ("1%", 0.01),
+                                 ("15", 0.15), ("100%", 1.0), ("0", 0.0)]:
+            with self.subTest(source=source):
+                profile = build_process("Example", {
+                    "name": "Density test", "layer_height": "0.2",
+                    "sparse_infill_density": source,
+                }, {})
+                self.assertAlmostEqual(expected, profile["fillDensity"])
+
+    def test_missing_speeds_match_engine_defaults_not_estimated_ratios(self) -> None:
+        expected = {"printSpeed": 60, "innerWallSpeed": 60,
+                    "sparseInfillSpeed": 100, "bridgeSpeed": 25,
+                    "gapInfillSpeed": 30, "travelSpeed": 120, "supportSpeed": 80}
+        profile = build_process("Example", {"name": "Engine defaults"}, {})
+        for key, value in expected.items():
+            self.assertEqual(value, profile[key], key)
+        explicit = build_process("Example", {
+            "name": "Explicit speeds", "outer_wall_speed": "35",
+            "inner_wall_speed": "45", "sparse_infill_speed": "80",
+            "bridge_speed": "20", "gap_infill_speed": "15",
+            "travel_speed": "180", "support_speed": "110",
+        }, {})
+        for key, value in zip(expected, [35, 45, 80, 20, 15, 180, 110]):
+            self.assertEqual(value, explicit[key], key)
+        legacy = build_process("Example", {
+            "name": "Legacy outer speed", "outer_wall_speed": "200%",
+        }, {})
+        self.assertEqual(60, legacy["printSpeed"])
+
+    def test_missing_layer_height_uses_engine_default_not_zero(self) -> None:
+        profile = build_process("Example", {"name": "Inherited engine default"}, {})
+        self.assertAlmostEqual(0.2, profile["layerHeightMm"])
+        with self.assertRaises(ValueError):
+            build_process("Example", {"name": "Explicit zero", "layer_height": "0"}, {})
+
+    def test_first_layer_default_is_independent_of_process_layer_height(self) -> None:
+        raw = {"name": "Fine", "layer_height": "0.08"}
+        self.assertAlmostEqual(0.2, build_process("Example", raw, {})["firstLayerHeightMm"])
+        self.assertAlmostEqual(0.12, build_process("Example", {
+            **raw, "initial_layer_print_height": "0.12",
+        }, {})["firstLayerHeightMm"])
+
+    def test_support_threshold_uses_engine_default_and_keeps_explicit_zero(self) -> None:
+        raw = {"name": "Support default"}
+        self.assertEqual(30, build_process("Example", raw, {})["supportAngle"])
+        for value in (0, 45, 90):
+            self.assertEqual(value, build_process("Example", {
+                **raw, "support_threshold_angle": str(value),
+            }, {})["supportAngle"])
+
+    def test_shell_skirt_and_acceleration_defaults_match_engine(self) -> None:
+        mapping = {
+            "default_acceleration": ("defaultAcceleration", 500),
+            "outer_wall_acceleration": ("outerWallAcceleration", 500),
+            "inner_wall_acceleration": ("innerWallAcceleration", 10000),
+            "top_surface_acceleration": ("topSurfaceAcceleration", 500),
+            "travel_acceleration": ("travelAcceleration", 10000),
+            "initial_layer_acceleration": ("firstLayerAcceleration", 300),
+            "top_shell_layers": ("topSolidLayers", 4),
+            "bottom_shell_layers": ("bottomSolidLayers", 3),
+            "top_shell_thickness": ("topShellThickness", 0.6),
+            "skirt_loops": ("skirtLoops", 1),
+            "skirt_distance": ("skirtDistance", 2),
+        }
+        defaults = build_process("Example", {"name": "Default values"}, {})
+        explicit_zero = build_process("Example", {
+            "name": "Explicit zero", **dict.fromkeys(mapping, "0"),
+        }, {})
+        for source, (key, expected) in mapping.items():
+            self.assertEqual(expected, defaults[key], source)
+            self.assertEqual(0, explicit_zero[key], source)
+
+    def test_infill_pattern_missing_default_matches_engine(self) -> None:
+        raw = {"name": "Pattern default"}
+        self.assertEqual("crosshatch", build_process("Example", raw, {})["fillPattern"])
+        self.assertEqual("gyroid", build_process("Example", {
+            **raw, "sparse_infill_pattern": "gyroid",
+        }, {})["fillPattern"])
+
+    def test_automatic_widths_remain_automatic_and_explicit_widths_inherit(self) -> None:
+        keys = ["outerWallLineWidth", "innerWallLineWidth", "topSurfaceLineWidth",
+                "sparseInfillLineWidth", "internalSolidInfillLineWidth",
+                "supportLineWidth", "initialLayerLineWidth"]
+        automatic = build_process("Example", {"name": "Auto"}, {})
+        self.assertEqual([0] * len(keys), [automatic[key] for key in keys])
+        inherited = build_process("Example", {"name": "Inherited", "line_width": "120%",
+            "outer_wall_line_width": "0", "support_line_width": "0.35"}, {})
+        self.assertAlmostEqual(0.48, inherited["outerWallLineWidth"])
+        self.assertAlmostEqual(0.48, inherited["initialLayerLineWidth"])
+        self.assertAlmostEqual(0.35, inherited["supportLineWidth"])
+
     def test_expands_shared_processes_for_each_compatible_nozzle(self) -> None:
         raw = {
             "name": "0.40mm Shared",
@@ -1821,6 +1913,13 @@ class GenerateProfileCatalogTest(unittest.TestCase):
 
         self.assertEqual(0.07, profile["minLayerHeight"])
         self.assertAlmostEqual(0.3, profile["maxLayerHeight"])
+        self.assertEqual(
+            0.01,
+            build_printer("Example", base | {"min_layer_height": ["0.005"]})["minLayerHeight"],
+        )
+        for key in ("min_layer_height", "max_layer_height"):
+            with self.assertRaisesRegex(ValueError, "negative layer height limit"):
+                build_printer("Example", base | {key: ["-0.1"]})
         with self.assertRaises(ValueError):
             build_printer(
                 "Example",

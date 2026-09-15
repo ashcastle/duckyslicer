@@ -213,11 +213,28 @@ internal class ProjectStore(
         val stored = durableProject.read(::readSnapshot, ::isCompatibleProjectRoot)
         val storageUnavailable = !stored.status.mutationSafe
         if (stored.value != null) {
+            val migration = stored.value.identityMigration
+            if (migration != null && !storageUnavailable) {
+                try {
+                    durableProject.write(migration, ::validateProjectRoot, ::isCompatibleProjectRoot)
+                } catch (_: Exception) {
+                    return stored.value.document.copy(storageUnavailable = true)
+                }
+            }
             pruneUnreferencedModels(stored.value.declaredModels)
             return stored.value.document.copy(storageUnavailable = storageUnavailable)
         }
         if (stored.status == DurableJsonStatus.MISSING) {
-            pruneUnreferencedModels(ProjectSnapshot())
+            val initial = ProjectSnapshot()
+            val options = SliceOptions()
+            // Drafts need an identity before the first model or applied edit exists.
+            return runCatching {
+                save(initial, options)
+                StoredProjectDocument(
+                    snapshot = initial, sliceOptions = options,
+                    plateOptions = mapOf(initial.selectedPlateId to options),
+                )
+            }.getOrElse { StoredProjectDocument(snapshot = initial, storageUnavailable = true) }
         }
         return StoredProjectDocument(
             storageUnavailable = storageUnavailable,
@@ -307,7 +324,12 @@ internal class ProjectStore(
                 )
             }
             val selectedPlateId = root.getString("selectedPlateId")
-            snapshot = ProjectSnapshot(selectedPlateId = selectedPlateId, plates = plates)
+            snapshot = ProjectSnapshot(
+                selectedPlateId = selectedPlateId, plates = plates,
+                draftIdentity = root.optString("draftIdentity").takeIf {
+                    it.length in 1..128 && it.all { c -> c.isLetterOrDigit() || c == '-' }
+                } ?: java.util.UUID.randomUUID().toString(),
+            )
             plateOptions = options
         } else {
             val objects = restoreObjects(root.optJSONArray("objects") ?: JSONArray())
@@ -369,9 +391,13 @@ internal class ProjectStore(
         } else {
             emptyList()
         }
+        val persistedIdentity = root.optString("draftIdentity").takeIf {
+            it.length in 1..128 && it.all { c -> c.isLetterOrDigit() || c == '-' }
+        }
+        val stableSnapshot = snapshot.copy(draftIdentity = persistedIdentity ?: snapshot.draftIdentity)
         return StoredProject(
             document = StoredProjectDocument(
-                snapshot = snapshot,
+                snapshot = stableSnapshot,
                 sliceOptions = plateOptions[snapshot.selectedPlateId],
                 plateOptions = plateOptions,
                 linkedDocument = linkedDocument,
@@ -379,6 +405,9 @@ internal class ProjectStore(
                 recentDocuments = recentDocuments,
             ),
             declaredModels = declaredModels,
+            identityMigration = if (persistedIdentity == null) {
+                JSONObject(root.toString()).put("draftIdentity", stableSnapshot.draftIdentity)
+            } else null,
         )
     }
 
@@ -435,6 +464,7 @@ internal class ProjectStore(
         val root = JSONObject()
             .put("schemaVersion", SCHEMA_VERSION)
             .put("selectedPlateId", snapshot.selectedPlateId)
+            .put("draftIdentity", snapshot.draftIdentity)
             .put(
                 "linkedDocument",
                 linkedDocument?.let { link ->
@@ -1227,6 +1257,7 @@ internal class ProjectStore(
     private data class StoredProject(
         val document: StoredProjectDocument,
         val declaredModels: Set<File>,
+        val identityMigration: JSONObject? = null,
     )
 }
 

@@ -112,9 +112,9 @@ data class ObjectProcessOverrides(
         const val MIN_SPEED_MM_S = 1f
         const val MAX_SPEED_MM_S = 1_000f
 
-        internal fun readPayload(reader: DataInputStream): ObjectProcessOverrides {
+        internal fun readPayload(reader: DataInputStream, allowEmpty: Boolean = false): ObjectProcessOverrides {
             val mask = reader.readInt()
-            require(mask != 0 && mask and ALL_BITS == mask) {
+            require((allowEmpty || mask != 0) && mask and ALL_BITS == mask) {
                 "Object setting mask is invalid"
             }
             return ObjectProcessOverrides(
@@ -142,7 +142,7 @@ data class ObjectProcessOverrides(
                     require(enabled in 0..1) { "Object support setting is invalid" }
                     (enabled == 1).takeIf { mask and SUPPORT_ENABLED_BIT != 0 }
                 },
-            ).also { require(!it.isEmpty) { "Object settings are empty" } }
+            ).also { require(allowEmpty || !it.isEmpty) { "Object settings are empty" } }
         }
     }
 }

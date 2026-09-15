@@ -23,6 +23,141 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AccessibilityInstrumentedTest {
     @Test
+    fun toolpathGestureCameraSurvivesActivityRecreation() {
+        launchHarness(AccessibilityHarnessActivity.SCREEN_TOOLPATH_CAMERA).use { scenario ->
+            fun surface(): ToolpathSurfaceView {
+                var result: ToolpathSurfaceView? = null
+                scenario.onActivity { activity ->
+                    fun find(view: android.view.View) {
+                        if (view is ToolpathSurfaceView) result = view
+                        if (view is android.view.ViewGroup) for (i in 0 until view.childCount) find(view.getChildAt(i))
+                    }
+                    find(activity.window.decorView)
+                }
+                return checkNotNull(result)
+            }
+            SystemClock.sleep(750)
+            val before = surface()
+            var original: WorkspaceCameraPose? = null
+            val bounds = Rect()
+            scenario.onActivity { original = before.cameraPoseForTest(); assertTrue(before.getGlobalVisibleRect(bounds)) }
+            executeShellInput("input swipe ${bounds.centerX()} ${bounds.centerY()} ${bounds.centerX() + 120} ${bounds.centerY() + 70} 350")
+            SystemClock.sleep(500)
+            var changed: WorkspaceCameraPose? = null
+            scenario.onActivity { changed = before.cameraPoseForTest() }
+            assertTrue("Gesture must change the initial preset", original != changed)
+            scenario.recreate()
+            SystemClock.sleep(750)
+            val after = surface()
+            assertTrue(before !== after)
+            scenario.onActivity {
+                assertEquals("Restore the gesture pose without replaying the old preset", changed, after.cameraPoseForTest())
+            }
+        }
+    }
+
+    @Test
+    fun prepareGestureCameraSurvivesActivityRecreation() {
+        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use { scenario ->
+            fun surface(): PrepareModelSurfaceView {
+                var result: PrepareModelSurfaceView? = null
+                scenario.onActivity { activity ->
+                    fun find(view: android.view.View) {
+                        if (view is PrepareModelSurfaceView) result = view
+                        if (view is android.view.ViewGroup) for (i in 0 until view.childCount) find(view.getChildAt(i))
+                    }
+                    find(activity.window.decorView)
+                }
+                return checkNotNull(result)
+            }
+            SystemClock.sleep(750)
+            val beforeView = surface()
+            var original: PrepareModelCamera? = null
+            val bounds = Rect()
+            scenario.onActivity {
+                original = beforeView.cameraPoseForTest()
+                assertTrue(beforeView.getGlobalVisibleRect(bounds))
+            }
+            val startX = bounds.left + bounds.width() * 3 / 4
+            val startY = bounds.top + bounds.height() / 3
+            executeShellInput("input swipe $startX $startY ${startX - 120} ${startY + 70} 350")
+            SystemClock.sleep(500)
+            var changed: PrepareModelCamera? = null
+            scenario.onActivity { changed = beforeView.cameraPoseForTest() }
+            assertNotNull(changed)
+            assertTrue("The gesture must actually change the camera", original != changed)
+            scenario.recreate()
+            SystemClock.sleep(750)
+            val afterView = surface()
+            assertTrue("Recreation must replace the native view", beforeView !== afterView)
+            scenario.onActivity {
+                assertEquals("Restored renderer must receive the exact gesture pose", changed, afterView.cameraPoseForTest())
+            }
+        }
+    }
+
+    @Test
+    fun durableProfileDraftAcrossProcessRestart() {
+        val phase = InstrumentationRegistry.getArguments().getString("draftRestartPhase")
+        org.junit.Assume.assumeTrue("Run seed and restore in separate app processes", phase in listOf("seed", "restore"))
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences("profile-editor-draft", 0)
+        val key = "draft:restart-test-project:plate-1"
+        if (phase == "seed") assertTrue(preferences.edit().remove(key).commit())
+        val notes = context.getString(R.string.configuration_notes)
+        val search = context.getString(R.string.search_settings)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_DURABLE_PROFILES).use {
+            val slicing = context.getString(R.string.slicing_profile)
+            assertTrue(waitForNode(slicing) { it.isClickable }.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            replaceEditableText(search, notes)
+            val field = scrollUntilNode(notes, scrollAnchorLabel = search) {
+                it.isEditable && !it.effectiveLabel().contains(search)
+            }
+            if (phase == "seed") {
+                assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "Restart draft 32.5")
+                }))
+            }
+            waitForNode("Restart draft 32.5") { it.isEditable && it.text?.toString() == "Restart draft 32.5" }
+            if (phase == "seed") {
+                clickNamedAction(context.getString(R.string.close))
+                val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
+                while (preferences.getString(key, null)?.contains("Restart draft 32.5") != true &&
+                    SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(NODE_POLL_MILLIS)
+                assertTrue("Draft must reach persistent storage", preferences.getString(key, null)?.contains("Restart draft 32.5") == true)
+            }
+        }
+        if (phase == "restore") assertTrue(preferences.edit().remove(key).commit())
+    }
+
+    @Test
+    fun connectedFillAngleAcceptsExactDecimalsAndRejectsOutOfRange() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        launchHarness(AccessibilityHarnessActivity.SCREEN_COLOR_PAINT).use { scenario ->
+            clickNamedAction(context.getString(R.string.paint_color))
+            clickNamedAction(context.getString(R.string.paint_tool_connected))
+            clickNamedAction("30°")
+            fun enter(text: String) {
+                val field = waitForAnyNode("angle input") { it.isEditable }
+                assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+                }))
+            }
+            enter("91")
+            waitForNode(context.getString(R.string.apply_changes)) { !it.isEnabled }
+            enter("32.5")
+            scenario.recreate()
+            waitForNode("32.5") { it.isEditable }
+            clickNamedAction(context.getString(R.string.apply_changes))
+            waitForNode("32.5°") { it.isVisibleToUser }
+            val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            context.filesDir.resolve("connected-fill-palette.png").outputStream().use { output ->
+                screenshot.compress(Bitmap.CompressFormat.PNG, 100, output)
+            }
+        }
+    }
+
+    @Test
     fun prepareGpuTextureComposesUnderWorkspaceControls() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
@@ -308,6 +443,13 @@ class AccessibilityInstrumentedTest {
     @Test
     fun profileSliderAndSwitchExposeTheirSettingNamesOnce() {
         launchHarness(AccessibilityHarnessActivity.SCREEN_PROFILE).use {
+            waitForNodes(setOf(TEST_SETTING_LABEL, TEST_SWITCH_LABEL))
+            assertFalse("Numeric settings start compact", currentNodes().any {
+                it.className?.toString() == SEEK_BAR_CLASS &&
+                    it.effectiveLabel().contains(TEST_SETTING_LABEL)
+            })
+            clickNamedAction(TEST_SETTING_LABEL)
+            waitForNode(TEST_SETTING_LABEL) { it.className?.toString() == SEEK_BAR_CLASS }
             val nodes = waitForNodes(setOf(TEST_SETTING_LABEL, TEST_SWITCH_LABEL))
             assertEquals(
                 1,
@@ -1098,6 +1240,9 @@ class AccessibilityInstrumentedTest {
         val profileLabel = context.getString(R.string.printer_profile)
         val profilesHeading = context.getString(R.string.profiles)
         launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE).use { scenario ->
+            val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+            try {
+            assertTrue(automation.setRotation(android.app.UiAutomation.ROTATION_FREEZE_90))
             scenario.onActivity { activity ->
                 activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             }
@@ -1132,6 +1277,9 @@ class AccessibilityInstrumentedTest {
                 "Reading order must reach the menu before the scrollable profile sheet",
                 nodes.indexOf(menu) < nodes.indexOf(printerProfile),
             )
+            } finally {
+                automation.setRotation(android.app.UiAutomation.ROTATION_UNFREEZE)
+            }
         }
     }
 
@@ -1341,7 +1489,7 @@ class AccessibilityInstrumentedTest {
         val useColor = context.getString(R.string.use_filament_color)
         val filamentNotes = context.getString(R.string.filament_notes)
         val revert = context.getString(R.string.revert_changes)
-        val apply = context.getString(R.string.apply_changes)
+        val apply = context.getString(R.string.apply_to_project)
         launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
             tapCenter(waitForNode(filamentProfile) { it.isClickable })
             val picker = scrollUntilClickable(filamentColor)
@@ -1368,6 +1516,7 @@ class AccessibilityInstrumentedTest {
                 AccessibilityNodeInfo.ACTION_CLICK,
             ))
 
+            replaceEditableText(context.getString(R.string.search_settings), filamentNotes)
             assertTrue(
                 "Filament notes must be editable and discoverable by their setting name",
                 scrollUntilNode(filamentNotes) { it.isEditable }.isEditable,
@@ -1386,9 +1535,13 @@ class AccessibilityInstrumentedTest {
         val supports = context.getString(R.string.supports)
         val supportBody = context.getString(R.string.support_filament)
         val supportInterface = context.getString(R.string.support_interface_filament)
-        val supportBasePattern = context.getString(R.string.support_base_pattern)
-        val supportInterfacePattern = context.getString(R.string.support_interface_pattern)
         val searchSettings = context.getString(R.string.search_settings)
+        val defaultMaterial = context.getString(R.string.filament_default)
+        fun isMaterialPicker(node: AccessibilityNodeInfo, label: String): Boolean {
+            val text = node.effectiveLabel()
+            return node.isClickable && !node.isEditable &&
+                (text == "$label $defaultMaterial" || text.startsWith("$label T"))
+        }
         launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
             tapCenter(waitForNode(slicingProfile) { it.isClickable })
             tapCenter(waitForNode(supports) { it.isClickable })
@@ -1399,8 +1552,7 @@ class AccessibilityInstrumentedTest {
                 scrollAnchorLabel = searchSettings,
                 timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
             ) { node ->
-                node.isClickable && !node.isEditable &&
-                    !node.effectiveLabel().contains(supportBasePattern)
+                isMaterialPicker(node, supportBody)
             }
             assertTrue(
                 "Support body material must be a named picker, not a numeric seek bar",
@@ -1418,8 +1570,7 @@ class AccessibilityInstrumentedTest {
                 scrollAnchorLabel = searchSettings,
                 timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
             ) { node ->
-                node.isClickable && !node.isEditable &&
-                    !node.effectiveLabel().contains(supportInterfacePattern)
+                isMaterialPicker(node, supportInterface)
             }
             assertTrue(
                 "Support interface material must be independently selectable",
@@ -1436,8 +1587,7 @@ class AccessibilityInstrumentedTest {
                 scrollAnchorLabel = searchSettings,
                 timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
             ) { node ->
-                node.isClickable && !node.isEditable &&
-                    !node.effectiveLabel().contains(supportInterfacePattern)
+                isMaterialPicker(node, supportInterface)
             }
             assertTrue(
                 "The selected support interface must expose its tool and filament name",
@@ -1462,6 +1612,12 @@ class AccessibilityInstrumentedTest {
             tapCenter(waitForNode(supports) { it.isClickable })
             labels.forEach { label ->
                 replaceEditableText(searchSettings, label)
+                val expand = scrollUntilNode(
+                    label,
+                    scrollAnchorLabel = searchSettings,
+                    timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
+                ) { it.isClickable && it.effectiveLabel() == label }
+                assertTrue(expand.performAction(AccessibilityNodeInfo.ACTION_CLICK))
                 val slider = scrollUntilNode(
                     label,
                     scrollAnchorLabel = searchSettings,
@@ -1489,6 +1645,26 @@ class AccessibilityInstrumentedTest {
             ) { node -> node.isEditable }
             assertTrue("Configuration notes must be editable", field.isEditable)
             replaceEditableText(configurationNotes, "Enable chamber macro before printing.")
+        }
+    }
+
+    @Test
+    fun incompleteThumbnailSettingSurvivesScreenRecreation() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val printer = context.getString(R.string.printer_profile)
+        val search = context.getString(R.string.search_settings)
+        val thumbnails = context.getString(R.string.gcode_thumbnails)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use { scenario ->
+            tapCenter(waitForNode(printer) { it.isClickable })
+            replaceEditableText(search, thumbnails)
+            scrollUntilNode(thumbnails, scrollAnchorLabel = search,
+                timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS) { it.isEditable }
+            replaceEditableText(thumbnails, "320x")
+            scenario.recreate()
+            val restored = waitForAnyNode("Unfinished thumbnail definition after recreation") {
+                it.isEditable && it.text?.toString() == "320x"
+            }
+            assertTrue(restored.isVisibleToUser)
         }
     }
 
@@ -1555,7 +1731,7 @@ class AccessibilityInstrumentedTest {
         val infill = context.getString(R.string.sparse_infill_density)
         val revert = context.getString(R.string.revert_changes)
         val apply = context.getString(R.string.apply_changes)
-        launchHarness(AccessibilityHarnessActivity.SCREEN_HEIGHT_RANGE_MODIFIERS).use {
+        launchHarness(AccessibilityHarnessActivity.SCREEN_HEIGHT_RANGE_MODIFIERS).use { scenario ->
             val addButton = waitForNodes(setOf(title, add)).firstOrNull {
                 it.isClickable && it.effectiveLabel() == add
             }
@@ -1575,15 +1751,19 @@ class AccessibilityInstrumentedTest {
                 timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
             ) { it.isCheckable && it.isClickable }
             assertTrue("A range must expose its sparse infill override", infillControl.isVisibleToUser)
-            val stageButton = scrollUntilClickable(
+            assertTrue(infillControl.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            scrollUntilNode(
                 add,
                 scrollAnchorLabel = infill,
                 timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
-            )
-            assertTrue(stageButton.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            ) { it.isClickable && it.isEnabled && it.effectiveLabel() == add }
+            clickNamedAction(add)
+
+            scenario.recreate()
 
             val revertButton = waitForNode(revert) { it.isClickable }
             val applyButton = waitForNode(apply) { it.isClickable }
+            assertTrue("Staged edits must survive screen recreation", applyButton.isEnabled)
             assertTrue(
                 "Apply must retain the requested 70/30 visual priority",
                 applyButton.screenBounds().width() > revertButton.screenBounds().width() * 2,
@@ -1650,7 +1830,8 @@ class AccessibilityInstrumentedTest {
                 )
             }
             val settingsButton = nodes.first { it.isClickable && it.effectiveLabel() == settings }
-            tapCenter(settingsButton)
+            assertTrue(settingsButton.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNode(settings) { it.isClickable && it.isCheckable && it.isChecked }
             var scrollAnchor = settings
             listOf(size, leftRight, frontBack, upDown, infill).forEach { label ->
                 val control = scrollUntilNode(
@@ -1889,7 +2070,7 @@ class AccessibilityInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val placeOnFace = context.getString(R.string.lay_on_face)
         val hint = context.getString(R.string.lay_on_face_hint)
-        launchHarness(AccessibilityHarnessActivity.SCREEN_LAY_ON_FACE).use {
+        launchHarness(AccessibilityHarnessActivity.SCREEN_LAY_ON_FACE).use { scenario ->
             val tool = waitForNodes(setOf(placeOnFace)).firstOrNull {
                 it.isClickable && it.effectiveLabel().contains(placeOnFace)
             }
@@ -1899,7 +2080,7 @@ class AccessibilityInstrumentedTest {
                 "Place on face mode must explain the next touch action",
                 waitForNodes(setOf(hint)).any { it.effectiveLabel().contains(hint) },
             )
-            tapPrepareFixtureCenter()
+            tapPrepareFixtureCenter(scenario)
             assertTrue(
                 "GPU facet picking must apply Place on face for the touched model surface",
                 waitForNodes(setOf(TEST_LAY_ON_FACE_SELECTED_LABEL)).any {
@@ -1924,11 +2105,11 @@ class AccessibilityInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val placeOnFace = context.getString(R.string.lay_on_face)
         val hint = context.getString(R.string.lay_on_face_hint)
-        launchHarness(AccessibilityHarnessActivity.SCREEN_LAY_ON_FACE_FAILURE).use {
+        launchHarness(AccessibilityHarnessActivity.SCREEN_LAY_ON_FACE_FAILURE).use { scenario ->
             val tool = waitForNode(placeOnFace) { it.isClickable }
             tapCenter(tool)
             waitForNodes(setOf(hint))
-            tapPrepareFixtureCenter()
+            tapPrepareFixtureCenter(scenario)
 
             val nodes = waitForNodes(setOf(TEST_LAY_ON_FACE_FAILED_LABEL, hint))
             assertTrue(
@@ -1969,7 +2150,7 @@ class AccessibilityInstrumentedTest {
         val paintSupport = context.getString(R.string.paint_support)
         val brushSize = context.getString(R.string.paint_brush_size)
         val hint = context.getString(R.string.support_paint_hint)
-        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
+        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use { scenario ->
             val tool = waitForNode(paintSupport) { it.isClickable }
             tapCenter(tool)
             assertTrue(
@@ -1987,7 +2168,7 @@ class AccessibilityInstrumentedTest {
                     current in min..max && min == 8f && max == 48f
                 },
             )
-            tapPrepareFixtureCenter()
+            tapPrepareFixtureCenter(scenario)
             assertTrue(
                 "GPU facet picking must invoke support paint for the touched model surface",
                 waitForNodes(setOf(TEST_SUPPORT_PAINTED_LABEL)).any {
@@ -2041,13 +2222,25 @@ class AccessibilityInstrumentedTest {
         }
     }
 
-    private fun tapPrepareFixtureCenter() {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val screenshot = instrumentation.uiAutomation.takeScreenshot()
+    private fun tapPrepareFixtureCenter(scenario: ActivityScenario<AccessibilityHarnessActivity>) {
+        var viewport: Rect? = null
+        scenario.onActivity { activity ->
+            fun find(view: android.view.View): android.view.TextureView? {
+                if (view is android.view.TextureView && view.isShown) return view
+                if (view is android.view.ViewGroup) {
+                    for (index in 0 until view.childCount) find(view.getChildAt(index))?.let { return it }
+                }
+                return null
+            }
+            viewport = find(activity.window.decorView)?.let { view ->
+                Rect().takeIf { view.getGlobalVisibleRect(it) && !it.isEmpty }
+            }
+        }
+        val bounds = checkNotNull(viewport) { "The model's actual GPU viewport must be visible" }
         listOf(0.415f, 0.425f, 0.435f, 0.445f).forEach { heightFraction ->
             executeShellInput(
-                "input tap ${screenshot.width / 2} " +
-                    "${(screenshot.height * heightFraction).toInt()}",
+                "input tap ${bounds.centerX()} " +
+                    "${bounds.top + (bounds.height() * heightFraction).toInt()}",
             )
             SystemClock.sleep(NODE_POLL_MILLIS)
         }

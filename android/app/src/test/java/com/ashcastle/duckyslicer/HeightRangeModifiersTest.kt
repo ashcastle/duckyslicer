@@ -7,6 +7,37 @@ import org.junit.Test
 
 class HeightRangeModifiersTest {
     @Test
+    fun slicingResolvesInheritedLayerHeightWithoutChangingStoredOverrides() {
+        val value = HeightRangeModifiers(listOf(
+            HeightRangeModifier(1f, 3f, ObjectProcessOverrides(), 1),
+            HeightRangeModifier(3f, 5f, ObjectProcessOverrides(layerHeightMm = 0.12f)),
+        ))
+        val resolved = value.resolvedForSlicing(0.235f)
+        assertEquals(0.235f, resolved.ranges[0].overrides.layerHeightMm)
+        assertEquals(0.12f, resolved.ranges[1].overrides.layerHeightMm)
+        assertEquals(null, value.ranges[0].overrides.layerHeightMm)
+        assertEquals(1, resolved.ranges[0].filamentSlot)
+    }
+
+    @Test
+    fun colorOnlyAndMixedRangesRoundTripWithoutInventingProcessOverrides() {
+        val value = HeightRangeModifiers(listOf(
+            HeightRangeModifier(1f, 3f, ObjectProcessOverrides(), filamentSlot = 1),
+            HeightRangeModifier(3f, 5f, ObjectProcessOverrides(wallLoops = 4)),
+        ))
+        val file = Files.createTempFile("height-color", ".bin").toFile()
+        try {
+            value.writeSidecar(file)
+            assertEquals(HeightRangeModifiers.sidecarBytes(2, true), file.length())
+            assertEquals(value, HeightRangeModifiers.readSidecar(file))
+            assertEquals(value, value.toProjectJson().toHeightRangeModifiers())
+            assertThrows(IllegalArgumentException::class.java) {
+                HeightRangeModifier(1f, 2f, ObjectProcessOverrides(), MAX_FILAMENT_SLOTS)
+            }
+        } finally { file.delete() }
+    }
+
+    @Test
     fun sidecarAndJsonRoundTripEverySupportedOverride() {
         val modifiers = HeightRangeModifiers(
             listOf(

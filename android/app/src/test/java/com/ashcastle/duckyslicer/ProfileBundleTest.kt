@@ -13,6 +13,26 @@ import org.junit.Test
 
 class ProfileBundleTest {
     @Test
+    fun reviewingImportDoesNotWriteProfiles() {
+        val directory = Files.createTempDirectory("profile-import-review-").toFile()
+        try {
+            val source = ProfileStore(directory.resolve("source.json"))
+            source.savePrinter("Review printer", SliceOptions())
+            val destinationFile = directory.resolve("destination.json")
+            val destination = ProfileStore(destinationFile)
+            val bytes = source.exportBundle()
+            val review = destination.reviewBundle(bytes)
+            assertEquals(1, review.importedPrinters)
+            assertFalse(destinationFile.exists())
+            val committed = destination.importBundle(bytes)
+            assertEquals(review, committed)
+            assertTrue(destinationFile.exists())
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun bundleRoundTripCarriesOnlyUserProfilesAndRepeatImportIsStable() {
         val sourceDirectory = Files.createTempDirectory("duckyslicer-profile-source-").toFile()
         val destinationDirectory = Files.createTempDirectory("duckyslicer-profile-destination-").toFile()

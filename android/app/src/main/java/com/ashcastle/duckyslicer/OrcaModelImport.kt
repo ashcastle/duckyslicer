@@ -25,6 +25,12 @@ internal suspend fun importOrcaModels(
     options: SliceOptions,
     requestId: String = UUID.randomUUID().toString(),
     transferCancellation: DocumentTransferCancellation? = null,
+    reviewProjectSettings: suspend (String, Result<org.json.JSONObject>) -> SliceOptions = { _, result ->
+        result.getOrThrow()
+        options
+    },
+    restoreObjectSettings: () -> Boolean = { true },
+    reviewAllSettings: (suspend (String, Result<org.json.JSONObject?>, List<OrcaImportedProjectObject>) -> SliceOptions)? = null,
 ): List<ProjectObject> = withContext(Dispatchers.IO) {
     val cancellation = transferCancellation ?: DocumentTransferCancellation()
     fun cancellationRequested(): Boolean = cancellation.wasRequested() ||
@@ -69,6 +75,14 @@ internal suspend fun importOrcaModels(
                     }
                 }
                 throwIfCancellationRequested()
+                val settings = if (format == OrcaModelFormat.THREE_MF)
+                    runCatching { readOrcaProjectSettings(source, ::cancellationRequested) }
+                else Result.success(null)
+                var acceptedOptions = options
+                if (reviewAllSettings == null && (settings.isFailure || settings.getOrNull() != null)) {
+                    acceptedOptions = reviewProjectSettings(metadata.displayName, settings.map { requireNotNull(it) })
+                }
+                throwIfCancellationRequested()
                 val exported = if (format == OrcaModelFormat.STL) {
                     listOf(
                         OrcaImportedProjectObject(
@@ -83,7 +97,11 @@ internal suspend fun importOrcaModels(
                 } else {
                     SlicerProcessClient.normalizeModel(source, staging, requestId)
                 }
-                val availableFilamentSlots = options.printerProfile.extruderCount
+                if (reviewAllSettings != null && (settings.isFailure || settings.getOrNull() != null ||
+                    exported.any { it.objectConfig.values.isNotEmpty() || it.heightRanges.isNotEmpty() })) {
+                    acceptedOptions = reviewAllSettings(metadata.displayName, settings, exported)
+                }
+                val availableFilamentSlots = acceptedOptions.printerProfile.extruderCount
                     .coerceIn(1, MAX_FILAMENT_SLOTS)
                 val imported = exported.mapIndexed { objectIndex, normalized ->
                     throwIfCancellationRequested()
@@ -95,6 +113,9 @@ internal suspend fun importOrcaModels(
                     )
                     val volumes = normalized.volumes.mapIndexed { volumeIndex, volume ->
                         throwIfCancellationRequested()
+                        require(!volume.role.acceptsFilament || volume.filamentSlot < availableFilamentSlots) {
+                            "Model uses unavailable filament slots"
+                        }
                         require(
                             volume.orcaFacetAnnotations.multiColor.maximumState <=
                                 availableFilamentSlots,
@@ -121,10 +142,25 @@ internal suspend fun importOrcaModels(
                         volumes = volumes,
                         originalCenterX = normalized.centerXmm,
                         originalCenterY = normalized.centerYmm,
+                        processOverrides = normalized.objectConfig.values.takeIf { restoreObjectSettings() }
+                            .orEmpty().let { values ->
+                            require(values.keys.all { it in orcaObjectSettingsKeys }) {
+                                "Object contains unsupported settings: ${values.keys - orcaObjectSettingsKeys}"
+                            }
+                            orcaObjectOverrides(values)
+                        },
+                        heightRangeModifiers = HeightRangeModifiers(normalized.heightRanges
+                            .takeIf { restoreObjectSettings() }.orEmpty().map { range ->
+                            orcaHeightRange(range.start, range.end, range.config.values).also {
+                                require(it.filamentSlot == null || it.filamentSlot < availableFilamentSlots) {
+                                    "Height range uses unavailable filament slots"
+                                }
+                            }
+                        }),
                     )
                 }
                 throwIfCancellationRequested()
-                val transforms = importedTransforms(imported, format, options)
+                val transforms = importedTransforms(imported, format, acceptedOptions)
                 imported.mapIndexed { index, geometry ->
                     val objectId = UUID.randomUUID().toString()
                     ProjectObject(
@@ -140,6 +176,8 @@ internal suspend fun importOrcaModels(
                             )
                         },
                         transform = transforms[index],
+                        processOverrides = geometry.processOverrides,
+                        heightRangeModifiers = geometry.heightRangeModifiers,
                     )
                 }
             } catch (failure: Throwable) {
@@ -172,6 +210,8 @@ private data class ImportedGeometry(
     val volumes: List<ImportedVolumeGeometry>,
     val originalCenterX: Float,
     val originalCenterY: Float,
+    val processOverrides: ObjectProcessOverrides = ObjectProcessOverrides(),
+    val heightRangeModifiers: HeightRangeModifiers = HeightRangeModifiers(),
 ) {
     private val printableVolumes: List<ImportedVolumeGeometry>
         get() = volumes.filter { it.role == ProjectVolumeRole.MODEL_PART }

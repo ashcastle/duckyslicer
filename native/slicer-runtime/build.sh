@@ -129,6 +129,12 @@ prepare_runtime_source() {
 
     # Normalize the generated worktree before applying the reviewed patch stack.
     # Reverse in the opposite order so repeated local builds stay reproducible.
+    if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/auto-line-width.patch" 2>/dev/null; then
+        git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/auto-line-width.patch"
+    fi
+    if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/height-range-color.patch" 2>/dev/null; then
+        git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/height-range-color.patch"
+    fi
     if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/process-notes.patch" 2>/dev/null; then
         git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/process-notes.patch"
     fi
@@ -282,6 +288,12 @@ prepare_runtime_source() {
     git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/process-notes.patch" 2>/dev/null || \
         die "runtime process-note bridge contains unreviewed changes"
     git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/process-notes.patch"
+    git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/height-range-color.patch" 2>/dev/null || \
+        die "height-range color bridge contains unreviewed changes"
+    git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/height-range-color.patch"
+    git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/auto-line-width.patch" 2>/dev/null || \
+        die "auto line-width bridge contains unreviewed changes"
+    git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/auto-line-width.patch"
 
     local engine_root="$SOURCE_ROOT/app/src/main/cpp/orcaslicer"
     local engine_patches=(
@@ -292,6 +304,8 @@ prepare_runtime_source() {
         "$SCRIPT_DIR/engine-support-flow-ratios.patch"
         "$SCRIPT_DIR/engine-initial-layer-travel-acceleration.patch"
         "$SCRIPT_DIR/engine-resonance-profile.patch"
+        "$SCRIPT_DIR/engine-height-range-import.patch"
+        "$SCRIPT_DIR/engine-auto-width-segmentation.patch"
     )
     local engine_patches_applied=true
     local engine_patch

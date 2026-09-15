@@ -452,6 +452,8 @@ internal object SlicerProcessClient {
 
     /** Writes one selected plate as an interoperable 3MF through Orca's native writer. */
     fun exportThreeMf(
+        processOverrideFiles: List<File?>,
+        heightRangeModifierFiles: List<File?>,
         transformedModels: List<File>,
         objectVolumeCounts: IntArray,
         filamentSlots: IntArray,
@@ -472,6 +474,12 @@ internal object SlicerProcessClient {
             "3MF export must run outside the application main thread"
         }
         requireValidRequestId(requestId)
+        require(processOverrideFiles.size == objectVolumeCounts.size &&
+            heightRangeModifierFiles.size == objectVolumeCounts.size) {
+            "3MF object settings do not match the project"
+        }
+        val processPaths = processOverrideFiles.map { it?.absolutePath.orEmpty() }
+        val rangePaths = heightRangeModifierFiles.map { it?.absolutePath.orEmpty() }
         require(
             transformedModels.isNotEmpty() &&
                 objectVolumeCounts.all { it in 1..MAX_PROJECT_VOLUMES_PER_OBJECT } &&
@@ -504,7 +512,8 @@ internal object SlicerProcessClient {
         }
         require(
             encodedRequestBytes(
-                modelPaths + sidecarPaths.flatten() + objectNames + volumeNames + output.absolutePath,
+                modelPaths + sidecarPaths.flatten() + processPaths + rangePaths +
+                    objectNames + volumeNames + output.absolutePath,
                 "",
             ) <= SlicerProcessContract.MAX_REQUEST_BYTES,
         ) { "3MF export request is too large" }
@@ -517,6 +526,8 @@ internal object SlicerProcessClient {
                 worker.request(
                     what = SlicerProcessContract.MESSAGE_EXPORT_THREE_MF,
                     data = Bundle().apply {
+                        putStringArrayList(SlicerProcessContract.KEY_PROCESS_OVERRIDE_PATHS, ArrayList(processPaths))
+                        putStringArrayList(SlicerProcessContract.KEY_HEIGHT_RANGE_MODIFIER_PATHS, ArrayList(rangePaths))
                         putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
                         putStringArrayList(SlicerProcessContract.KEY_MODEL_PATHS, ArrayList(modelPaths))
                         putIntArray(SlicerProcessContract.KEY_OBJECT_VOLUME_COUNTS, objectVolumeCounts)
@@ -698,9 +709,20 @@ internal object SlicerProcessClient {
         val seenConfigs = HashSet<File>()
         val seenAnnotations = HashSet<File>()
         val grouped = ArrayList<MutableList<OrcaImportedProjectVolumeRecord>>()
+        val objectSettings = mutableMapOf<Int, Pair<ProjectVolumeConfig, List<OrcaImportedHeightRange>>>()
+        val objectSettingSources = mutableMapOf<Int, Pair<String, String>>()
+        fun readObjectConfig(path: String): ProjectVolumeConfig {
+            if (path.isEmpty()) return ProjectVolumeConfig()
+            val file = File(path).canonicalFile
+            require(file.parentFile == canonicalStaging && file.isFile &&
+                file.length() in 8..ProjectVolumeConfig.MAX_SIDECAR_BYTES.toLong()) {
+                "Slicer returned an unsafe object setting file"
+            }
+            return ProjectVolumeConfig.readSidecar(file)
+        }
         records.forEach { record ->
-            val values = record.split('\t', limit = 12)
-            require(values.size == 12) { "Slicer returned invalid project model metadata" }
+            val values = record.split('\t', limit = 14)
+            require(values.size == 14) { "Slicer returned invalid project model metadata" }
             val output = checkedImportedModelFile(values[0], canonicalStaging, seen)
             val objectName = values[1].trim().takeIf { it.length in 1..200 } ?: "model"
             val volumeName = values[2].trim().takeIf { it.length in 1..200 } ?: "part.stl"
@@ -746,6 +768,21 @@ internal object SlicerProcessClient {
             require(objectOrdinal in 0 until SlicerProcessService.MAX_OBJECTS) {
                 "Slicer returned an invalid object group"
             }
+            if (objectOrdinal !in objectSettings) {
+                objectSettingSources[objectOrdinal] = values[12] to values[13]
+                val ranges = if (values[13].isEmpty()) emptyList() else values[13].split('\n').also {
+                    require(it.size <= HeightRangeModifiers.MAX_RANGES) { "Too many imported height ranges" }
+                }.map { line ->
+                    val parts = line.split('\t', limit = 3)
+                    require(parts.size == 3) { "Invalid imported height range" }
+                    OrcaImportedHeightRange(checkedImportedCoordinate(parts[0]),
+                        checkedImportedCoordinate(parts[1]), readObjectConfig(parts[2]))
+                }
+                objectSettings[objectOrdinal] = readObjectConfig(values[12]) to ranges
+            }
+            require(objectSettingSources[objectOrdinal] == (values[12] to values[13])) {
+                "Slicer returned inconsistent object settings"
+            }
             if (objectOrdinal == grouped.size) grouped.add(ArrayList())
             require(objectOrdinal == grouped.lastIndex) {
                 "Slicer returned non-contiguous object groups"
@@ -771,7 +808,7 @@ internal object SlicerProcessClient {
         require(grouped.size in 1..SlicerProcessService.MAX_OBJECTS) {
             "Slicer returned an invalid object count"
         }
-        return grouped.map { group ->
+        return grouped.mapIndexed { ordinal, group ->
             val first = group.first()
             require(group.any { it.volume.role == ProjectVolumeRole.MODEL_PART }) {
                 "Slicer returned an object without a printable model part"
@@ -786,6 +823,8 @@ internal object SlicerProcessClient {
                 displayName = first.objectName,
                 centerXmm = first.centerXmm,
                 centerYmm = first.centerYmm,
+                objectConfig = objectSettings.getValue(ordinal).first,
+                heightRanges = objectSettings.getValue(ordinal).second,
             )
         }
     }
@@ -1743,6 +1782,14 @@ internal data class OrcaImportedProjectObject(
     val displayName: String,
     val centerXmm: Float,
     val centerYmm: Float,
+    val objectConfig: ProjectVolumeConfig = ProjectVolumeConfig(),
+    val heightRanges: List<OrcaImportedHeightRange> = emptyList(),
+)
+
+internal data class OrcaImportedHeightRange(
+    val start: Float,
+    val end: Float,
+    val config: ProjectVolumeConfig,
 )
 
 private data class OrcaImportedProjectVolumeRecord(
@@ -2749,6 +2796,9 @@ class SlicerProcessService : Service() {
             val records = requireNotNull(
                 runtime.nativeExportLoadedProjectVolumes(outputDirectory.absolutePath),
             ) { "Model objects and parts could not be exported" }
+            require(encodedRequestBytes(records.toList(), "") <= SlicerProcessContract.MAX_REQUEST_BYTES) {
+                "Imported model metadata is too large"
+            }
             require(records.size in 1..ProjectStore.MAX_PROJECT_VOLUMES) {
                 "Invalid imported model volume count"
             }
@@ -2817,6 +2867,12 @@ class SlicerProcessService : Service() {
             require(values.size == models.size) { "$label count does not match models" }
         }
 
+        fun objectPaths(key: String): List<String> = requireNotNull(extras.getStringArrayList(key)) {
+            "3MF object setting paths are unavailable"
+        }.also { require(it.size == objectVolumeCounts.size) { "3MF object setting count is invalid" } }
+        val processPaths = objectPaths(SlicerProcessContract.KEY_PROCESS_OVERRIDE_PATHS)
+        val rangePaths = objectPaths(SlicerProcessContract.KEY_HEIGHT_RANGE_MODIFIER_PATHS)
+
         val volumeConfigPaths = requestedPaths(
             SlicerProcessContract.KEY_VOLUME_CONFIG_PATHS,
             "Volume setting",
@@ -2852,7 +2908,7 @@ class SlicerProcessService : Service() {
             encodedRequestBytes(
                 paths + objectNames + volumeNames + volumeConfigPaths + supportPaintPaths +
                     seamPaintPaths + multiColorPaintPaths + orcaSupportPaths + orcaSeamPaths +
-                    orcaMultiColorPaths + outputPath,
+                    orcaMultiColorPaths + processPaths + rangePaths + outputPath,
                 "",
             ) <= SlicerProcessContract.MAX_REQUEST_BYTES,
         ) { "3MF export request is too large" }
@@ -2894,9 +2950,21 @@ class SlicerProcessService : Service() {
             },
         ) { "Multi-color paint uses an unavailable filament" }
         val output = validateThreeMfExportOutput(outputPath)
+        val processOverrides = processPaths.map { it.takeIf(String::isNotEmpty)?.let(::validateObjectProcessOverrides) }
+        val heightRanges = rangePaths.map { it.takeIf(String::isNotEmpty)?.let(::validateHeightRangeModifiers) }
         val runtime = createNativeRuntime()
         try {
             val mapping = loadNativeObjects(runtime, models, objectVolumeCounts)
+            processOverrides.forEachIndexed { index, settings ->
+                if (settings != null) check(runtime.applyObjectProcessOverrides(index, settings.file.absolutePath)) {
+                    "3MF object settings could not be applied"
+                }
+            }
+            heightRanges.forEachIndexed { index, settings ->
+                if (settings != null) check(runtime.applyHeightRangeModifiers(index, settings.file.absolutePath)) {
+                    "3MF height settings could not be applied"
+                }
+            }
             objectNames.forEachIndexed { objectIndex, name ->
                 check(runtime.nativeSetProjectObjectName(objectIndex, name)) {
                     "3MF object name could not be applied"

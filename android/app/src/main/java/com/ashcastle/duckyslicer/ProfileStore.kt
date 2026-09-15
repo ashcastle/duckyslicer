@@ -677,6 +677,10 @@ class ProfileStore internal constructor(
     }
 
     @Synchronized
+    internal fun reviewBundle(bytes: ByteArray): ProfileBundleImportResult =
+        mergeProfileBundle(readRoot(forMutation = true), bytes, ::userId).result
+
+    @Synchronized
     internal fun importBundle(
         bytes: ByteArray,
         beforeCommit: () -> Unit = {},

@@ -20,6 +20,8 @@ internal object NativeEngine {
 
     external fun layOnFace(requestJson: String): String
 
+    external fun selectConnectedFacets(requestJson: String): String
+
     external fun previewGcodeRangeInto(
         path: String,
         startLayer: Int,

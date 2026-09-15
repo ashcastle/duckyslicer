@@ -1,0 +1,45 @@
+diff --git a/app/src/main/cpp/src/sapil_object_process_overrides.cpp b/app/src/main/cpp/src/sapil_object_process_overrides.cpp
+--- a/app/src/main/cpp/src/sapil_object_process_overrides.cpp
++++ b/app/src/main/cpp/src/sapil_object_process_overrides.cpp
+@@ -18,3 +18,4 @@
+ constexpr std::array<unsigned char, 4> MAGIC{'D', 'P', 'O', '1'};
+ constexpr std::array<unsigned char, 4> HEIGHT_RANGE_MAGIC{'D', 'H', 'R', '1'};
++constexpr std::array<unsigned char, 4> HEIGHT_COLOR_MAGIC{'D', 'H', 'R', '2'};
+ constexpr std::uint32_t LAYER_HEIGHT_BIT = 1U << 0;
+@@ -136,8 +137,11 @@
+     std::uint32_t count = 0;
+-    if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size()) ||
+-        magic != HEIGHT_RANGE_MAGIC || !read_u32_be(input, count) || count == 0U ||
++    if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size())) return false;
++    const bool with_color = magic == HEIGHT_COLOR_MAGIC;
++    const auto entry_bytes = HEIGHT_RANGE_ENTRY_BYTES + (with_color ? 4U : 0U);
++    if ((!with_color && magic != HEIGHT_RANGE_MAGIC) ||
++        !read_u32_be(input, count) || count == 0U ||
+         count > MAX_HEIGHT_RANGES ||
+-        bytes != HEIGHT_RANGE_HEADER_BYTES + count * HEIGHT_RANGE_ENTRY_BYTES) {
++        bytes != HEIGHT_RANGE_HEADER_BYTES + count * entry_bytes) {
+         return false;
+     }
+ 
+@@ -159,3 +164,3 @@
+         if (!read_f32_be(input, start_z) || !read_f32_be(input, end_z) ||
+-            !read_u32_be(input, mask) || mask == 0U || (mask & ~ALL_BITS) != 0U ||
++            !read_u32_be(input, mask) || (mask & ~ALL_BITS) != 0U ||
+             !read_f32_be(input, layer_height) || !read_u32_be(input, wall_loops) ||
+@@ -168,3 +173,6 @@
++        std::uint32_t filament = 0;
++        if (with_color && (!read_u32_be(input, filament) || filament > 16U)) return false;
++        if (mask == 0U && filament == 0U) return false;
+         if (!std::isfinite(start_z) || !std::isfinite(end_z) || start_z < 0.0F ||
+             end_z > 10000.0F || end_z - start_z < 0.01F ||
+             (index > 0U && start_z < previous_end)) {
+@@ -205,4 +213,9 @@
+         if (mask & SUPPORT_ENABLED_BIT) range_config.set_key_value(
+             "enable_support", new Slic3r::ConfigOptionBool(support_enabled != 0));
++        if (filament != 0U) {
++            for (const char* key : {"wall_filament", "sparse_infill_filament", "solid_infill_filament"}) {
++                range_config.set_key_value(key, new Slic3r::ConfigOptionInt(static_cast<int>(filament)));
++            }
++        }
+         parsed[{static_cast<double>(start_z), static_cast<double>(end_z)}]
+             .assign_config(std::move(range_config));

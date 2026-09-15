@@ -14,10 +14,36 @@ import org.junit.Test
 
 class ProjectStoreTest {
     @Test
+    fun existingProjectWithoutDraftIdentityIsMigratedOnceWithoutChangingSettings() = withStore { root, store ->
+        store.save(ProjectSnapshot(), SliceOptions().copy(layerHeight = 0.235f))
+        val file = File(root, "current_project.json")
+        val before = JSONObject(file.readText()).apply { remove("draftIdentity") }
+        file.writeText(before.toString())
+        val migrated = store.loadProject()
+        val reopened = ProjectStore(root, ::inspectedModel).loadProject()
+        assertFalse(migrated.storageUnavailable)
+        assertEquals(migrated.snapshot.draftIdentity, reopened.snapshot.draftIdentity)
+        assertEquals(0.235f, reopened.sliceOptions!!.layerHeight)
+        val after = JSONObject(file.readText()).apply { remove("draftIdentity") }
+        assertEquals(before.toString(), after.toString())
+    }
+
+    @Test
+    fun firstEmptyProjectIdentitySurvivesStoreRecreation() = withStore { root, store ->
+        val first = store.loadProject()
+        val reopened = ProjectStore(root, ::inspectedModel).loadProject()
+        assertFalse(first.storageUnavailable)
+        assertEquals(first.snapshot.draftIdentity, reopened.snapshot.draftIdentity)
+    }
+
+    @Test
     fun emptyProjectWithNullSelectionRemainsWritableAndReadable() = withStore { _, store ->
-        store.save(ProjectSnapshot(), SliceOptions())
+        val original = ProjectSnapshot()
+        org.junit.Assert.assertNotEquals(original.draftIdentity, ProjectSnapshot().draftIdentity)
+        store.save(original, SliceOptions())
 
         val restored = store.loadProject()
+        assertEquals(original.draftIdentity, restored.snapshot.draftIdentity)
 
         assertFalse(restored.storageUnavailable)
         assertTrue(restored.snapshot.objects.isEmpty())
@@ -251,7 +277,7 @@ class ProjectStoreTest {
         assertEquals(82, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf(
-                "schemaVersion", "selectedPlateId", "linkedDocument",
+                "schemaVersion", "selectedPlateId", "draftIdentity", "linkedDocument",
                 "linkedDocumentDirty", "recentDocuments", "plates",
             ),
             persisted.keys().asSequence().toSet(),

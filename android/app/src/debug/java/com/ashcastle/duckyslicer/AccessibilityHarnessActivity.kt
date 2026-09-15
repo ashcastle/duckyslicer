@@ -131,6 +131,12 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                         SCREEN_MODEL_TRANSFORM -> WorkspaceAccessibilityHarness(
                             projectObjects = listOf(accessibilityProjectObject()),
                         )
+                        SCREEN_COLOR_PAINT -> WorkspaceAccessibilityHarness(
+                            projectObjects = listOf(accessibilityProjectObject()),
+                            sliceOptions = SliceOptions().copy(
+                                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                            ),
+                        )
                         SCREEN_LAY_ON_FACE -> WorkspaceAccessibilityHarness(
                             projectObjects = listOf(accessibilityLayOnFaceProjectObject()),
                         )
@@ -203,6 +209,8 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             }
                         }
                         SCREEN_WORKSPACE_PROFILES -> ProfileSettingsAccessibilityHarness()
+                        SCREEN_DURABLE_PROFILES -> ProfileSettingsAccessibilityHarness("restart-test-project:plate-1")
+                        SCREEN_TOOLPATH_CAMERA -> ToolpathCameraAccessibilityHarness()
                             else -> PreviewAccessibilityHarness()
                         }
                     }
@@ -230,6 +238,8 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_SLICE_ALL_PROGRESS = "slice-all-progress"
         const val SCREEN_WORKSPACE = "workspace"
         const val SCREEN_WORKSPACE_PROFILES = "workspace-profiles"
+        const val SCREEN_DURABLE_PROFILES = "durable-profiles"
+        const val SCREEN_TOOLPATH_CAMERA = "toolpath-camera"
         const val SCREEN_OBJECT_SETTINGS = "object-settings"
         const val SCREEN_HEIGHT_RANGE_MODIFIERS = "height-range-modifiers"
         const val SCREEN_SHAPES = "shapes"
@@ -239,6 +249,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_SIMPLIFY = "simplify"
         const val SCREEN_SPLIT_PARTS = "split-parts"
         const val SCREEN_MODEL_TRANSFORM = "model-transform"
+        const val SCREEN_COLOR_PAINT = "color-paint"
         const val SCREEN_LAY_ON_FACE = "lay-on-face"
         const val SCREEN_LAY_ON_FACE_FAILURE = "lay-on-face-failure"
         const val SCREEN_GCODE_EXPORT = "gcode-export"
@@ -252,7 +263,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
 }
 
 @Composable
-private fun ProfileSettingsAccessibilityHarness() {
+private fun ProfileSettingsAccessibilityHarness(draftScope: String = "") {
     val userPrinter = PrinterProfile.CUSTOM_CARTESIAN.copy(
         id = "user-accessibility-printer",
         name = "My accessibility printer",
@@ -290,6 +301,7 @@ private fun ProfileSettingsAccessibilityHarness() {
     Column(Modifier.padding(16.dp)) {
         ProfileSettings(
             options = options,
+            draftScope = draftScope,
             catalog = catalog,
             bundledCatalogUnavailable = false,
             recents = ProfileRecents(),
@@ -345,6 +357,22 @@ private fun HeightRangeModifiersAccessibilityHarness() {
         onApply = { modifiers = it },
         onDismiss = {},
     )
+}
+
+@Composable
+private fun ToolpathCameraAccessibilityHarness() {
+    val preview = remember {
+        GcodeLayerPreview(startLayer = 0, endLayer = 0, layerCount = 1,
+            minZMm = 0.2f, maxZMm = 0.2f,
+            segments = FloatArray(GcodeLayerPreview.SEGMENT_STRIDE).apply {
+                this[0] = 50f; this[1] = 50f; this[2] = 150f; this[3] = 150f; this[4] = 0.2f
+            }, roleSegmentCounts = intArrayOf(1, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+    }
+    DepthTestedToolpathScene(preview, 220f, 220f, 0f, 0f,
+        rectangularBedPolygon(220f, 220f), emptyList(), 1f, 0.8f,
+        (0 until GcodeLayerPreview.ROLE_COUNT).toSet(), PreviewColorMode.FEATURE,
+        DefaultFilamentColors, PreviewDetail.PERFORMANCE,
+        WorkspaceCameraRequest(1L, WorkspaceCameraPreset.TOP), {}, Modifier.fillMaxSize())
 }
 
 @Composable
@@ -524,6 +552,7 @@ private fun SettingsAccessibilityHarness(supportExporting: Boolean = false) {
 
 @Composable
 private fun WorkspaceAccessibilityHarness(
+    sliceOptions: SliceOptions = SliceOptions(),
     selectedTab: WorkspaceTab = WorkspaceTab.SLICE,
     projectObjects: List<ProjectObject> = emptyList(),
     sliceOutcome: SliceOutcome? = null,
@@ -581,7 +610,7 @@ private fun WorkspaceAccessibilityHarness(
         layerPauseEvents = activePlate.layerPauseEvents,
         layerFilamentChanges = activePlate.layerFilamentChanges,
         layerCustomGCodeEvents = activePlate.layerCustomGCodeEvents,
-        sliceOptions = SliceOptions(),
+        sliceOptions = sliceOptions,
         profileCatalog = ProfileCatalog(sourceRevision = "accessibility-harness"),
         profileRecents = ProfileRecents(),
         appSettings = AppSettings(),
@@ -793,7 +822,8 @@ private fun WorkspaceAccessibilityHarness(
         onSeamPaintPreview = { _, _, _, _ -> },
         onSeamPaintCommitted = { _, _, _, _ -> },
         onBrimPointsChanged = { _, _ -> },
-        onMultiColorPaintPreview = { _, _, _, _ -> },
+            onMultiColorPaintPreview = { _, _, _, _ -> },
+            onConnectedColorFill = { _, _, _, _, _ -> },
         onMultiColorPaintCommitted = { _, _, _, _ -> },
         onVariableLayerHeightsChanged = {},
         onObjectProcessOverridesChanged = {},

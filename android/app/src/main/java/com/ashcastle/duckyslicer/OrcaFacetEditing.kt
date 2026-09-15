@@ -11,7 +11,7 @@ internal data class FacetPaintTarget(
 ) {
     init {
         require(facetIndex >= 0) { "Facet paint target is invalid" }
-        require(subdivisionDepth in 1..MAX_SUBDIVISION_DEPTH) {
+        require(subdivisionDepth in 0..MAX_SUBDIVISION_DEPTH) {
             "Facet paint depth is invalid"
         }
         require(weightA.isFinite() && weightB.isFinite() && weightC.isFinite()) {
@@ -148,6 +148,19 @@ internal fun exactPaintFacetsToClear(
     .toSet()
 
 internal const val MAX_FACET_PAINT_BATCH_TARGETS = 256
+
+/** A region is applied atomically, without repeatedly copying the entire map per facet. */
+internal fun OrcaFacetAnnotation.paintWholeFacets(facets: Set<Int>, state: Int): OrcaFacetAnnotation {
+    require(state in 0..MAX_FACET_STATE && facets.all { it >= 0 })
+    require(facets.size <= OrcaFacetAnnotation.MAX_ANNOTATED_TRIANGLES)
+    val encoded = FacetTreeCodec.serialize(FacetNode.Leaf(state))
+    val next = triangles.toMutableMap()
+    facets.forEach { if (state == 0) next.remove(it) else next[it] = encoded }
+    require(next.size <= OrcaFacetAnnotation.MAX_ANNOTATED_TRIANGLES) {
+        "Connected region exceeds paint capacity"
+    }
+    return if (next == triangles) this else OrcaFacetAnnotation(next.toSortedMap())
+}
 
 private sealed interface FacetNode {
     data class Leaf(val state: Int) : FacetNode

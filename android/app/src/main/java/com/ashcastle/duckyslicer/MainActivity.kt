@@ -839,6 +839,9 @@ private fun DuckySlicerScreen(
     var pendingStlExportObjectId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedTab by rememberSaveable { mutableStateOf(WorkspaceTab.SLICE) }
     var layerPreview by remember { mutableStateOf<GcodeLayerPreview?>(null) }
+    var previewRangePath by rememberSaveable { mutableStateOf<String?>(null) }
+    var previewRangeStart by rememberSaveable { mutableStateOf(0) }
+    var previewRangeEnd by rememberSaveable { mutableStateOf(Int.MAX_VALUE) }
     var stalePreviewResult by remember { mutableStateOf<PlateSliceResult?>(null) }
     val sliceOperationState by sliceOperationModel.state.collectAsStateWithLifecycle()
     val plateSliceBatchState by plateSliceBatchModel.state.collectAsStateWithLifecycle()
@@ -892,6 +895,7 @@ private fun DuckySlicerScreen(
     val projectRestored = projectTransferState.restored
     val remoteOperationState by remoteOperationModel.state.collectAsStateWithLifecycle()
     val profileLibraryState by profileLibraryModel.state.collectAsStateWithLifecycle()
+    var completedProfileSave by remember { mutableStateOf<ProfileEditorSaveApplied?>(null) }
     val appSettingsState by appSettingsModel.state.collectAsStateWithLifecycle()
     val gcodeExportState by gcodeExportModel.state.collectAsStateWithLifecycle()
     val supportReportExportState by
@@ -1059,7 +1063,14 @@ private fun DuckySlicerScreen(
         ),
         onInvalidSelectedResult = ::clearCompletedSlice,
         onResultsChanged = { plateSliceResults = it },
-        onPreviewChanged = { layerPreview = it },
+        onPreviewChanged = {
+            layerPreview = it
+            if (it != null) {
+                previewRangePath = sliceOperationState.outcome?.output?.absolutePath
+                previewRangeStart = it.startLayer
+                previewRangeEnd = it.endLayer
+            }
+        },
         onClearStalePreview = { stalePreviewResult = null },
         onTabSelected = { selectedTab = it },
         onPresentation = { nextNotice, nextError ->
@@ -1113,7 +1124,16 @@ private fun DuckySlicerScreen(
     LaunchedEffect(profileLibraryState.completion?.id) {
         val completion = profileLibraryState.completion ?: return@LaunchedEffect
         val session = projectTransferModel.state.value
-        completion.optionsForSession(session.sessionRevision)?.let(::applyOptions)
+        completion.optionsForSession(session.sessionRevision)?.let { saved ->
+            val snapshot = session.history.current
+            val previous = session.sliceOptions
+            applyOptions(saved)
+            if (projectTransferModel.state.value.sliceOptions == saved) {
+                completedProfileSave = ProfileEditorSaveApplied(completion.id,
+                    "${snapshot.draftIdentity}/${snapshot.selectedPlateId}",
+                    previous, completion.sourceOptions, saved)
+            }
+        }
         notice = profileSavedNotice
         error = null
         profileLibraryModel.consumeCompletion(completion.id)
@@ -1149,6 +1169,14 @@ private fun DuckySlicerScreen(
             error = nextError
         },
     )
+
+    ProfileImportReviewDialog(profileLibraryState.importReview, profileLibraryModel::approveImport)
+    OrcaModelSettingsReviewDialog(projectTransferState.modelSettingsReview,
+        onChoose = projectTransferModel::approveModelSettings,
+        onCancel = { projectTransferModel.cancelActiveEdit() })
+    OrcaImportReviewDialog(profileLibraryState.orcaImportReview,
+        onConfirm = profileLibraryModel::approveOrcaImport,
+        onCancel = { profileLibraryModel.cancelTransfer() })
 
     fun applyModelTransform(transform: ModelTransform, recordHistory: Boolean = true) {
         val current = projectTransferModel.state.value.history
@@ -1504,7 +1532,7 @@ private fun DuckySlicerScreen(
         if (
             !profileBusy && projectRestored && !projectTransferBusy &&
             !importing && !autoLaying && !arranging && !splitting && !cutting &&
-            !slicing && !previewLoading && profileLibraryModel.importBundle(uri)
+            !slicing && !previewLoading && profileLibraryModel.importBundle(uri, sliceOptions)
         ) {
             error = null
             notice = null
@@ -1575,7 +1603,11 @@ private fun DuckySlicerScreen(
             completed?.isRestorableFrom(context.filesDir) == true &&
             layerPreview == null
         ) {
-            loadPreviewRange(0, Int.MAX_VALUE)
+            val sameResult = previewRangePath == completed.output.absolutePath
+            loadPreviewRange(
+                if (sameResult) previewRangeStart else 0,
+                if (sameResult) previewRangeEnd else Int.MAX_VALUE,
+            )
         }
     }
 
@@ -1612,7 +1644,10 @@ private fun DuckySlicerScreen(
         model = remoteOperationModel,
     )
 
+    WorkspaceContent {
     WorkspaceScreen(
+        draftScope = projectHistory.current.draftIdentity,
+        completedProfileSave = completedProfileSave,
         selectedTab = selectedTab,
         projectPlates = projectPlates,
         selectedPlateId = selectedPlateId,
@@ -1960,6 +1995,9 @@ private fun DuckySlicerScreen(
             }
         },
         onMultiColorPaintPreview = facetPaintActions::previewMultiColor,
+        onConnectedColorFill = { objectId, volumeId, seed, slot, angle ->
+            projectTransferModel.fillConnectedColor(objectId, volumeId, seed, slot, angle)
+        },
         onMultiColorPaintCommitted = facetPaintActions::commitMultiColor,
         onVariableLayerHeightsChanged = { variableLayerHeights ->
             val current = projectTransferModel.state.value.history
@@ -2125,6 +2163,7 @@ private fun DuckySlicerScreen(
             }
         },
     )
+    }
     externalProjectConfirmation?.let { request ->
         ProjectReplacementDialog(
             linkedProjectName = projectTransferState.linkedDocument?.displayName,
@@ -2144,6 +2183,12 @@ private fun DuckySlicerScreen(
             },
         )
     }
+}
+
+// Keep the large workspace binding out of the screen's JVM method-size budget.
+@Composable
+private fun WorkspaceContent(content: @Composable () -> Unit) {
+    content()
 }
 
 internal fun startExternalProjectImport(

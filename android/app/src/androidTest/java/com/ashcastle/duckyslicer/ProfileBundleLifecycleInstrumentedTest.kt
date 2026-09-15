@@ -184,6 +184,9 @@ class ProfileBundleLifecycleInstrumentedTest {
                 })
 
                 releaseImportProvider()
+                waitUntil("profile review did not appear") { retained.state.value.importReview != null }
+                assertFalse(ProfileStore(context).load().filaments.any { it.name == "Imported device filament" })
+                scenario.onActivity { retained.approveImport(true) }
                 waitUntil("profile import did not finish") {
                     retained.state.value.transferCompletion?.outcome ==
                         ProfileTransferOutcome.SUCCEEDED
@@ -228,6 +231,8 @@ class ProfileBundleLifecycleInstrumentedTest {
                 }
                 waitForImportProvider { it.getBoolean(BlockingImportProvider.KEY_STARTED) }
                 releaseImportProvider()
+                waitUntil("profile review did not appear") { retained.state.value.importReview != null }
+                scenario.onActivity { retained.approveImport(true) }
                 waitUntil("conflicting profile import did not finish") {
                     retained.state.value.transferCompletion?.outcome ==
                         ProfileTransferOutcome.SUCCEEDED
@@ -244,6 +249,76 @@ class ProfileBundleLifecycleInstrumentedTest {
                 val imported = stored.single { it.name == "conflict material (2)" }
                 assertEquals(237, imported.nozzleTemp)
                 assertEquals(0.96f, imported.flowRatio)
+            }
+        } finally {
+            releaseImportProvider()
+            fixture.parentFile?.deleteRecursively()
+            resetTargetProfiles()
+        }
+    }
+
+    @Test
+    fun orcaReviewSurvivesRecreationAndCancellationNeverWritesProfiles() = checkOrcaReview(false)
+
+    @Test
+    fun orcaImportWritesOnlyAfterBothReviewsAreApproved() = checkOrcaReview(true)
+
+    @Test
+    fun bundledVendorParentResolvesWithItsOwnInheritedSettings() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val incoming = org.json.JSONObject()
+            .put("type", "process").put("name", "My MK3S process")
+            .put("inherits", "0.20mm Standard @MK3S 0.4")
+        val parents = context.assets.open("orca-import-parents.bin").use {
+            readOrcaBundledParents(it, listOf(incoming))
+        }
+        val review = reviewOrcaPresets(listOf(incoming), parents, emptyMap(), emptySet()).single()
+        assertEquals(null, review.problem)
+        assertEquals("35", review.resolved!!.getString("outer_wall_speed"))
+        assertEquals("Prusa MK3S 0.4 nozzle",
+            review.resolved.getJSONArray("compatible_printers").getString(0))
+    }
+
+    private fun checkOrcaReview(approve: Boolean) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        resetTargetProfiles()
+        ProfileStore(context).savePrinter("Keep original", SliceOptions())
+        val target = context.filesDir.resolve("profiles/user_profiles.json")
+        val original = target.readBytes()
+        val fixture = profileBundleFixture("Temporary fixture").apply {
+            writeText("""{"type":"process","name":"Reviewed Orca process","layer_height":"0.16"}""")
+        }
+        prepareImport(BlockingImportProvider.METHOD_PREPARE, fixture)
+        try {
+            launchHarness().use { scenario ->
+                lateinit var model: ProfileLibraryViewModel
+                scenario.onActivity { model = ViewModelProvider(it)[ProfileLibraryViewModel::class.java] }
+                waitUntil("library not loaded") { model.state.value.catalogLoaded && !model.state.value.busy }
+                scenario.onActivity { assertTrue(model.importBundle(BlockingImportProvider.URI)) }
+                waitForImportProvider { it.getBoolean(BlockingImportProvider.KEY_STARTED) }
+                releaseImportProvider()
+                waitUntil("Orca review missing") { model.state.value.orcaImportReview != null }
+                assertTrue(original.contentEquals(target.readBytes()))
+                scenario.recreate()
+                assertTrue(model.state.value.orcaImportReview != null)
+                if (approve) {
+                    scenario.onActivity { model.approveOrcaImport(setOf(0), setOf(0)) }
+                    waitUntil("final review missing") { model.state.value.importReview != null }
+                    assertTrue(original.contentEquals(target.readBytes()))
+                    scenario.onActivity { model.approveImport(true) }
+                    waitUntil("import not committed") {
+                        model.state.value.transferCompletion?.outcome == ProfileTransferOutcome.SUCCEEDED
+                    }
+                    assertTrue(ProfileStore(context).load().slicing.any {
+                        it.name == "Reviewed Orca process" && it.layerHeightMm == 0.16f
+                    })
+                } else {
+                    scenario.onActivity { assertTrue(model.cancelTransfer()) }
+                    waitUntil("cancel not settled") {
+                        model.state.value.transferCompletion?.outcome == ProfileTransferOutcome.CANCELED
+                    }
+                    assertTrue(original.contentEquals(target.readBytes()))
+                }
             }
         } finally {
             releaseImportProvider()

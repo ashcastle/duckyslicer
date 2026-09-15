@@ -6,6 +6,30 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OrcaFacetEditingTest {
+    @Test
+    fun wholeRegionIsAtomicAndKeepsUnselectedRecursiveFacets() {
+        val original = OrcaFacetAnnotation(mapOf(0 to "40003", 1 to "48003", 2 to "8"))
+        val next = original.paintWholeFacets(setOf(0, 2), 3)
+        assertEquals("48003", next.triangles[1])
+        assertEquals(next.triangles[0], next.triangles[2])
+        assertEquals(mapOf(1 to "48003"), next.paintWholeFacets(setOf(0, 2), 0).triangles)
+        assertEquals("40003", original.triangles[0])
+        assertThrows(IllegalArgumentException::class.java) {
+            original.paintWholeFacets(setOf(-1), 1)
+        }
+    }
+
+    @Test
+    fun wholeTriangleReplacesRecursivePaintAndErasesWithoutTouchingNeighbors() {
+        val original = OrcaFacetAnnotation(mapOf(0 to "40003", 1 to "8"))
+        val target = FacetPaintTarget(0, 1f, 0f, 0f, subdivisionDepth = 0)
+        val painted = original.paintAll(listOf(target), state = 2)
+        assertEquals(mapOf(0 to "8", 1 to "8"), painted.triangles)
+        assertEquals(mapOf(1 to "8"), painted.paintAll(listOf(target), state = 0).triangles)
+        assertEquals("40003", original.triangles[0])
+        assertEquals("", target.regionKey)
+    }
+
     private val source = floatArrayOf(
         0f, 0f, 0f,
         2f, 0f, 0f,

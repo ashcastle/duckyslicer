@@ -736,11 +736,25 @@ class OrcaMultiColorPaintInstrumentedTest {
     }
 
     @Test
-    fun paintedFacetsUseOrcaMmuSegmentationAndProduceTwoToolGcode() {
+    fun paintedFacetsUseOrcaMmuSegmentationAndProduceTwoToolGcode() = verifyPaintedTwoToolOutput(false)
+
+    @Test
+    fun connectedFillSurvivesThreeMfRoundTripAndProducesTwoToolGcode() = verifyPaintedTwoToolOutput(true)
+
+    @Test
+    fun heightRangeColorUsesSecondToolOnlyInsideTheSelectedBand() = verifyPaintedTwoToolOutput(false, true)
+
+    @Test
+    fun automaticLineWidthsProduceRealTwoToolExtrusion() = verifyPaintedTwoToolOutput(false, automaticWidths = true)
+
+    private fun verifyPaintedTwoToolOutput(connectedFillRoundTrip: Boolean, heightColor: Boolean = false,
+        automaticWidths: Boolean = false) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val modelFile = File(context.cacheDir, "multi-color-box.stl")
         var output: File? = null
+        val exportDirectory = File(context.cacheDir, "$THREE_MF_EXPORT_DIRECTORY_PREFIX${java.util.UUID.randomUUID()}")
+        var restoredModels = emptyList<ProjectObject>()
         try {
             instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
                 modelFile.outputStream().use(input::copyTo)
@@ -756,24 +770,129 @@ class OrcaMultiColorPaintInstrumentedTest {
                 filamentStartGcode = "M117 DUCKY_SLOT_1_START",
                 filamentEndGcode = "M117 DUCKY_SLOT_1_END",
             )
-            val options = SliceOptions()
+            var options = SliceOptions()
                 .selectPrinter(PrinterProfile.U1_04)
                 .selectFilament(primary)
                 .selectQuality(QualityProfile.DRAFT)
                 .copy(filamentSlots = listOf(primary, secondary))
+            if (automaticWidths) options = options.copy(
+                outerWallLineWidth = 0f, innerWallLineWidth = 0f, topSurfaceLineWidth = 0f,
+                sparseInfillLineWidth = 0f, internalSolidInfillLineWidth = 0f,
+                supportLineWidth = 0f, initialLayerLineWidth = 0f,
+            )
             val paint = MultiColorPaint()
                 .paint(4, 1)
                 .paint(5, 1)
-            val projectObject = ProjectObject(
+            var projectObject = ProjectObject(
                 id = "painted-box",
                 model = model,
                 multiColorPaint = paint,
             )
 
+            if (connectedFillRoundTrip) {
+                val selection = org.json.JSONObject(NativeEngine.selectConnectedFacets(org.json.JSONObject()
+                    .put("path", modelFile.absolutePath).put("seed", 4)
+                    .put("angleDegrees", 1).toString())).getJSONArray("facets")
+                val facets = (0 until selection.length()).mapTo(HashSet()) { selection.getInt(it) }
+                assertEquals("The selected planar side must contain its two source facets", setOf(4, 5), facets)
+                val annotation = OrcaFacetAnnotation().paintWholeFacets(facets, 2)
+                projectObject = projectObject.copy(volumes = projectObject.volumes.map { volume ->
+                    volume.copy(multiColorPaint = MultiColorPaint(),
+                        orcaFacetAnnotations = volume.orcaFacetAnnotations.copy(multiColor = annotation))
+                })
+                assertTrue(exportDirectory.mkdir())
+                val exported = File(exportDirectory, THREE_MF_EXPORT_FILE_NAME)
+                OnDeviceSlicer.exportThreeMf(listOf(projectObject), options, exported)
+                val uri = androidx.core.content.FileProvider.getUriForFile(context,
+                    "${context.packageName}.debug-files", exported)
+                restoredModels = kotlinx.coroutines.runBlocking {
+                    importOrcaModels(context, uri, ProjectStore(context), options)
+                }
+                projectObject = restoredModels.single()
+                assertEquals(annotation, projectObject.singleVolume.orcaFacetAnnotations.multiColor)
+            }
+            if (heightColor) {
+                projectObject = ProjectObject(id = "height-color-box", model = model,
+                    heightRangeModifiers = HeightRangeModifiers(listOf(
+                        HeightRangeModifier(5f, 15f, ObjectProcessOverrides(), filamentSlot = 1),
+                    )))
+                assertTrue(exportDirectory.mkdir())
+                val exported = File(exportDirectory, THREE_MF_EXPORT_FILE_NAME)
+                OnDeviceSlicer.exportThreeMf(listOf(projectObject), options, exported)
+                java.util.zip.ZipFile(exported).use { archive ->
+                    val entry = archive.getEntry("Metadata/Prusa_Slicer_layer_config_ranges.xml")
+                    org.junit.Assert.assertNotNull("3MF must contain native height-range settings", entry)
+                    val document = archive.getInputStream(entry).use {
+                        javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(it)
+                    }
+                    val ranges = document.getElementsByTagName("range")
+                    assertEquals(1, ranges.length)
+                    val range = ranges.item(0) as org.w3c.dom.Element
+                    assertEquals(5.0, range.getAttribute("min_z").toDouble(), 0.0001)
+                    assertEquals(15.0, range.getAttribute("max_z").toDouble(), 0.0001)
+                    val values = range.getElementsByTagName("option").let { nodes ->
+                        (0 until nodes.length).associate { index ->
+                            val option = nodes.item(index) as org.w3c.dom.Element
+                            option.getAttribute("opt_key") to option.textContent
+                        }
+                    }
+                    listOf("wall_filament", "sparse_infill_filament", "solid_infill_filament").forEach {
+                        assertEquals("Height material must survive native export: $it", "2", values[it])
+                    }
+                    assertEquals(options.layerHeight.toDouble(), values.getValue("layer_height").toDouble(), 0.0001)
+                }
+                val normalizedDirectory = ProjectStore(context).createModelImportStaging()
+                val restoredRange = try {
+                    val normalized = SlicerProcessClient.normalizeModel(exported, normalizedDirectory).single()
+                    normalized.heightRanges.single().let { orcaHeightRange(it.start, it.end, it.config.values) }
+                } finally {
+                    normalizedDirectory.deleteRecursively()
+                }
+                assertEquals(5f, restoredRange.startZmm)
+                assertEquals(15f, restoredRange.endZmm)
+                assertEquals(1, restoredRange.filamentSlot)
+                assertEquals(options.layerHeight, restoredRange.overrides.layerHeightMm)
+                val uri = androidx.core.content.FileProvider.getUriForFile(context,
+                    "${context.packageName}.debug-files", exported)
+                restoredModels = kotlinx.coroutines.runBlocking {
+                    importOrcaModels(context, uri, ProjectStore(context), options)
+                }
+                projectObject = restoredModels.single()
+                assertEquals(restoredRange, projectObject.heightRangeModifiers.ranges.single())
+                var reviewedHeightOnlyArchive = false
+                val geometryOnly = kotlinx.coroutines.runBlocking {
+                    importOrcaModels(context, uri, ProjectStore(context), options,
+                        restoreObjectSettings = { false },
+                        reviewAllSettings = { _, global, objects ->
+                            assertTrue(global.isSuccess)
+                            assertEquals(null, global.getOrNull())
+                            assertEquals(1, objects.single().heightRanges.size)
+                            reviewedHeightOnlyArchive = true
+                            options
+                        })
+                }
+                assertTrue("Height-only 3MF must reach combined import review", reviewedHeightOnlyArchive)
+                restoredModels = restoredModels + geometryOnly
+                assertTrue("Model-only import must omit height settings",
+                    geometryOnly.single().heightRangeModifiers.ranges.isEmpty())
+                assertTrue("Model-only import must omit object overrides",
+                    geometryOnly.single().processOverrides.isEmpty)
+            }
+
             val outcome = OnDeviceSlicer.slice(listOf(projectObject), options)
             output = outcome.output
             val gcode = outcome.output.readText()
             val commands = gcode.lineSequence().map(String::trim).toList()
+
+            if (automaticWidths) {
+                listOf("line_width", "outer_wall_line_width", "inner_wall_line_width",
+                    "top_surface_line_width", "sparse_infill_line_width",
+                    "internal_solid_infill_line_width", "support_line_width",
+                    "initial_layer_line_width").forEach { key ->
+                    val stored = commands.single { it.startsWith("; $key = ") }.substringAfter(" = ")
+                    assertEquals("Native config must retain automatic $key", 0.0, stored.toDouble(), 0.0)
+                }
+            }
 
             assertTrue("Both filament definitions must reach Orca", gcode.contains("filament_type = PLA;PETG"))
             assertTrue("Unpainted faces must retain tool 0", commands.any { it == "T0" })
@@ -795,9 +914,25 @@ class OrcaMultiColorPaintInstrumentedTest {
                     commands.lastIndexOf("M117 DUCKY_SLOT_1_END"),
             )
             assertTrue("The painted slice must contain extrusion", gcode.contains(";TYPE:Outer wall"))
+            val outerWalls = analyzePositiveExtrusion(gcode).extrusionMotionsByRoleAndTool["Outer wall"].orEmpty()
+            assertTrue("Unpainted outer walls must actually extrude with tool 0", outerWalls[0].orEmpty().isNotEmpty())
+            assertTrue("Painted outer walls must actually extrude with tool 1, not just select it", outerWalls[1].orEmpty().isNotEmpty())
+            if (heightColor) {
+                val heights = analyzePositiveExtrusion(gcode).outerWallHeightsByTool
+                assertTrue(heights[1].orEmpty().isNotEmpty())
+                // Orca selects layer ranges at slice_z=(lo+hi)/2; G-code Z is hi.
+                // This fixture has constant layer height, including inside the color-only range.
+                fun slicePlane(z: Double) = z - options.layerHeight.toDouble() * 0.5
+                assertTrue("Selected material must stay within the slicing band", heights[1].orEmpty().all { slicePlane(it) in 5.0..15.0 })
+                assertTrue("Original material must not leak into selected outer walls", heights[0].orEmpty().none { slicePlane(it) in 5.0..15.0 })
+                assertTrue("Lower walls retain original material", heights[0].orEmpty().any { it < 5.0 })
+                assertTrue("Upper walls return to original material", heights[0].orEmpty().any { it > 15.01 })
+            }
         } finally {
             output?.delete()
             modelFile.delete()
+            restoredModels.flatMap { it.volumes }.forEach { File(it.model.localPath).delete() }
+            exportDirectory.deleteRecursively()
         }
     }
 
@@ -869,6 +1004,8 @@ class OrcaMultiColorPaintInstrumentedTest {
     }
 
     private fun analyzePositiveExtrusion(gcode: String): MultiColorGcodeAnalysis {
+        val outerWallHeightsByTool = mutableMapOf<Int, MutableList<Double>>()
+        var height = 0.0
         val objectExtrusionByTool = mutableMapOf<Int, Double>()
         val primeTowerExtrusionByTool = mutableMapOf<Int, Double>()
         val extrusionMotionsByRoleAndTool = mutableMapOf<String, MutableMap<Int, MutableList<String>>>()
@@ -882,6 +1019,9 @@ class OrcaMultiColorPaintInstrumentedTest {
         var primeTowerMotions = 0
         gcode.lineSequence().forEach { raw ->
             val line = raw.trim()
+            if (line.startsWith("G0 ") || line.startsWith("G1 ")) {
+                axisValue(line, 'Z')?.let { height = it }
+            }
             val selectedTool = line.substringBefore(';').trim().let { command ->
                 command.takeIf { it.startsWith('T') }
                     ?.substring(1)
@@ -918,6 +1058,7 @@ class OrcaMultiColorPaintInstrumentedTest {
                         axisValue(line, axis) != null
                     }
                     if (extrusion > MINIMUM_EXTRUSION_MM && spatialMotion) {
+                        if (activeRole == "Outer wall") outerWallHeightsByTool.getOrPut(activeTool) { mutableListOf() }.add(height)
                         val output = if (primeTower) primeTowerExtrusionByTool else objectExtrusionByTool
                         output[activeTool] = output.getOrDefault(activeTool, 0.0) + extrusion
                         val canonicalMotion = "T$activeTool|${line.substringBefore(';').trim()}"
@@ -934,6 +1075,7 @@ class OrcaMultiColorPaintInstrumentedTest {
             }
         }
         return MultiColorGcodeAnalysis(
+            outerWallHeightsByTool = outerWallHeightsByTool,
             objectExtrusionByTool = objectExtrusionByTool,
             primeTowerExtrusionByTool = primeTowerExtrusionByTool,
             extrusionMotionsByRoleAndTool = extrusionMotionsByRoleAndTool.mapValues { (_, tools) ->
@@ -1092,6 +1234,7 @@ class OrcaMultiColorPaintInstrumentedTest {
 }
 
 private data class MultiColorGcodeAnalysis(
+    val outerWallHeightsByTool: Map<Int, List<Double>>,
     val objectExtrusionByTool: Map<Int, Double>,
     val primeTowerExtrusionByTool: Map<Int, Double>,
     val extrusionMotionsByRoleAndTool: Map<String, Map<Int, List<String>>>,

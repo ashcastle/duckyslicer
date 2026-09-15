@@ -18,6 +18,47 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ProfileLibraryInstrumentedTest {
     @Test
+    fun failedSaveKeepsProjectUnchangedAndRetryCommitsTheSameValues() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val profileRoot = File(context.filesDir, "profiles")
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        profileRoot.deleteRecursively()
+        projectRoot.deleteRecursively()
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                lateinit var library: ProfileLibraryViewModel
+                lateinit var project: ProjectTransferViewModel
+                scenario.onActivity {
+                    library = ViewModelProvider(it)[ProfileLibraryViewModel::class.java]
+                    project = ViewModelProvider(it)[ProjectTransferViewModel::class.java]
+                }
+                waitUntil("state not loaded") { library.state.value.catalogLoaded && project.state.value.restored }
+                val initial = project.state.value
+                val submitted = initial.sliceOptions.copy(layerHeight = 0.235f)
+                val obstruction = File(profileRoot, "user_profiles.json.tmp")
+                assertTrue(obstruction.mkdirs())
+                assertTrue(library.saveSlicing("Retry exact value", submitted, initial.sessionRevision))
+                waitUntil("failed save did not settle") { !library.state.value.busy }
+                assertEquals(initial.sliceOptions, project.state.value.sliceOptions)
+                assertTrue(library.state.value.catalog.slicing.none { it.name == "Retry exact value" })
+                assertEquals(null, library.state.value.completion)
+                assertTrue(obstruction.delete())
+                assertTrue(library.saveSlicing("Retry exact value", submitted, initial.sessionRevision))
+                waitUntil("retry did not apply saved profile") {
+                    project.state.value.sliceOptions.quality.name == "Retry exact value"
+                }
+                assertEquals(0.235f, project.state.value.sliceOptions.layerHeight)
+                assertEquals(0.235f, ProfileStore(context).load().slicing.single {
+                    it.name == "Retry exact value"
+                }.layerHeightMm)
+            }
+        } finally {
+            profileRoot.deleteRecursively()
+            projectRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun clearingRetainedOwnerFlushesRecentProfilesBeforeDebounce() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val profileRoot = File(context.filesDir, "profiles")

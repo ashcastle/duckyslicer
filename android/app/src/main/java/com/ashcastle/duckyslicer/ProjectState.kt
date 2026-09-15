@@ -201,6 +201,7 @@ data class ProjectPlate(
 data class ProjectSnapshot(
     val selectedPlateId: String,
     val plates: List<ProjectPlate>,
+    val draftIdentity: String = UUID.randomUUID().toString(),
 ) {
     constructor(
         objects: List<ProjectObject> = emptyList(),

@@ -6,6 +6,41 @@ import org.junit.Test
 
 class PrinterDefaultSelectionTest {
     @Test
+    fun automaticWidthsAreNotReplacedOnConstructionOrProfileSelection() {
+        val auto = QualityProfile.STANDARD.copy(
+            outerWallLineWidth = 0f, innerWallLineWidth = 0f, topSurfaceLineWidth = 0f,
+            sparseInfillLineWidth = 0f, internalSolidInfillLineWidth = 0f,
+            supportLineWidth = 0f, initialLayerLineWidth = 0f,
+        )
+        listOf(SliceOptions(quality = auto), SliceOptions().selectQuality(auto)).forEach { options ->
+            assertEquals(listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f), listOf(
+                options.outerWallLineWidth, options.innerWallLineWidth, options.topSurfaceLineWidth,
+                options.sparseInfillLineWidth, options.internalSolidInfillLineWidth,
+                options.supportLineWidth, options.initialLayerLineWidth,
+            ))
+        }
+    }
+
+    @Test
+    fun snapmakerDefaultsDoNotRemainSelectedForAnotherPrinterWithSameNozzle() {
+        val target = printer(defaultPrintProfile = "Vendor standard")
+        val vendorQuality = quality("vendor-standard", "Vendor standard", target)
+        val updated = SliceOptions().selectPrinter(
+            target,
+            ProfileCatalog(slicing = QualityProfile.builtIns + vendorQuality),
+        )
+        assertEquals(vendorQuality.id, updated.quality.id)
+        QualityProfile.builtIns.forEach { preset ->
+            assertEquals("Snapmaker", preset.brand)
+            assertEquals(false, preset.compatiblePrinters.matchesPrinter(target))
+            val matchingPrinter = PrinterProfile.builtIns.first {
+                it.brand == "Snapmaker" && it.nozzleDiameter == preset.nozzleDiameter
+            }
+            assertEquals(true, preset.compatiblePrinters.matchesPrinter(matchingPrinter))
+        }
+    }
+
+    @Test
     fun incompatibleSelectionsUseExactPrinterDefaultsAndPopulatePhysicalTools() {
         val printer = printer(
             extruderCount = 2,

@@ -652,7 +652,9 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     nozzle_volume = number(raw.get("nozzle_volume"), 0)
     configured_min_layer_height = number(raw.get("min_layer_height"), 0)
     configured_max_layer_height = number(raw.get("max_layer_height"), 0)
-    min_layer_height = configured_min_layer_height if configured_min_layer_height > 0 else 0.07
+    if configured_min_layer_height < 0 or configured_max_layer_height < 0:
+        raise ValueError("negative layer height limit")
+    min_layer_height = max(0.01, configured_min_layer_height) if configured_min_layer_height > 0 else 0.07
     max_layer_height = configured_max_layer_height if configured_max_layer_height > 0 else nozzle * 0.75
     retract_length = number(raw.get("retraction_length"), 0.8)
     tool_change_retract_lengths = number_values(raw.get("retract_length_toolchange"), retract_length)
@@ -1431,54 +1433,50 @@ def build_process(
     nozzle = nozzle_override if nozzle_override is not None else (
         nozzles.pop() if len(nozzles) == 1 else 0.4
     )
-    layer_height = number(raw.get("layer_height"), 0)
-    first_layer = number(raw.get("initial_layer_print_height"), layer_height)
+    layer_height = number(raw.get("layer_height"), 0.2)
+    first_layer = number(raw.get("initial_layer_print_height"), 0.2)
     if not (0.02 <= layer_height <= nozzle * 0.9 and 0.02 <= first_layer <= 1.0):
         raise ValueError("unsafe layer height")
     normalized_support_type = support_type(raw.get("support_type"))
     density_source = str(scalar(raw.get("sparse_infill_density"), "15%"))
     density_value = number(density_source, 15)
-    density = density_value / 100 if density_source.endswith("%") or density_value > 1 else density_value
+    # Orca's coPercent stores percentage points even without a '%' suffix.
+    # In particular, 1 means 1%, not a fully solid part.
+    density = density_value / 100
     general_line_width = raw.get("line_width", 0)
     general_line_width_mm = line_width_mm(general_line_width, nozzle)
     outer_wall_line_width = (
         line_width_mm(raw.get("outer_wall_line_width"), nozzle)
         or general_line_width_mm
-        or nozzle * 1.05
     )
     inner_wall_line_width = (
         line_width_mm(raw.get("inner_wall_line_width"), nozzle)
         or general_line_width_mm
-        or nozzle * 1.125
     )
     top_surface_line_width = (
         line_width_mm(raw.get("top_surface_line_width"), nozzle)
         or general_line_width_mm
-        or nozzle * 1.05
     )
     sparse_infill_line_width = (
         line_width_mm(raw.get("sparse_infill_line_width"), nozzle)
         or general_line_width_mm
-        or nozzle * 1.125
     )
     internal_solid_infill_line_width = (
         line_width_mm(raw.get("internal_solid_infill_line_width"), nozzle)
         or general_line_width_mm
-        or nozzle * 1.125
     )
     support_line_width = (
         line_width_mm(raw.get("support_line_width"), nozzle)
         or general_line_width_mm
-        or nozzle * 1.05
     )
     initial_layer_line_width = (
         line_width_mm(raw.get("initial_layer_line_width"), nozzle)
         or general_line_width_mm
-        or nozzle * 1.25
     )
-    outer_wall_speed = number(raw.get("outer_wall_speed"), 100)
+    # Missing values must match the pinned engine, not estimated speed ratios.
+    outer_wall_speed = absolute_number(raw.get("outer_wall_speed"), 60)
     first_layer_speed = absolute_number(raw.get("initial_layer_speed"), 30)
-    support_speed = number(raw.get("support_speed"), 100)
+    support_speed = number(raw.get("support_speed"), 80)
     overhang_1_speed, overhang_1_percent = float_or_percent(raw.get("overhang_1_4_speed"), 0)
     overhang_2_speed, overhang_2_percent = float_or_percent(raw.get("overhang_2_4_speed"), 0)
     overhang_3_speed, overhang_3_percent = float_or_percent(raw.get("overhang_3_4_speed"), 0)
@@ -1564,13 +1562,13 @@ def build_process(
         "perimeters": integer(raw.get("wall_loops"), 2),
         "fillDensity": density,
         "printSpeed": outer_wall_speed,
-        "innerWallSpeed": relative_number(raw.get("inner_wall_speed"), outer_wall_speed, outer_wall_speed * 1.5),
-        "sparseInfillSpeed": relative_number(raw.get("sparse_infill_speed"), outer_wall_speed, outer_wall_speed * 1.35),
+        "innerWallSpeed": relative_number(raw.get("inner_wall_speed"), outer_wall_speed, 60),
+        "sparseInfillSpeed": relative_number(raw.get("sparse_infill_speed"), outer_wall_speed, 100),
         "internalSolidInfillSpeed": absolute_number(raw.get("internal_solid_infill_speed"), 100),
         "topSurfaceSpeed": absolute_number(raw.get("top_surface_speed"), 100),
         "supportSpeed": support_speed,
-        "bridgeSpeed": number(raw.get("bridge_speed"), 50),
-        "gapInfillSpeed": number(raw.get("gap_infill_speed"), outer_wall_speed * 1.25),
+        "bridgeSpeed": number(raw.get("bridge_speed"), 25),
+        "gapInfillSpeed": number(raw.get("gap_infill_speed"), 30),
         "firstLayerInfillSpeed": number(raw.get("initial_layer_infill_speed"), 60),
         "supportInterfaceSpeed": absolute_number(raw.get("support_interface_speed"), 80),
         "internalBridgeSpeed": internal_bridge_speed,
@@ -1608,12 +1606,12 @@ def build_process(
             {"disabled", "limited", "nofilter"},
             "disabled",
         ),
-        "defaultAcceleration": number(raw.get("default_acceleration"), 0),
-        "outerWallAcceleration": number(raw.get("outer_wall_acceleration"), 0),
-        "innerWallAcceleration": number(raw.get("inner_wall_acceleration"), 0),
-        "topSurfaceAcceleration": number(raw.get("top_surface_acceleration"), 0),
-        "travelAcceleration": number(raw.get("travel_acceleration"), 0),
-        "firstLayerAcceleration": number(raw.get("initial_layer_acceleration"), 0),
+        "defaultAcceleration": number(raw.get("default_acceleration"), 500),
+        "outerWallAcceleration": number(raw.get("outer_wall_acceleration"), 500),
+        "innerWallAcceleration": number(raw.get("inner_wall_acceleration"), 10000),
+        "topSurfaceAcceleration": number(raw.get("top_surface_acceleration"), 500),
+        "travelAcceleration": number(raw.get("travel_acceleration"), 10000),
+        "firstLayerAcceleration": number(raw.get("initial_layer_acceleration"), 300),
         "firstLayerTravelAcceleration": initial_layer_travel_acceleration,
         "firstLayerTravelAccelerationPercent": initial_layer_travel_acceleration_percent,
         "bridgeAcceleration": bridge_acceleration,
@@ -1634,13 +1632,13 @@ def build_process(
         "brimObjectGap": number(raw.get("brim_object_gap"), 0),
         "brimEarsMaxAngle": number(raw.get("brim_ears_max_angle"), 125),
         "brimEarsDetectionLength": number(raw.get("brim_ears_detection_length"), 1),
-        "topSolidLayers": integer(raw.get("top_shell_layers"), 5),
-        "bottomSolidLayers": integer(raw.get("bottom_shell_layers"), 4),
-        "topShellThickness": number(raw.get("top_shell_thickness"), 0),
+        "topSolidLayers": integer(raw.get("top_shell_layers"), 4),
+        "bottomSolidLayers": integer(raw.get("bottom_shell_layers"), 3),
+        "topShellThickness": number(raw.get("top_shell_thickness"), 0.6),
         "bottomShellThickness": number(raw.get("bottom_shell_thickness"), 0),
         "topSurfaceDensity": number(raw.get("top_surface_density"), 100),
         "bottomSurfaceDensity": number(raw.get("bottom_surface_density"), 100),
-        "fillPattern": infill_pattern(raw.get("sparse_infill_pattern"), "gyroid"),
+        "fillPattern": infill_pattern(raw.get("sparse_infill_pattern"), "crosshatch"),
         "fillMultiline": integer(raw.get("fill_multiline"), 1),
         "lateralLatticeAngle1": number(raw.get("lateral_lattice_angle_1"), -45),
         "lateralLatticeAngle2": number(raw.get("lateral_lattice_angle_2"), 45),
@@ -1690,11 +1688,11 @@ def build_process(
         "maxTravelDetourDistance": max_travel_detour_distance,
         "maxTravelDetourDistancePercent": max_travel_detour_distance_percent,
         "reduceInfillRetraction": boolean(raw.get("reduce_infill_retraction")),
-        "travelSpeed": number(raw.get("travel_speed"), 300),
+        "travelSpeed": number(raw.get("travel_speed"), 120),
         "travelSpeedZ": number(raw.get("travel_speed_z"), 0),
         "firstLayerSpeed": first_layer_speed,
         "supportType": normalized_support_type,
-        "supportAngle": number(raw.get("support_threshold_angle"), 45),
+        "supportAngle": number(raw.get("support_threshold_angle"), 30),
         "supportInterfaceTopLayers": integer(raw.get("support_interface_top_layers"), 3),
         "supportInterfaceBottomLayers": integer(raw.get("support_interface_bottom_layers"), 0),
         "supportInterfaceSpacing": number(raw.get("support_interface_spacing"), 0.5),
@@ -1725,8 +1723,8 @@ def build_process(
         "supportIroningFlow": number(raw.get("support_ironing_flow"), 10),
         "supportIroningSpacing": number(raw.get("support_ironing_spacing"), 0.1),
         "skirtType": enum_value(raw.get("skirt_type"), {"combined", "perobject"}, "combined"),
-        "skirtLoops": integer(raw.get("skirt_loops"), 0),
-        "skirtDistance": number(raw.get("skirt_distance"), 6),
+        "skirtLoops": integer(raw.get("skirt_loops"), 1),
+        "skirtDistance": number(raw.get("skirt_distance"), 2),
         "skirtStartAngle": number(raw.get("skirt_start_angle"), -135),
         "skirtHeight": integer(raw.get("skirt_height"), 1),
         "skirtSpeed": number(raw.get("skirt_speed"), 50),
@@ -2163,7 +2161,7 @@ def build_process(
         and 0 <= profile["treeSupportBranchDiameterAngle"] <= 15
         and 0 <= profile["treeSupportBrimWidth"] <= 100
         and all(
-            0.1 <= profile[key] <= 3
+            profile[key] == 0 or 0.1 <= profile[key] <= 3
             for key in [
                 "outerWallLineWidth",
                 "innerWallLineWidth",

@@ -146,6 +146,23 @@ val generateOrcaProfileCatalog = tasks.register<Exec>("generateOrcaProfileCatalo
     }
 }
 
+val generateOrcaImportParents = tasks.register<Exec>("generateOrcaImportParents") {
+    dependsOn(buildSlicerRuntime)
+    val generator = repositoryRoot.resolve("tools/generate_orca_import_parents.py")
+    val output = generatedProfileAssets.map { it.file("orca-import-parents.bin") }
+    inputs.file(generator)
+    inputs.file(profileCatalogGenerator)
+    inputs.dir(orcaProfileRoot)
+    outputs.file(output)
+    commandLine("python3", generator.absolutePath, orcaProfileRoot.absolutePath,
+        output.get().asFile.absolutePath)
+    doFirst {
+        val obsolete = generatedProfileAssets.get().file("orca-import-parents.jsonl.gz").asFile
+        if (obsolete.exists()) check(obsolete.delete())
+    }
+}
+generateOrcaProfileCatalog.configure { dependsOn(generateOrcaImportParents) }
+
 val buildRustNative = tasks.register<Exec>("buildRustNative") {
     group = "build"
     description = "Builds the Rust JNI library for arm64-v8a."

@@ -1,11 +1,14 @@
 package com.ashcastle.duckyslicer
 
+import org.json.JSONObject
+
 import android.app.Application
 import android.content.ContentResolver
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -50,6 +53,7 @@ internal enum class ProjectEditKind {
     SPLIT_PARTS,
     CUT,
     SIMPLIFY,
+    COLOR_FILL,
 }
 
 internal data class ActiveProjectEdit(
@@ -110,6 +114,7 @@ internal sealed interface ProjectTransferCompletion {
 }
 
 internal data class ProjectTransferState(
+    val modelSettingsReview: OrcaModelSettingsReview? = null,
     val busy: Boolean = false,
     val activeTransferId: Long? = null,
     val activeTransferDirection: ProjectTransferDirection? = null,
@@ -237,7 +242,10 @@ internal fun ProjectTransferState.withNewProject(): ProjectTransferState? {
     if (!restored || busy || completion != null || editCompletion != null) return null
     val nextHistory = ProjectHistoryState()
     val nextPlateOptions = mapOf(nextHistory.current.selectedPlateId to sliceOptions)
-    if (history == nextHistory && plateOptions == nextPlateOptions && linkedDocument == null) {
+    val comparableEmptyHistory = nextHistory.copy(
+        current = nextHistory.current.copy(draftIdentity = history.current.draftIdentity),
+    )
+    if (history == comparableEmptyHistory && plateOptions == nextPlateOptions && linkedDocument == null) {
         return null
     }
     return copy(
@@ -408,6 +416,14 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     private var persistenceJob: Job? = null
     private var activeProjectDocumentTransfer: ActiveProjectDocumentTransfer? = null
     private var activeModelImportTransfer: ActiveModelImportTransfer? = null
+    private var modelSettingsApproval: CompletableDeferred<Boolean?>? = null
+
+    @Synchronized
+    fun approveModelSettings(requestId: String, useSettings: Boolean) {
+        if (mutableState.value.modelSettingsReview?.requestId == requestId) {
+            modelSettingsApproval?.complete(useSettings)
+        }
+    }
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -928,14 +944,58 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             var installed = emptyList<ProjectObject>()
             try {
                 val placed = ArrayList<ProjectObject>()
+                var importOptions = baseline.options
                 requestedUris.forEach { uri ->
+                    var restoreObjectSettings = true
                     val imported = importOrcaModels(
                         getApplication<Application>(),
                         uri,
                         projectStore,
-                        baseline.options,
+                        importOptions,
                         baseline.operation.requestId,
                         cancellation,
+                        reviewAllSettings = { name, raw, objects ->
+                            val converted = raw.mapCatching { settings ->
+                                val global = settings?.let { convertOrcaProjectSettings(it, importOptions) }
+                                    ?: OrcaProjectConversion(importOptions, emptySet(), emptySet(), emptySet())
+                                val objectKeys = mutableSetOf<String>()
+                                objects.forEachIndexed { index, obj ->
+                                    require(obj.objectConfig.values.keys.all { it in orcaObjectSettingsKeys }) {
+                                        "Object ${index + 1}: unsupported settings ${obj.objectConfig.values.keys - orcaObjectSettingsKeys}"
+                                    }
+                                    orcaObjectOverrides(obj.objectConfig.values)
+                                    objectKeys += obj.objectConfig.values.keys.map { "${index + 1}: $it" }
+                                    HeightRangeModifiers(obj.heightRanges.map { range ->
+                                        orcaHeightRange(range.start, range.end, range.config.values).also {
+                                            require(it.filamentSlot == null || it.filamentSlot < global.options.printerProfile.extruderCount) {
+                                                "Object ${index + 1}: unavailable height-range material"
+                                            }
+                                        }
+                                    })
+                                    obj.heightRanges.forEach { range ->
+                                        objectKeys += range.config.values.keys.map { "${index + 1} [${range.start}–${range.end} mm]: $it" }
+                                    }
+                                }
+                                global.copy(appliedKeys = global.appliedKeys + objectKeys)
+                            }
+                            val approval = CompletableDeferred<Boolean?>()
+                            synchronized(this@ProjectTransferViewModel) {
+                                modelSettingsApproval = approval
+                                mutableState.value = mutableState.value.copy(modelSettingsReview =
+                                    OrcaModelSettingsReview(UUID.randomUUID().toString(), name,
+                                        converted.getOrNull(), converted.exceptionOrNull()?.message))
+                            }
+                            if (cancellation.wasRequested()) approval.complete(null)
+                            val useSettings = approval.await() ?: throw ProjectEditCancelledException()
+                            restoreObjectSettings = useSettings
+                            synchronized(this@ProjectTransferViewModel) {
+                                modelSettingsApproval = null
+                                mutableState.value = mutableState.value.copy(modelSettingsReview = null)
+                            }
+                            if (useSettings) importOptions = converted.getOrThrow().options
+                            importOptions
+                        },
+                        restoreObjectSettings = { restoreObjectSettings },
                     )
                     require(imported.isNotEmpty()) { "Model document contains no objects" }
                     installed = installed + imported
@@ -962,12 +1022,15 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                     }
                 }
                 val nextHistory = baseline.history.addAll(placed)
-                val requiredFilamentSlots = placed
+                val volumeFilamentSlots = placed
                     .flatMap(ProjectObject::volumes)
                     .maxOfOrNull(ProjectVolume::filamentSlot)
                     ?.plus(1)
                     ?: 1
-                val nextOptions = baseline.options.withMinimumFilamentSlots(requiredFilamentSlots)
+                val heightFilamentSlots = placed.flatMap { it.heightRangeModifiers.ranges }
+                    .mapNotNull { it.filamentSlot }.maxOrNull()?.plus(1) ?: 1
+                val requiredFilamentSlots = maxOf(volumeFilamentSlots, heightFilamentSlots)
+                val nextOptions = importOptions.withMinimumFilamentSlots(requiredFilamentSlots)
                 cancellation.complete()
                 if (
                     !completeEditSuccess(
@@ -1002,6 +1065,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 synchronized(this@ProjectTransferViewModel) {
                     if (activeModelImportTransfer?.operation?.matches(baseline.operation) == true) {
                         activeModelImportTransfer = null
+                        modelSettingsApproval = null
+                        mutableState.value = mutableState.value.copy(modelSettingsReview = null)
                     }
                 }
                 cancellation.close()
@@ -1511,6 +1576,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             val operation = mutableState.value.activeEdit ?: return false
             val updated = mutableState.value.withEditCancellationRequested(operation.id) ?: return false
             mutableState.value = updated
+            modelSettingsApproval?.complete(null)
             operation to activeModelImportTransfer?.takeIf {
                 it.operation.matches(operation)
             }
@@ -1540,6 +1606,36 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 completeEditFailure(baseline, failure)
             } finally {
                 SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
+            }
+        }
+        return true
+    }
+
+    @Synchronized
+    fun fillConnectedColor(objectId: String, volumeId: String, seed: Int, slot: Int?, angle: Float): Boolean {
+        val state = mutableState.value
+        val volume = state.history.current.objects.firstOrNull { it.id == objectId }
+            ?.volumes?.firstOrNull { it.id == volumeId } ?: return false
+        if (!volume.role.acceptsFacetPaint || seed !in 0 until volume.model.triangles ||
+            (slot != null && slot !in state.sliceOptions.resolvedFilamentSlots().indices) ||
+            !angle.isFinite() || angle !in 0f..90f) return false
+        val baseline = startEditLocked(ProjectEditKind.COLOR_FILL) ?: return false
+        viewModelScope.launch(Dispatchers.Default) {
+            try {
+                val response = JSONObject(NativeEngine.selectConnectedFacets(JSONObject()
+                    .put("path", volume.model.localPath).put("seed", seed)
+                    .put("angleDegrees", angle.toDouble()).toString()))
+                check(!response.has("error")) { "Connected fill could not be completed" }
+                val values = response.getJSONArray("facets")
+                require(values.length() in 1..OrcaFacetAnnotation.MAX_ANNOTATED_TRIANGLES)
+                val facets = (0 until values.length()).mapTo(HashSet()) { values.getInt(it) }
+                require(facets.all { it in 0 until volume.model.triangles })
+                val annotation = volume.orcaFacetAnnotations.multiColor.paintWholeFacets(facets, slot?.plus(1) ?: 0)
+                val legacy = MultiColorPaint(volume.multiColorPaint.facets.filterKeys { it !in facets })
+                val next = baseline.history.updateExactMultiColorPaint(objectId, volumeId, legacy, annotation)
+                completeEditSuccess(baseline, next)
+            } catch (failure: Exception) {
+                completeEditFailure(baseline, failure)
             }
         }
         return true

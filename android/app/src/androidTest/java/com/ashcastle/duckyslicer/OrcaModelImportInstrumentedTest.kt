@@ -15,6 +15,109 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class OrcaModelImportInstrumentedTest {
+    @Test fun malformedSettingsCanBeExplicitlyIgnoredForGeometryImport() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val archive = File(context.cacheDir, "malformed-settings.3mf")
+        val root = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        root.deleteRecursively()
+        try {
+            writeStandard3mf(archive, projectSettings = "not valid JSON")
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.debug-files", archive)
+            var reviewed = false
+            val objects = importOrcaModels(context, uri, ProjectStore(context), SliceOptions(),
+                reviewAllSettings = { _, settings, normalized ->
+                    assertTrue(settings.isFailure)
+                    assertEquals(2, normalized.size)
+                    reviewed = true
+                    SliceOptions()
+                }, restoreObjectSettings = { false })
+            assertTrue(reviewed)
+            assertEquals(2, objects.size)
+        } finally {
+            archive.delete()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test fun projectSettingsApprovalCommitsModelAndSettingsTogether() = checkProjectSettingsDecision(true)
+    @Test fun projectSettingsModelOnlyPreservesCurrentSettings() = checkProjectSettingsDecision(false)
+    @Test fun projectSettingsCancellationPreservesCurrentProject() = checkProjectSettingsDecision(null)
+
+    private fun checkProjectSettingsDecision(choice: Boolean?) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val archive = File(context.cacheDir, "settings-decision.3mf")
+        val root = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        root.deleteRecursively()
+        fun awaitState(message: String, predicate: () -> Boolean) {
+            val deadline = android.os.SystemClock.elapsedRealtime() + 30_000
+            while (!predicate()) {
+                check(android.os.SystemClock.elapsedRealtime() < deadline) { message }
+                android.os.SystemClock.sleep(25)
+            }
+        }
+        try {
+            writeStandard3mf(archive, projectSettings = """{"layer_height":"0.235"}""")
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.debug-files", archive)
+            androidx.test.core.app.ActivityScenario.launch(AccessibilityHarnessActivity::class.java).use { scenario ->
+                lateinit var model: ProjectTransferViewModel
+                scenario.onActivity { model = androidx.lifecycle.ViewModelProvider(it)[ProjectTransferViewModel::class.java] }
+                awaitState("project not restored") { model.state.value.restored }
+                val initial = model.state.value
+                scenario.onActivity { assertTrue(model.importModels(uri)) }
+                awaitState("settings review missing") { model.state.value.modelSettingsReview != null }
+                val review = requireNotNull(model.state.value.modelSettingsReview)
+                assertEquals(initial.history, model.state.value.history)
+                assertEquals(initial.sliceOptions, model.state.value.sliceOptions)
+                scenario.recreate()
+                assertEquals(review.requestId, model.state.value.modelSettingsReview?.requestId)
+                scenario.onActivity {
+                    if (choice == null) model.cancelActiveEdit()
+                    else model.approveModelSettings(review.requestId, choice)
+                }
+                awaitState("import decision did not settle") { model.state.value.editCompletion != null }
+                val completed = model.state.value
+                assertEquals(null, completed.modelSettingsReview)
+                if (choice == null) {
+                    assertEquals(ProjectEditFailure.CANCELED, completed.editCompletion?.failure)
+                    assertEquals(initial.history, completed.history)
+                    assertEquals(initial.sliceOptions, completed.sliceOptions)
+                } else {
+                    assertEquals(null, completed.editCompletion?.failure)
+                    assertEquals(2, completed.history.current.objects.size)
+                    assertEquals(if (choice) 0.235f else initial.sliceOptions.layerHeight,
+                        completed.sliceOptions.layerHeight)
+                }
+            }
+        } finally {
+            archive.delete()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun modelImportInvokesSettingsReviewBeforeInstallingGeometry() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val archive = File(context.cacheDir, "reviewed-settings.3mf")
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        projectRoot.deleteRecursively()
+        try {
+            writeStandard3mf(archive, projectSettings = """{"layer_height":"0.235"}""")
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.debug-files", archive)
+            var reviewed = false
+            val objects = importOrcaModels(context, uri, ProjectStore(context), SliceOptions(),
+                reviewProjectSettings = { _, raw ->
+                    assertEquals("0.235", raw.getOrThrow().getString("layer_height"))
+                    reviewed = true
+                    convertOrcaProjectSettings(raw.getOrThrow(), SliceOptions()).options
+                })
+            assertTrue(reviewed)
+            assertEquals(2, objects.size)
+        } finally {
+            archive.delete()
+            projectRoot.deleteRecursively()
+        }
+    }
+
     @Test
     fun printerFanResponseTimingUsesOrcaFanMover() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -666,9 +769,11 @@ class OrcaModelImportInstrumentedTest {
         pauseAtZ: Float? = null,
         painted: Boolean = false,
         bbsPainted: Boolean = false,
+        projectSettings: String? = null,
     ) {
         require(!(painted && bbsPainted))
         ZipOutputStream(destination.outputStream().buffered()).use { zip ->
+            if (projectSettings != null) zip.writeEntry("Metadata/project_settings.config", projectSettings)
             zip.writeEntry(
                 "[Content_Types].xml",
                 """<?xml version="1.0" encoding="UTF-8"?>

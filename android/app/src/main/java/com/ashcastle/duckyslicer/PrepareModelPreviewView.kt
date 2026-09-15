@@ -589,6 +589,7 @@ internal class PrepareModelSurfaceView(
     @Volatile
     private var rendererReady = false
     private var sceneSubmitted = false
+    private var submittedCamera: PrepareModelCamera? = null
     private var logicalSurfaceWidth = 1
     private var logicalSurfaceHeight = 1
     private var interactionActive = false
@@ -638,6 +639,7 @@ internal class PrepareModelSurfaceView(
         overlays: List<PrepareModelOverlayData>,
     ) {
         sceneSubmitted = true
+        submittedCamera = camera
         this.interactionActive = interactionActive
         renderer.submit(
             geometry,
@@ -666,6 +668,7 @@ internal class PrepareModelSurfaceView(
     }
 
     internal fun rendererReadyForTest(): Boolean = rendererReady
+    internal fun cameraPoseForTest(): PrepareModelCamera? = submittedCamera
 
     internal fun renderBufferSizeForTest(): PreviewSurfaceSize = renderedBufferSize
 

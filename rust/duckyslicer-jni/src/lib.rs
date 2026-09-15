@@ -1,5 +1,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
+mod facet_fill;
+
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::ffi::c_char;
@@ -2774,6 +2776,24 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_transformStlG
         make_java_string(env, &response)
     })
     .resolve::<LogErrorAndDefault>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_selectConnectedFacets<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    request_json: JString<'local>,
+) -> jstring {
+    env.with_env(|env| {
+        let response = guarded_json(|| {
+            let raw = request_json.try_to_string(env)
+                .map_err(|error| EngineError::Parse(error.to_string()))?;
+            let request: facet_fill::Request = serde_json::from_str(&raw)
+                .map_err(|error| EngineError::Parse(error.to_string()))?;
+            facet_fill::select(&request)
+        });
+        make_java_string(env, &response)
+    }).resolve::<LogErrorAndDefault>()
 }
 
 #[unsafe(no_mangle)]

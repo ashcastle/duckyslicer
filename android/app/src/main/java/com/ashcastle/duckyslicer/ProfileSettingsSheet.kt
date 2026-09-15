@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
@@ -50,6 +51,13 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -83,6 +92,15 @@ internal enum class ProfileSettingsKind {
 }
 
 private val LocalSettingsQuery = compositionLocalOf { "" }
+internal val LocalDockedProfileEditor = compositionLocalOf { false }
+private val LocalBasicSettings = compositionLocalOf<Set<String>?> { null }
+private val FloatListEditorSaver = androidx.compose.runtime.saveable.listSaver<List<Float>, Float>(
+    save = { it.toList() }, restore = { it.toList() },
+)
+private val CoordinatePairEditorSaver = androidx.compose.runtime.saveable.listSaver<Pair<Float, Float>, Float>(
+    save = { listOf(it.first, it.second) },
+    restore = { if (it.size == 2) it[0] to it[1] else null },
+)
 private const val MAX_GCODE_TEMPLATE_BYTES = 262_144
 
 private enum class MotionLimitUnit {
@@ -197,8 +215,11 @@ private val SILENT_MOTION_LIMIT_CONTROLS = listOf(
 
 @Composable
 private fun settingMatchesQuery(label: String): Boolean {
-    return settingQueryMatches(LocalSettingsQuery.current, label)
+    return settingVisible(LocalSettingsQuery.current, label, LocalBasicSettings.current)
 }
+
+internal fun settingVisible(query: String, label: String, basicLabels: Set<String>?): Boolean =
+    (query.isNotBlank() || basicLabels == null || label in basicLabels) && settingQueryMatches(query, label)
 
 internal fun settingQueryMatches(query: String, label: String): Boolean {
     val normalized = query.trim().lowercase(Locale.ROOT)
@@ -243,7 +264,21 @@ internal data class ProfileEditSession(
     fun revert(): ProfileEditSession = copy(working = opening)
 
     fun applied(): ProfileEditSession = copy(opening = working)
+
+    fun saved(result: ProfileEditorSaveApplied): ProfileEditSession = when {
+        working == result.source -> ProfileEditSession(result.saved)
+        opening == result.previous -> copy(opening = result.saved)
+        else -> this
+    }
 }
+
+internal data class ProfileEditorSaveApplied(
+    val id: Long,
+    val scope: String,
+    val previous: SliceOptions,
+    val source: SliceOptions,
+    val saved: SliceOptions,
+)
 
 internal data class ProfileEditorState(
     val kind: ProfileSettingsKind,
@@ -273,11 +308,14 @@ internal enum class SlicingSettingsSection(val titleResource: Int) {
 
 @Composable
 internal fun ProfileSettings(
+    draftScope: String = "",
     options: SliceOptions,
     catalog: ProfileCatalog,
     bundledCatalogUnavailable: Boolean,
     recents: ProfileRecents,
     enabled: Boolean,
+    completedSave: ProfileEditorSaveApplied? = null,
+    onEditorVisibilityChanged: (Boolean) -> Unit = {},
     onOptionsChanged: (SliceOptions) -> Unit,
     onSavePrinter: (String, SliceOptions) -> Unit,
     onSaveFilament: (String, SliceOptions, Int) -> Unit,
@@ -292,12 +330,48 @@ internal fun ProfileSettings(
     onDeleteFilament: (String) -> Unit,
     onDeleteSlicing: (String) -> Unit,
 ) {
-    val editorModel = remember { ProfileEditorDraft() }
+    val context = LocalContext.current
+    val draftPreferences = remember(context) { context.getSharedPreferences("profile-editor-draft", 0) }
+    val editorModel = remember(draftScope) { ProfileEditorDraft() }
+    var openEditorScope by rememberSaveable { mutableStateOf<String?>(null) }
+    var openEditorKind by rememberSaveable { mutableStateOf<String?>(null) }
+    val draftKey = "draft:$draftScope"
+    LaunchedEffect(draftScope, options, openEditorScope, openEditorKind) {
+        if (editorModel.editor == null) {
+            editorModel.editor = restoreProfileDraft(draftPreferences.getString(draftKey, null), options)
+        }
+        if (openEditorScope == draftScope && !editorModel.visible) {
+            ProfileSettingsKind.entries.firstOrNull { it.name == openEditorKind }?.let {
+                editorModel.open(it, options)
+            }
+        }
+    }
     var editor by editorModel::editor
+    LaunchedEffect(editorModel.visible) { onEditorVisibilityChanged(editorModel.visible) }
+    LaunchedEffect(completedSave?.id) {
+        completedSave?.takeIf { it.scope == draftScope }?.let { result ->
+            editor = editor?.let { it.copy(session = it.session.saved(result)) }
+        }
+    }
+    val persistedSession = editor
+    val encodedDraft = remember(persistedSession) { persistedSession?.encodeDraft() }
+    SideEffect {
+        if (draftScope.isNotBlank() && persistedSession != null && draftPreferences.getString(draftKey, null) != encodedDraft) {
+            draftPreferences.edit().putString(draftKey, encodedDraft).apply()
+        }
+    }
     var expanded by rememberSaveable { mutableStateOf(true) }
 
     fun open(kind: ProfileSettingsKind) {
+        openEditorScope = draftScope
+        openEditorKind = kind.name
         editorModel.open(kind, options)
+    }
+
+    fun dismissEditor() {
+        openEditorScope = null
+        openEditorKind = null
+        editorModel.dismiss()
     }
 
     fun updateEditor(options: SliceOptions) {
@@ -315,11 +389,8 @@ internal fun ProfileSettings(
         }
     }
 
-    fun acceptEditor(staged: SliceOptions) {
-        onOptionsChanged(staged)
-        editor = editor?.let { it.copy(session = ProfileEditSession(staged)) }
-    }
 
+    if (!LocalDockedProfileEditor.current || !editorModel.visible) {
     val profileState = stringResource(
         if (expanded) R.string.expanded_state else R.string.collapsed_state,
     )
@@ -407,6 +478,7 @@ internal fun ProfileSettings(
         )
     }
 
+    }
     val activeEditor = editor.takeIf { editorModel.visible }
     when (activeEditor?.kind) {
         ProfileSettingsKind.PRINTER -> PrinterSettingsSheet(
@@ -418,11 +490,9 @@ internal fun ProfileSettings(
             },
             onOptionsChanged = ::updateEditor,
             onSave = { name, staged ->
-                acceptEditor(staged)
                 onSavePrinter(name, staged)
             },
             onUpdate = { staged ->
-                acceptEditor(staged)
                 onUpdatePrinter(staged.printerProfile.id, staged)
             },
             onRename = { profile, name ->
@@ -432,7 +502,7 @@ internal fun ProfileSettings(
             dirty = activeEditor.session.isDirty,
             onRevert = ::revertEditor,
             onApply = ::applyEditor,
-            onDismiss = editorModel::dismiss,
+            onDismiss = ::dismissEditor,
         )
 
         ProfileSettingsKind.FILAMENT -> FilamentSettingsSheet(
@@ -447,11 +517,9 @@ internal fun ProfileSettings(
             },
             onOptionsChanged = ::updateEditor,
             onSave = { name, staged, slot ->
-                acceptEditor(staged)
                 onSaveFilament(name, staged, slot)
             },
             onUpdate = { staged, slot ->
-                acceptEditor(staged)
                 onUpdateFilament(
                     staged.resolvedFilamentSlots()[slot].id,
                     staged,
@@ -465,7 +533,7 @@ internal fun ProfileSettings(
             dirty = activeEditor.session.isDirty,
             onRevert = ::revertEditor,
             onApply = ::applyEditor,
-            onDismiss = editorModel::dismiss,
+            onDismiss = ::dismissEditor,
         )
 
         ProfileSettingsKind.SLICING -> SlicingSettingsSheet(
@@ -481,11 +549,9 @@ internal fun ProfileSettings(
             },
             onOptionsChanged = ::updateEditor,
             onSave = { name, staged ->
-                acceptEditor(staged)
                 onSaveSlicing(name, staged)
             },
             onUpdate = { staged ->
-                acceptEditor(staged)
                 onUpdateSlicing(staged.quality.id, staged)
             },
             onRename = { profile, name ->
@@ -495,7 +561,7 @@ internal fun ProfileSettings(
             dirty = activeEditor.session.isDirty,
             onRevert = ::revertEditor,
             onApply = ::applyEditor,
-            onDismiss = editorModel::dismiss,
+            onDismiss = ::dismissEditor,
         )
 
         null -> Unit
@@ -542,8 +608,8 @@ private fun PrinterSettingsSheet(
     onApply: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var profilesOpen by remember { mutableStateOf(false) }
-    var settingsQuery by remember { mutableStateOf("") }
+    var profilesOpen by rememberSaveable { mutableStateOf(false) }
+    var settingsQuery by rememberSaveable { mutableStateOf("") }
     var selectedExtruder by rememberSaveable(options.printerProfile.id) { mutableStateOf(0) }
     LaunchedEffect(options.printerProfile.extruderCount) {
         selectedExtruder = selectedExtruder.coerceIn(0, options.printerProfile.extruderCount - 1)
@@ -664,10 +730,9 @@ private fun PrinterSettingsSheet(
         selected = options.nozzleDiameter,
         optionLabel = { stringResource(R.string.millimeters_value_precise, it) },
         onSelected = {
-            onOptionsChanged(
-                options.copy(nozzleDiameter = it)
-                    .selectQuality(QualityProfile.standardFor(it)),
-            )
+            // Editing hardware must not replace the user's process settings with
+            // an unrelated printer's fallback profile.
+            onOptionsChanged(options.copy(nozzleDiameter = it))
         },
     )
     SettingChoices(
@@ -2169,9 +2234,9 @@ private fun FilamentSettingsSheet(
     onApply: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var selectedSlot by remember { mutableStateOf(0) }
-    var profilesOpen by remember { mutableStateOf(false) }
-    var settingsQuery by remember { mutableStateOf("") }
+    var selectedSlot by rememberSaveable { mutableStateOf(0) }
+    var profilesOpen by rememberSaveable { mutableStateOf(false) }
+    var settingsQuery by rememberSaveable { mutableStateOf("") }
     val slots = options.resolvedFilamentSlots()
     LaunchedEffect(slots.size) {
         selectedSlot = selectedSlot.coerceIn(0, slots.lastIndex)
@@ -2232,7 +2297,7 @@ private fun FilamentSettingsSheet(
             },
         )
         val notesLabel = stringResource(R.string.filament_notes)
-        if (settingQueryMatches(settingsQuery, notesLabel)) {
+        if (settingMatchesQuery(notesLabel)) {
             OutlinedTextField(
                 value = activeProfile.notes,
                 onValueChange = { candidate ->
@@ -3650,9 +3715,9 @@ private fun SlicingSettingsSheet(
     onApply: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var selectedSection by remember { mutableStateOf(SlicingSettingsSection.QUALITY) }
-    var profilesOpen by remember { mutableStateOf(false) }
-    var settingsQuery by remember { mutableStateOf("") }
+    var selectedSection by rememberSaveable { mutableStateOf(SlicingSettingsSection.QUALITY) }
+    var profilesOpen by rememberSaveable { mutableStateOf(false) }
+    var settingsQuery by rememberSaveable { mutableStateOf("") }
     SettingsSheet(
         title = stringResource(R.string.slicing_profile),
         onDismiss = onDismiss,
@@ -3676,7 +3741,7 @@ private fun SlicingSettingsSheet(
     ) {
         val maximumLayerHeight = options.printerProfile.maxLayerHeight.coerceAtLeast(0.04f)
         val layerHeightSteps = ((maximumLayerHeight - 0.04f) / 0.01f).roundToInt().coerceAtLeast(2) - 1
-        val minimumLineWidth = options.nozzleDiameter * 0.5f
+        val minimumLineWidth = 0f
         val maximumLineWidth = listOf(
             options.nozzleDiameter * 2f,
             options.outerWallLineWidth,
@@ -3740,9 +3805,10 @@ private fun SlicingSettingsSheet(
         val maximumFilamentSlot = options.resolvedFilamentSlots().size.coerceIn(1, MAX_FILAMENT_SLOTS)
         val supportAvailability = options.supportSettingsAvailability()
         val isSearchingSettings = settingsQuery.isNotBlank()
-        val minimumOrganicTipDiameter = minimumOrganicTreeTipDiameter(options.supportLineWidth)
+        val supportWidthForLimits = options.supportLineWidth.takeIf { it > 0f } ?: options.nozzleDiameter
+        val minimumOrganicTipDiameter = minimumOrganicTreeTipDiameter(supportWidthForLimits)
         val minimumOrganicBranchDiameter = minimumOrganicTreeBranchDiameter(
-            options.supportLineWidth,
+            supportWidthForLimits,
             options.treeSupportTipDiameter,
         )
         val maximumOrganicTipDiameter = max(
@@ -3786,7 +3852,8 @@ private fun SlicingSettingsSheet(
                 )
                 SettingSlider(
                     label = stringResource(R.string.initial_layer_line_width),
-                    valueText = stringResource(R.string.millimeters_value_precise, options.initialLayerLineWidth),
+                    valueText = if (options.initialLayerLineWidth == 0f) stringResource(R.string.automatic_layer_height)
+                        else stringResource(R.string.millimeters_value_precise, options.initialLayerLineWidth),
                     value = options.initialLayerLineWidth,
                     range = minimumLineWidth..maximumLineWidth,
                     steps = lineWidthSteps,
@@ -3802,7 +3869,8 @@ private fun SlicingSettingsSheet(
                 )
                 SettingSlider(
                     label = stringResource(R.string.outer_wall_width),
-                    valueText = stringResource(R.string.millimeters_value_precise, options.outerWallLineWidth),
+                    valueText = if (options.outerWallLineWidth == 0f) stringResource(R.string.automatic_layer_height)
+                        else stringResource(R.string.millimeters_value_precise, options.outerWallLineWidth),
                     value = options.outerWallLineWidth,
                     range = minimumLineWidth..maximumLineWidth,
                     steps = lineWidthSteps,
@@ -3810,7 +3878,8 @@ private fun SlicingSettingsSheet(
                 )
                 SettingSlider(
                     label = stringResource(R.string.inner_wall_width),
-                    valueText = stringResource(R.string.millimeters_value_precise, options.innerWallLineWidth),
+                    valueText = if (options.innerWallLineWidth == 0f) stringResource(R.string.automatic_layer_height)
+                        else stringResource(R.string.millimeters_value_precise, options.innerWallLineWidth),
                     value = options.innerWallLineWidth,
                     range = minimumLineWidth..maximumLineWidth,
                     steps = lineWidthSteps,
@@ -3818,7 +3887,8 @@ private fun SlicingSettingsSheet(
                 )
                 SettingSlider(
                     label = stringResource(R.string.top_surface_width),
-                    valueText = stringResource(R.string.millimeters_value_precise, options.topSurfaceLineWidth),
+                    valueText = if (options.topSurfaceLineWidth == 0f) stringResource(R.string.automatic_layer_height)
+                        else stringResource(R.string.millimeters_value_precise, options.topSurfaceLineWidth),
                     value = options.topSurfaceLineWidth,
                     range = minimumLineWidth..maximumLineWidth,
                     steps = lineWidthSteps,
@@ -3826,7 +3896,8 @@ private fun SlicingSettingsSheet(
                 )
                 SettingSlider(
                     label = stringResource(R.string.internal_solid_infill_width),
-                    valueText = stringResource(R.string.millimeters_value_precise, options.internalSolidInfillLineWidth),
+                    valueText = if (options.internalSolidInfillLineWidth == 0f) stringResource(R.string.automatic_layer_height)
+                        else stringResource(R.string.millimeters_value_precise, options.internalSolidInfillLineWidth),
                     value = options.internalSolidInfillLineWidth,
                     range = minimumLineWidth..maximumLineWidth,
                     steps = lineWidthSteps,
@@ -4941,7 +5012,8 @@ private fun SlicingSettingsSheet(
                 )
                 SettingSlider(
                     label = stringResource(R.string.sparse_infill_width),
-                    valueText = stringResource(R.string.millimeters_value_precise, options.sparseInfillLineWidth),
+                    valueText = if (options.sparseInfillLineWidth == 0f) stringResource(R.string.automatic_layer_height)
+                        else stringResource(R.string.millimeters_value_precise, options.sparseInfillLineWidth),
                     value = options.sparseInfillLineWidth,
                     range = minimumLineWidth..maximumLineWidth,
                     steps = lineWidthSteps,
@@ -5672,7 +5744,8 @@ private fun SlicingSettingsSheet(
                     }
                     SettingSlider(
                         label = stringResource(R.string.support_line_width),
-                        valueText = stringResource(R.string.millimeters_value_precise, options.supportLineWidth),
+                        valueText = if (options.supportLineWidth == 0f) stringResource(R.string.automatic_layer_height)
+                            else stringResource(R.string.millimeters_value_precise, options.supportLineWidth),
                         value = options.supportLineWidth,
                         range = minimumLineWidth..maximumLineWidth,
                         steps = lineWidthSteps,
@@ -6360,7 +6433,7 @@ private fun SlicingSettingsSheet(
 
             SlicingSettingsSection.OTHERS -> {
                 val notesLabel = stringResource(R.string.configuration_notes)
-                if (settingQueryMatches(settingsQuery, notesLabel)) {
+                if (settingMatchesQuery(notesLabel)) {
                     OutlinedTextField(
                         value = options.quality.notes,
                         onValueChange = { candidate ->
@@ -7854,8 +7927,8 @@ private fun BedExcludeAreaSetting(
 ) {
     val label = stringResource(R.string.bed_exclude_area)
     if (!settingMatchesQuery(label)) return
-    var input by remember { mutableStateOf(formatBedExcludeArea(value)) }
-    var lastApplied by remember { mutableStateOf(value) }
+    var input by rememberSaveable(label) { mutableStateOf(formatBedExcludeArea(value)) }
+    var lastApplied by rememberSaveable(label, stateSaver = FloatListEditorSaver) { mutableStateOf(value) }
     LaunchedEffect(value) {
         if (value != lastApplied) {
             input = formatBedExcludeArea(value)
@@ -7975,8 +8048,8 @@ private fun GcodeThumbnailSetting(
 ) {
     val label = stringResource(R.string.gcode_thumbnails)
     if (!settingMatchesQuery(label)) return
-    var input by remember { mutableStateOf(value) }
-    var lastApplied by remember { mutableStateOf(value) }
+    var input by rememberSaveable(label) { mutableStateOf(value) }
+    var lastApplied by rememberSaveable(label) { mutableStateOf(value) }
     LaunchedEffect(value) {
         if (value != lastApplied) {
             input = value
@@ -8264,8 +8337,8 @@ private fun DecimalSettingField(
     onValueChange: (Float) -> Unit,
 ) {
     if (!settingMatchesQuery(label)) return
-    var input by remember { mutableStateOf(editableDecimal(value)) }
-    var lastApplied by remember { mutableStateOf(value) }
+    var input by rememberSaveable(label) { mutableStateOf(editableDecimal(value)) }
+    var lastApplied by rememberSaveable(label) { mutableStateOf(value) }
     LaunchedEffect(value) {
         if (abs(value - lastApplied) >= 0.001f) {
             input = editableDecimal(value)
@@ -8311,8 +8384,10 @@ private fun CoordinatePairSettingField(
     onValueChange: (Float, Float) -> Unit,
 ) {
     if (!settingMatchesQuery(label)) return
-    var input by remember { mutableStateOf(editableCoordinatePair(valueX, valueY)) }
-    var lastApplied by remember { mutableStateOf(valueX to valueY) }
+    var input by rememberSaveable(label) { mutableStateOf(editableCoordinatePair(valueX, valueY)) }
+    var lastApplied by rememberSaveable(label, stateSaver = CoordinatePairEditorSaver) {
+        mutableStateOf(valueX to valueY)
+    }
     LaunchedEffect(valueX, valueY) {
         if (abs(valueX - lastApplied.first) >= 0.001f ||
             abs(valueY - lastApplied.second) >= 0.001f
@@ -8373,8 +8448,8 @@ private fun IntegerSettingField(
     onValueChange: (Int) -> Unit,
 ) {
     if (!settingMatchesQuery(label)) return
-    var input by remember { mutableStateOf(value.toString()) }
-    var lastApplied by remember { mutableStateOf(value) }
+    var input by rememberSaveable(label) { mutableStateOf(value.toString()) }
+    var lastApplied by rememberSaveable(label) { mutableStateOf(value) }
     LaunchedEffect(value) {
         if (value != lastApplied) {
             input = value.toString()
@@ -9051,6 +9126,7 @@ private fun <T> ProfileChooserSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val docked = LocalDockedProfileEditor.current
     val sheetHeight = with(LocalDensity.current) {
         LocalWindowInfo.current.containerSize.height.toDp()
     } * 0.88f
@@ -9061,7 +9137,7 @@ private fun <T> ProfileChooserSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(sheetHeight)
+                .then(if (docked) Modifier.fillMaxHeight() else Modifier.height(sheetHeight))
                 .navigationBarsPadding()
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -9176,13 +9252,37 @@ private fun SettingsSheet(
     header: @Composable () -> Unit,
     content: @Composable () -> Unit,
 ) {
+    val context = LocalContext.current
+    val preferences = remember(context) { context.getSharedPreferences("profile-editor-ui", 0) }
+    var expert by remember { mutableStateOf(preferences.getBoolean("expert", false)) }
+    val basicLabels = listOf(
+        R.string.layer_height, R.string.first_layer_height, R.string.nozzle_temperature,
+        R.string.bed_temperature, R.string.first_layer_nozzle_temperature,
+        R.string.first_layer_bed_temperature, R.string.print_speed,
+        R.string.walls, R.string.nozzle_diameter, R.string.filament_diameter,
+        R.string.filament_color,
+        R.string.quality, R.string.strength, R.string.supports,
+        R.string.speed, R.string.others,
+        R.string.bed_width, R.string.bed_depth, R.string.build_height,
+        R.string.build_plate, R.string.flow_ratio, R.string.max_volumetric_speed,
+        R.string.cooling, R.string.minimum_fan_speed, R.string.maximum_fan_speed,
+        R.string.retraction, R.string.retraction_length, R.string.retraction_speed,
+        R.string.use_printer_retraction_defaults,
+        R.string.infill, R.string.top_shell_layers, R.string.bottom_shell_layers,
+        R.string.outer_wall_speed, R.string.inner_wall_speed,
+        R.string.first_layer_speed, R.string.travel_speed, R.string.seam_position,
+        R.string.support_type, R.string.support_style, R.string.support_threshold_angle,
+        R.string.support_top_z_distance, R.string.support_bottom_z_distance,
+        R.string.support_filament, R.string.support_interface_filament,
+        R.string.brim_type, R.string.brim_width,
+    ).map { stringResource(it) }.toSet()
     val scrollState = rememberScrollState()
     val sheetHeight = with(LocalDensity.current) {
         LocalWindowInfo.current.containerSize.height.toDp()
     } * 0.92f
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     LaunchedEffect(scrollKey) { scrollState.scrollTo(0) }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    val sheetContent: @Composable () -> Unit = {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -9209,6 +9309,13 @@ private fun SettingsSheet(
                     }
                 }
                 header()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.expert_mode), modifier = Modifier.weight(1f))
+                    Switch(checked = expert, onCheckedChange = {
+                        expert = it
+                        preferences.edit().putBoolean("expert", it).apply()
+                    })
+                }
                 OutlinedTextField(
                     value = settingQuery,
                     onValueChange = onSettingQueryChanged,
@@ -9219,6 +9326,7 @@ private fun SettingsSheet(
                 )
                 CompositionLocalProvider(
                     LocalSettingsQuery provides settingQuery.trim().lowercase(Locale.ROOT),
+                    LocalBasicSettings provides if (expert) null else basicLabels,
                 ) {
                     content()
                 }
@@ -9227,6 +9335,11 @@ private fun SettingsSheet(
                 ProfileDirtyActionBar(onRevert = onRevert, onApply = onApply)
             }
         }
+    }
+    if (LocalDockedProfileEditor.current) {
+        Surface { sheetContent() }
+    } else {
+        ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) { sheetContent() }
     }
 }
 
@@ -9251,14 +9364,15 @@ private fun ProfileDirtyActionBar(
             OutlinedButton(
                 onClick = onRevert,
                 modifier = Modifier.weight(3f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 8.dp),
             ) {
-                Text(stringResource(R.string.revert_changes))
+                Text(stringResource(R.string.revert_changes), maxLines = 1)
             }
             Button(
                 onClick = onApply,
                 modifier = Modifier.weight(7f),
             ) {
-                Text(stringResource(R.string.apply_changes))
+                Text(stringResource(R.string.apply_to_project))
             }
         }
     }
@@ -9491,7 +9605,7 @@ internal fun <T> SearchableGroupedProfileChoices(
 @Composable
 private fun SaveProfileField(onSave: (String) -> Unit, onDismiss: () -> Unit) {
     if (LocalSettingsQuery.current.isNotBlank()) return
-    var name by remember { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf("") }
     HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
     OutlinedTextField(
         value = name,
@@ -9503,7 +9617,6 @@ private fun SaveProfileField(onSave: (String) -> Unit, onDismiss: () -> Unit) {
     Button(
         onClick = {
             onSave(name.trim())
-            onDismiss()
         },
         enabled = name.isNotBlank(),
         modifier = Modifier.fillMaxWidth(),
@@ -9522,7 +9635,6 @@ private fun UpdateProfileButton(
     Button(
         onClick = {
             onUpdate()
-            onDismiss()
         },
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -9567,24 +9679,85 @@ internal fun SettingSlider(
     enabled: Boolean = true,
 ) {
     if (!settingMatchesQuery(label)) return
+    var editing by rememberSaveable(label) { mutableStateOf(false) }
+    var showSlider by rememberSaveable(label) { mutableStateOf(false) }
+    val scale = if (valueText.contains('%') && range.endInclusive <= 1f) 100f else 1f
+    val displayLocale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val exactValueText = exactSettingDisplay(valueText, value, scale, displayLocale)
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, fontWeight = FontWeight.SemiBold)
-            Text(valueText, color = Color(0xFFC8C9C2))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+            TextButton(enabled = enabled, onClick = { editing = true }) {
+                Text(exactValueText, color = if (enabled) Color(0xFFF6C945) else Color(0xFF92938D))
+            }
+            IconButton(enabled = enabled, onClick = { showSlider = !showSlider }) {
+                Icon(if (showSlider) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = label)
+            }
         }
+        if (showSlider) {
         Slider(
             value = value.coerceIn(range.start, range.endInclusive),
             onValueChange = onValueChange,
             enabled = enabled,
             modifier = Modifier.semantics {
                 contentDescription = label
-                stateDescription = valueText
+                stateDescription = exactValueText
             },
             valueRange = range,
             steps = steps,
             colors = duckySliderColors(),
         )
+        }
     }
+    if (editing) {
+        val focusRequester = remember { FocusRequester() }
+        var input by rememberSaveable(label, stateSaver = TextFieldValue.Saver) {
+            val text = exactSettingInput(value, scale)
+            mutableStateOf(TextFieldValue(text, selection = TextRange(0, text.length)))
+        }
+        val parsed = parseExactSettingValue(input.text, scale, range)
+        val valid = parsed != null
+        fun confirmValue() {
+            parsed?.let {
+                onValueChange(it)
+                editing = false
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { editing = false },
+            title = { Text(label) },
+            text = {
+                OutlinedTextField(
+                    modifier = Modifier.focusRequester(focusRequester),
+                    value = input,
+                    onValueChange = { input = it },
+                    singleLine = true,
+                    isError = !valid,
+                    supportingText = { Text("${exactSettingInput(range.start, scale)} – ${exactSettingInput(range.endInclusive, scale)}") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { confirmValue() }),
+                )
+                LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            },
+            confirmButton = {
+                TextButton(enabled = valid, onClick = ::confirmValue) { Text(stringResource(R.string.apply_changes)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { editing = false }) { Text(stringResource(R.string.close)) }
+            },
+        )
+    }
+}
+
+internal fun parseExactSettingValue(
+    input: String,
+    scale: Float,
+    range: ClosedFloatingPointRange<Float>,
+): Float? {
+    if (!scale.isFinite() || scale <= 0f) return null
+    val value = input.trim().replace(',', '.').toFloatOrNull()?.div(scale) ?: return null
+    return value.takeIf { it.isFinite() && it in range }
 }
 
 @Composable

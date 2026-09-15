@@ -1343,50 +1343,62 @@ data class QualityProfile(
         val FINE_02 = QualityProfile(
             "snapmaker-u1-02-006", "0.06 mm Fine",
             0.06f, 0.10f, 4, 0.15f, 120f, 0.2f, builtIn = true,
+            brand = "Snapmaker", compatiblePrinters = listOf(PrinterProfile.U1_02.name),
         )
         val STANDARD_02 = QualityProfile(
             "snapmaker-u1-02-012", "0.12 mm Standard",
             0.12f, 0.10f, 4, 0.15f, 120f, 0.2f, builtIn = true,
+            brand = "Snapmaker", compatiblePrinters = listOf(PrinterProfile.U1_02.name),
         )
         val DRAFT_02 = QualityProfile(
             "snapmaker-u1-02-014", "0.14 mm Draft",
             0.14f, 0.10f, 4, 0.15f, 120f, 0.2f, builtIn = true,
+            brand = "Snapmaker", compatiblePrinters = listOf(PrinterProfile.U1_02.name),
         )
         val DRAFT = QualityProfile(
             "snapmaker-u1-04-028", "0.28 mm Extra Draft",
             0.28f, 0.20f, 2, 0.15f, 200f, 0.4f, builtIn = true,
+            brand = "Snapmaker", compatiblePrinters = listOf(PrinterProfile.U1_04.name),
         )
         val STANDARD = QualityProfile(
             "snapmaker-u1-04-020", "0.20 mm Standard",
             0.20f, 0.25f, 2, 0.15f, 200f, 0.4f, builtIn = true,
+            brand = "Snapmaker", compatiblePrinters = listOf(PrinterProfile.U1_04.name),
         )
         val FINE = QualityProfile(
             "snapmaker-u1-04-012", "0.12 mm Fine",
             0.12f, 0.20f, 2, 0.15f, 200f, 0.4f, builtIn = true,
+            brand = "Snapmaker", compatiblePrinters = listOf(PrinterProfile.U1_04.name),
         )
         val DRAFT_06 = QualityProfile(
             "snapmaker-u1-06-040", "0.40 mm Extra Draft",
             0.40f, 0.35f, 2, 0.15f, 220f, 0.6f, builtIn = true,
+            brand = "Snapmaker", compatiblePrinters = listOf(PrinterProfile.U1_06.name),
         )
         val STANDARD_06 = QualityProfile(
             "snapmaker-u1-06-030", "0.30 mm Standard",
             0.30f, 0.30f, 2, 0.15f, 200f, 0.6f, builtIn = true,
+            brand = "Snapmaker", compatiblePrinters = listOf(PrinterProfile.U1_06.name),
         )
         val FINE_06 = QualityProfile(
             "snapmaker-u1-06-020", "0.20 mm Fine",
             0.20f, 0.25f, 2, 0.15f, 200f, 0.6f, builtIn = true,
+            brand = "Snapmaker", compatiblePrinters = listOf(PrinterProfile.U1_06.name),
         )
         val FINE_08 = QualityProfile(
             "snapmaker-u1-08-024", "0.24 mm Fine",
             0.24f, 0.40f, 2, 0.15f, 200f, 0.8f, builtIn = true,
+            brand = "Snapmaker", compatiblePrinters = listOf(PrinterProfile.U1_08.name),
         )
         val STANDARD_08 = QualityProfile(
             "snapmaker-u1-08-040", "0.40 mm Standard",
             0.40f, 0.40f, 2, 0.15f, 200f, 0.8f, builtIn = true,
+            brand = "Snapmaker", compatiblePrinters = listOf(PrinterProfile.U1_08.name),
         )
         val DRAFT_08 = QualityProfile(
             "snapmaker-u1-08-056", "0.56 mm Draft",
             0.56f, 0.40f, 2, 0.15f, 200f, 0.8f, builtIn = true,
+            brand = "Snapmaker", compatiblePrinters = listOf(PrinterProfile.U1_08.name),
         )
         val builtIns = listOf(
             FINE_02, STANDARD_02, DRAFT_02,
@@ -1662,20 +1674,13 @@ data class SliceOptions(
     val raftExpansion: Float = quality.raftExpansion,
     val raftFirstLayerDensity: Float = quality.raftFirstLayerDensity,
     val raftFirstLayerExpansion: Float = quality.raftFirstLayerExpansion,
-    val outerWallLineWidth: Float = quality.outerWallLineWidth.takeIf { it > 0f }
-        ?: nozzleDiameter * 1.05f,
-    val innerWallLineWidth: Float = quality.innerWallLineWidth.takeIf { it > 0f }
-        ?: nozzleDiameter * 1.125f,
-    val topSurfaceLineWidth: Float = quality.topSurfaceLineWidth.takeIf { it > 0f }
-        ?: nozzleDiameter * 1.05f,
-    val sparseInfillLineWidth: Float = quality.sparseInfillLineWidth.takeIf { it > 0f }
-        ?: nozzleDiameter * 1.125f,
-    val internalSolidInfillLineWidth: Float = quality.internalSolidInfillLineWidth.takeIf { it > 0f }
-        ?: nozzleDiameter * 1.125f,
-    val supportLineWidth: Float = quality.supportLineWidth.takeIf { it > 0f }
-        ?: nozzleDiameter * 1.05f,
-    val initialLayerLineWidth: Float = quality.initialLayerLineWidth.takeIf { it > 0f }
-        ?: nozzleDiameter * 1.25f,
+    val outerWallLineWidth: Float = quality.outerWallLineWidth,
+    val innerWallLineWidth: Float = quality.innerWallLineWidth,
+    val topSurfaceLineWidth: Float = quality.topSurfaceLineWidth,
+    val sparseInfillLineWidth: Float = quality.sparseInfillLineWidth,
+    val internalSolidInfillLineWidth: Float = quality.internalSolidInfillLineWidth,
+    val supportLineWidth: Float = quality.supportLineWidth,
+    val initialLayerLineWidth: Float = quality.initialLayerLineWidth,
     val smallPerimeterSpeed: Float = quality.smallPerimeterSpeed,
     val smallPerimeterSpeedPercent: Boolean = quality.smallPerimeterSpeedPercent,
     val smallPerimeterThreshold: Float = quality.smallPerimeterThreshold,
@@ -2152,20 +2157,13 @@ data class SliceOptions(
         raftExpansion = profile.raftExpansion,
         raftFirstLayerDensity = profile.raftFirstLayerDensity,
         raftFirstLayerExpansion = profile.raftFirstLayerExpansion,
-        outerWallLineWidth = profile.outerWallLineWidth.takeIf { it > 0f }
-            ?: nozzleDiameter * 1.05f,
-        innerWallLineWidth = profile.innerWallLineWidth.takeIf { it > 0f }
-            ?: nozzleDiameter * 1.125f,
-        topSurfaceLineWidth = profile.topSurfaceLineWidth.takeIf { it > 0f }
-            ?: nozzleDiameter * 1.05f,
-        sparseInfillLineWidth = profile.sparseInfillLineWidth.takeIf { it > 0f }
-            ?: nozzleDiameter * 1.125f,
-        internalSolidInfillLineWidth = profile.internalSolidInfillLineWidth.takeIf { it > 0f }
-            ?: nozzleDiameter * 1.125f,
-        supportLineWidth = profile.supportLineWidth.takeIf { it > 0f }
-            ?: nozzleDiameter * 1.05f,
-        initialLayerLineWidth = profile.initialLayerLineWidth.takeIf { it > 0f }
-            ?: nozzleDiameter * 1.25f,
+        outerWallLineWidth = profile.outerWallLineWidth,
+        innerWallLineWidth = profile.innerWallLineWidth,
+        topSurfaceLineWidth = profile.topSurfaceLineWidth,
+        sparseInfillLineWidth = profile.sparseInfillLineWidth,
+        internalSolidInfillLineWidth = profile.internalSolidInfillLineWidth,
+        supportLineWidth = profile.supportLineWidth,
+        initialLayerLineWidth = profile.initialLayerLineWidth,
         smallPerimeterSpeed = profile.smallPerimeterSpeed,
         smallPerimeterSpeedPercent = profile.smallPerimeterSpeedPercent,
         smallPerimeterThreshold = profile.smallPerimeterThreshold,
@@ -3106,6 +3104,9 @@ object OnDeviceSlicer {
                 range.overrides.layerHeightMm?.let { it in layerHeightRange } != false
             }
         }) { "Height range layer height is unavailable for this nozzle" }
+        require(objects.all { obj -> obj.heightRangeModifiers.ranges.all {
+            it.filamentSlot == null || it.filamentSlot in options.resolvedFilamentSlots().indices
+        } }) { "Height range filament is unavailable" }
         return withTransformedModels(
             objects,
             options,
@@ -3202,6 +3203,7 @@ object OnDeviceSlicer {
             }
             val heightRangeModifierFiles = objects.mapIndexed { index, projectObject ->
                 projectObject.heightRangeModifiers
+                    .resolvedForSlicing(projectObject.processOverrides.layerHeightMm ?: options.layerHeight)
                     .takeIf { it.ranges.isNotEmpty() }
                     ?.let {
                         File.createTempFile(
@@ -3287,6 +3289,9 @@ object OnDeviceSlicer {
         require(objects.isNotEmpty()) { "Project has no objects" }
         val filamentSlots = options.resolvedFilamentSlots()
         val volumes = objects.flatMap(ProjectObject::volumes)
+        require(objects.all { obj -> obj.heightRangeModifiers.ranges.all {
+            it.filamentSlot == null || it.filamentSlot in filamentSlots.indices
+        } }) { "Height range filament assignment is unavailable" }
         require(volumes.all { volume ->
             !volume.role.acceptsFilament || volume.filamentSlot in filamentSlots.indices
         }) { "Volume filament assignment is unavailable" }
@@ -3364,7 +3369,23 @@ object OnDeviceSlicer {
                     ).also(it::writeSidecar)
                 }
             }
+            val processFiles = objects.mapIndexed { index, obj ->
+                obj.processOverrides.takeUnless(ObjectProcessOverrides::isEmpty)?.let {
+                    File.createTempFile("3mf-process-$index-", ".bin", output.parentFile)
+                        .also(it::writeSidecar)
+                }
+            }
+            val rangeFiles = objects.mapIndexed { index, obj ->
+                obj.heightRangeModifiers
+                    .resolvedForSlicing(obj.processOverrides.layerHeightMm ?: options.layerHeight)
+                    .takeIf { it.ranges.isNotEmpty() }?.let {
+                        File.createTempFile("3mf-ranges-$index-", ".bin", output.parentFile)
+                            .also(it::writeSidecar)
+                    }
+            }
             val temporaryFiles = listOf(
+                processFiles,
+                rangeFiles,
                 supportPaintFiles,
                 seamPaintFiles,
                 multiColorPaintFiles,
@@ -3376,6 +3397,8 @@ object OnDeviceSlicer {
             try {
                 if (cancellationRequested()) throw ProjectEditCancelledException()
                 SlicerProcessClient.exportThreeMf(
+                    processOverrideFiles = processFiles,
+                    heightRangeModifierFiles = rangeFiles,
                     transformedModels = transformedModels.files,
                     objectVolumeCounts = transformedModels.objectVolumeCounts,
                     filamentSlots = volumes.map(ProjectVolume::filamentSlot).toIntArray(),
