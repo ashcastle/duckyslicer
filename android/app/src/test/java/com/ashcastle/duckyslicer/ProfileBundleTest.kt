@@ -221,7 +221,7 @@ class ProfileBundleTest {
             )
             val importedPrinter = catalog.printers.single { it.name == "Portable printer" }
             assertEquals(QualityProfile.STANDARD.name, importedPrinter.defaultPrintProfile)
-            assertEquals(listOf(FilamentProfile.PLA.name), importedPrinter.defaultFilamentProfiles)
+            assertEquals(listOf(FilamentProfile.GENERIC_PLA.name), importedPrinter.defaultFilamentProfiles)
             val importedFilament = catalog.filaments.single {
                 it.name == "Portable filament" && !it.builtIn
             }

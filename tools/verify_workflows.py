@@ -140,6 +140,37 @@ def android_concurrency_errors(workflow: str) -> list[str]:
     return []
 
 
+DEVICE_TEST_JOB = "device-tests"
+DEVICE_TEST_REQUIREMENTS: dict[str, str] = {
+    "the hosted device-test job depends on the verified build": "needs: verify",
+    "device tests run on an Apple-silicon host": "runs-on: macos-14",
+    "device tests use the locked Android 16 ARM64 16 KB image": (
+        "system-images;android-36;google_apis_ps16k;arm64-v8a"
+    ),
+    "the boot asserts a 16 KB page size": "getconf PAGE_SIZE",
+    "the boot asserts the 16 KB page size value": "= 16384",
+    "instrumentation is executed, not just assembled": "adb shell am instrument",
+    "the smoke run is bounded to explicit test classes": "-e class ",
+    "the smoke run is bounded by a job timeout": "timeout-minutes:",
+    "failed device runs upload their logs": "duckyslicer-arm64-emulator-log",
+}
+
+
+def android_device_test_errors(workflow: str, jobs: dict[str, str]) -> list[str]:
+    """Require hosted instrumented execution so device tests cannot silently rot."""
+    if DEVICE_TEST_JOB not in jobs:
+        return [
+            "android.yml: a hosted device-tests job is required so instrumentation "
+            "tests run in CI instead of only being assembled"
+        ]
+    job = jobs[DEVICE_TEST_JOB]
+    return [
+        f"android.yml: device-tests is missing its guarantee: {description}"
+        for description, marker in DEVICE_TEST_REQUIREMENTS.items()
+        if marker not in job
+    ]
+
+
 def main() -> None:
     errors: list[str] = []
     action_count = 0
@@ -423,8 +454,7 @@ def main() -> None:
             "android.yml: the traced Kotlin build must disable Gradle build-cache reuse"
         )
 
-    if "device-tests" in android_jobs or "runs-on: macos-14" in android_source:
-        errors.append("android.yml: hosted emulator jobs are not allowed")
+    errors.extend(android_device_test_errors(android_source, android_jobs))
     for hosted_play_build in (
         ":app:bundleRelease",
         ":app:packageReleaseUniversalApk",
@@ -611,7 +641,8 @@ def main() -> None:
         raise SystemExit("Workflow verification failed:\n- " + "\n- ".join(errors))
     print(
         f"Verified {len(workflows)} workflows and {action_count} immutable Action references; "
-        "CodeQL, local-only release signing, and static ARM64 16 KB checks are enforced"
+        "CodeQL, local-only release signing, hosted ARM64 16 KB device tests, "
+        "and static ARM64 16 KB checks are enforced"
     )
 
 

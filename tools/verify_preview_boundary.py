@@ -910,7 +910,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "minOf(widthDp, heightDp) >= TabletShortestSideDp",
         "WorkspaceTopOverlayClearanceDp = 142f",
         "workspacePanelMaxHeightDp(maxHeight.value).dp",
-        "BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxSize())",
+        "BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxSize()",
         "showWorkspaceNavigationLabels(LocalDensity.current.fontScale)",
         "contentDescription = if (showLabels) null else labelText",
         "alwaysShowLabel = showLabels",

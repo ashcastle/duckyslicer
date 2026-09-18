@@ -67,7 +67,7 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "onSettingQueryChanged = { settingsQuery = it }",
         "CurrentProfileButton(",
         "ProfileChooserSheet(",
-        "private fun <T> SettingChoices(",
+        "fun <T> SettingChoices(",
         "LocalSettingsQuery provides",
         "settingQueryMatches(",
         "SlicingSettingsSection.entries",
@@ -470,7 +470,7 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
     for marker in (
         "modifier = Modifier.semantics",
         "contentDescription = label",
-        "stateDescription = valueText",
+        "stateDescription = exactValueText",
     ):
         if marker not in settings_slider:
             raise VerificationError(f"profile slider accessibility is missing: {marker}")
@@ -736,13 +736,28 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
             raise VerificationError(f"Slicing profile sections are not documented in {document}")
 
 
+def profile_editor_sources(main: Path) -> str:
+    """Concatenate the profile editor files so policy checks survive code moves."""
+    editor_files = (
+        "ProfileSettingsSheet.kt",
+        "PrinterSettingsSheet.kt",
+        "FilamentSettingsSheet.kt",
+        "ProfileSettingsFields.kt",
+    )
+    return "\n".join(
+        (main / name).read_text(encoding="utf-8")
+        for name in editor_files
+        if (main / name).is_file()
+    )
+
+
 def read_sources() -> dict[str, str]:
     main = ROOT / "android/app/src/main/java/com/ashcastle/duckyslicer"
     tests = ROOT / "android/app/src/test/java/com/ashcastle/duckyslicer"
     resources = ROOT / "android/app/src/main/res"
     return {
         "DeviceSheet.kt": (main / "DeviceSheet.kt").read_text(encoding="utf-8"),
-        "ProfileSettingsSheet.kt": (main / "ProfileSettingsSheet.kt").read_text(encoding="utf-8"),
+        "ProfileSettingsSheet.kt": profile_editor_sources(main),
         "ProfileRecents.kt": (main / "ProfileRecents.kt").read_text(encoding="utf-8"),
         "ProfileRecentsTest.kt": (tests / "ProfileRecentsTest.kt").read_text(encoding="utf-8"),
         "ProfileEditSessionTest.kt": (tests / "ProfileEditSessionTest.kt").read_text(

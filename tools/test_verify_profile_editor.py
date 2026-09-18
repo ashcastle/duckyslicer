@@ -33,7 +33,7 @@ def valid_sources() -> dict[str, str]:
             "role = Role.Switch .semantics(mergeDescendants = true) "
             "contentDescription = label Switch(checked = checked, enabled = enabled, onCheckedChange = null) "
             "@Composable internal fun SettingSlider( modifier = Modifier.semantics "
-            "contentDescription = label stateDescription = valueText @Composable"
+            "contentDescription = label stateDescription = exactValueText @Composable"
             " LocalWindowInfo.current.containerSize.height.toDp()"
             " options.withSpiralMode(enabled) R.string.spiral_vase R.string.smooth_spiral"
             " R.string.max_xy_smoothing R.string.spiral_starting_flow"
@@ -495,7 +495,7 @@ class VerifyProfileEditorTest(unittest.TestCase):
     def test_rejects_unnamed_profile_slider(self) -> None:
         sources = valid_sources()
         sources["ProfileSettingsSheet.kt"] = sources["ProfileSettingsSheet.kt"].replace(
-            "stateDescription = valueText", "missingState = valueText"
+            "stateDescription = exactValueText", "missingState = exactValueText"
         )
         with self.assertRaisesRegex(VerificationError, "profile slider accessibility"):
             verify_profile_editor(sources)

@@ -22,7 +22,8 @@ internal fun reviewOrcaPresets(
     val records = (parents + incoming).map { JSONObject(it.toString()) }
     fun key(record: JSONObject) = record.optString("type") to record.optString("name")
     val index = records.groupBy(::key)
-    val metadata = setOf("name", "type", "inherits", "from", "version", "instantiation", "setting_id")
+    val metadata = setOf("name", "type", "inherits", "from", "version", "instantiation", "setting_id",
+        "printer_settings_id", "filament_settings_id", "print_settings_id", "is_custom_defined")
 
     fun resolve(record: JSONObject, path: Set<Pair<String, String>>): JSONObject {
         val identity = key(record)

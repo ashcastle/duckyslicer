@@ -1,0 +1,45 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Native code follows .clang-format; keep the editor defaults consistent with it.
+[*.{c,cc,cpp,cxx,h,hh,hpp,hxx,inl}]
+indent_size = 4
+
+[*.{kt,kts}]
+indent_size = 4
+# Existing sources contain long Compose call sites; formatting is not line-length
+# driven. Kotlin style is otherwise the official 4-space, trailing-comma style.
+max_line_length = off
+
+[*.{yml,yaml}]
+indent_size = 2
+
+[*.json]
+indent_size = 2
+
+[*.{xml,md,html,css}]
+indent_size = 2
+trim_trailing_whitespace = false
+
+[*.{sh,bash}]
+indent_size = 2
+
+[*.{bat,cmd}]
+end_of_line = crlf
+indent_size = 4
+
+[Makefile]
+indent_style = tab
+
+[*.patch]
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = false
+insert_final_newline = false

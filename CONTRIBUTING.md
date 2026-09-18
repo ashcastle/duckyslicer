@@ -281,6 +281,14 @@ manifest. API levels, permissions, backup/debug state, application components, a
 content-URI import filters are fail-closed allowlists. Any dependency that changes the
 merged manifest requires explicit security review and a policy update.
 
+## Updating the native slicer runtime
+
+The Android ARM64 slicer runtime is built from pinned third-party forks with a
+layered patch stack. Read [`docs/NATIVE_RUNTIME.md`](docs/NATIVE_RUNTIME.md) before
+moving a pin, changing a patch, or investigating a native build failure. That
+document records the input lock, the patch order, the reproducibility risk, and
+the evidence required for a pin change.
+
 ## Updating Android dependencies
 
 Gradle dependency changes must update `android/app/gradle.lockfile`,

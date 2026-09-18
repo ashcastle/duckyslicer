@@ -91,6 +91,10 @@
     <string name="menu">Menu</string>
     <string name="import_model">Import model</string>
     <string name="import_profiles">Import profiles</string>
+    <string name="multi_extruder_enabled">Multiple extruders</string>
+    <string name="add_extruder">Add extruder</string>
+    <string name="remove_last_extruder">Remove last</string>
+    <string name="remove_extruder_warning">Reduce the number of extruders? Filament slots beyond the new limit will be removed and affected assignments will be adjusted. Apply the profile to confirm the change.</string>
     <string name="profile_import_review">Printers: %1$d\nFilaments: %2$d\nSlicing profiles: %3$d\nDuplicates skipped: %4$d\nName conflicts saved as copies: %5$d\n\nExisting profiles will not be overwritten. Nothing is saved until you confirm.</string>
     <string name="export_profiles">Export profiles</string>
     <string name="share_profiles">Share profiles</string>

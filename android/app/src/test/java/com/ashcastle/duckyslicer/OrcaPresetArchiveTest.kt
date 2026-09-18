@@ -19,12 +19,55 @@ class OrcaPresetArchiveTest {
         return output.toByteArray()
     }
 
+    @Test fun readsOrcaPrinterBundleWithUntypedUserPresetsAndTrailingManifest() {
+        val result = readOrcaPresetArchive(archive(
+            "printer/My printer.json" to """{"name":"My printer","inherits":"Base"}""".toByteArray(),
+            "filament/PLA.json" to """{"name":"PLA","filament_settings_id":["PLA"]}""".toByteArray(),
+            "process/Fine.json" to """{"name":"Fine","print_settings_id":"Fine","layer_height":"0.12"}""".toByteArray(),
+            "bundle_structure.json" to """{"bundle_type":"printer config bundle","printer_config":["printer/My printer.json"],"filament_config":["filament/PLA.json"],"process_config":["process/Fine.json"]}""".toByteArray(),
+        ))
+        assertEquals(listOf("machine", "filament", "process"), result.presets.map { it.getString("type") })
+        assertTrue(result.unrecognizedEntries.isEmpty())
+    }
+
+    @Test fun readsOrcaFilamentBundleAndStandaloneUserJson() {
+        val filament = """{"name":"PLA","filament_settings_id":["PLA"],"nozzle_temperature":["215"]}""".toByteArray()
+        assertEquals("filament", readOrcaPresetArchive(filament).presets.single().getString("type"))
+        val result = readOrcaPresetArchive(archive(
+            "Vendor/PLA.json" to filament,
+            "bundle_structure.json" to """{"bundle_type":"filament config bundle","printer_vendor":[{"vendor":"Vendor","filament_path":["Vendor/PLA.json"]}]}""".toByteArray(),
+        ))
+        assertEquals("filament", result.presets.single().getString("type"))
+        assertTrue(result.unrecognizedEntries.isEmpty())
+    }
+
+    @Test fun automaticallyRecognizesAllThreeFlatPresetZipExports() {
+        for ((key, kind) in listOf("printer_settings_id" to "machine",
+            "filament_settings_id" to "filament", "print_settings_id" to "process")) {
+            val json = """{"name":"Exported preset","$key":"Exported preset","from":"User"}""".toByteArray()
+            val result = readOrcaPresetArchive(archive("Exported preset.json" to json))
+            assertEquals(kind, result.presets.single().getString("type"))
+        }
+    }
+
+    @Test fun rejectsConflictingTypesAndMissingManifestEntries() {
+        for (entry in listOf("Fine.json", "missing.json")) {
+            assertThrows(IllegalArgumentException::class.java) {
+                readOrcaPresetArchive(archive("Fine.json" to preset,
+                    "bundle_structure.json" to """{"bundle_type":"printer config bundle","printer_config":["$entry"]}""".toByteArray()))
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            readOrcaPresetArchive("""{"name":"Mixed","print_settings_id":"X","printer_settings_id":"Y"}""".toByteArray())
+        }
+    }
+
     @Test fun readsSingleJsonAndBundledJsonWithoutExtractingFiles() {
         assertEquals("Fine", readOrcaPresetArchive(preset).presets.single().getString("name"))
         val result = readOrcaPresetArchive(archive("process/Fine.json" to preset,
             "bundle_structure.json" to "{}".toByteArray(), "preview.png" to byteArrayOf(1)))
         assertEquals(1, result.presets.size)
-        assertEquals(listOf("bundle_structure.json", "preview.png"), result.unrecognizedEntries)
+        assertEquals(setOf("bundle_structure.json", "preview.png"), result.unrecognizedEntries.toSet())
     }
 
     @Test fun refusesUnsafePathsAndArchivesWithoutProfiles() {

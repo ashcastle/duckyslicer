@@ -469,7 +469,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         raise VerificationError("profile import is not validated before its atomic commit")
 
     for marker in (
-        "fun importBundle(uri: Uri)",
+        "fun importBundle(uri: Uri",
         "fun exportBundle(uri: Uri)",
         "DocumentTransferCancellation()",
         "application.contentResolver.acquireContentProviderClient(uri)",
@@ -487,7 +487,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
     for marker in (
         "profileImportPicker",
         "profileExportPicker",
-        "profileLibraryModel.importBundle(uri)",
+        "profileLibraryModel.importBundle(uri",
         "profileLibraryModel.exportBundle(uri)",
         "profileLibraryModel::cancelTransfer",
     ):

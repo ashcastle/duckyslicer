@@ -30,6 +30,15 @@ jobs, previewing layers, and exporting G-code directly on your device.
 - Optional OctoPrint and Klipper/Moonraker connections
 - 22 app languages, with English as the default
 
+## Printer support
+
+Bundled printer, filament, and process profiles are normalized from the pinned
+OrcaSlicer profile catalog. The out-of-the-box printer defaults target the
+Snapmaker U1 family (0.2/0.4/0.6/0.8 mm nozzles) plus a generic Cartesian
+printer, with Generic PLA as the initial filament; other printers are selected from the bundled catalog or added by
+importing an OrcaSlicer profile bundle. This is an ARM64, Android 8+ build, so
+only `arm64-v8a` devices are supported.
+
 ## Install
 
 Download the signed ARM64 APK from [GitHub Releases](https://github.com/ashcastle/duckyslicer/releases).

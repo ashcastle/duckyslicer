@@ -1504,7 +1504,7 @@ data class MachineMotionSettings(
 
 data class SliceOptions(
     val printerProfile: PrinterProfile = PrinterProfile.U1_04,
-    val filamentProfile: FilamentProfile = FilamentProfile.PLA,
+    val filamentProfile: FilamentProfile = FilamentProfile.GENERIC_PLA,
     val filamentSlots: List<FilamentProfile> = listOf(filamentProfile),
     val filamentColors: List<Int> = filamentSlots.mapIndexed(::suggestedFilamentColor),
     val quality: QualityProfile = QualityProfile.STANDARD,

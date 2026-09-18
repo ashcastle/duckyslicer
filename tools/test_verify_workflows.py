@@ -4,6 +4,7 @@ import unittest
 
 from tools.verify_workflows import (
     android_concurrency_errors,
+    android_device_test_errors,
     ccache_lock_errors,
     literal_run_blocks,
     manual_dispatch_errors,
@@ -88,6 +89,65 @@ jobs:
         self.assertEqual(
             ["android.yml: concurrency must be scoped to the exact commit"],
             android_concurrency_errors(source),
+        )
+
+    def test_requires_a_hosted_device_test_job(self) -> None:
+        errors = android_device_test_errors("jobs:\n  verify:\n", {"verify": ""})
+        self.assertEqual(1, len(errors))
+        self.assertIn("hosted device-tests job is required", errors[0])
+
+    def test_accepts_a_bounded_arm64_16kb_device_test_job(self) -> None:
+        job = """  device-tests:
+    needs: verify
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - run: |
+          sdkmanager "system-images;android-36;google_apis_ps16k;arm64-v8a"
+          nohup emulator -avd a -accel off &
+          adb wait-for-device
+          test "$(adb shell getconf PAGE_SIZE | tr -d '\\r')" = 16384
+          adb shell am instrument -w -e class com.example.SmokeTest com.example.test/androidx.test.runner.AndroidJUnitRunner
+          name: duckyslicer-arm64-emulator-log
+"""
+        self.assertEqual([], android_device_test_errors("", {"device-tests": job}))
+
+    def test_rejects_a_device_test_job_that_only_assembles(self) -> None:
+        job = """  device-tests:
+    needs: verify
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - run: ./gradlew :app:assembleDebugAndroidTest
+"""
+        errors = android_device_test_errors("", {"device-tests": job})
+        self.assertIn(
+            "android.yml: device-tests is missing its guarantee: "
+            "the boot asserts a 16 KB page size",
+            errors,
+        )
+        self.assertIn(
+            "android.yml: device-tests is missing its guarantee: "
+            "instrumentation is executed, not just assembled",
+            errors,
+        )
+
+    def test_rejects_an_unbounded_device_test_job(self) -> None:
+        job = """  device-tests:
+    needs: verify
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - run: |
+          sdkmanager "system-images;android-36;google_apis_ps16k;arm64-v8a"
+          test "$(adb shell getconf PAGE_SIZE | tr -d '\\r')" = 16384
+          adb shell am instrument com.example.test/androidx.test.runner.AndroidJUnitRunner
+          name: duckyslicer-arm64-emulator-log
+"""
+        self.assertIn(
+            "android.yml: device-tests is missing its guarantee: "
+            "the smoke run is bounded to explicit test classes",
+            android_device_test_errors("", {"device-tests": job}),
         )
 
 

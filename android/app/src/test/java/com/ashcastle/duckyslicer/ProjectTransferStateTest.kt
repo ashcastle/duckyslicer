@@ -161,7 +161,7 @@ class ProjectTransferStateTest {
 
     @Test
     fun importedPartAssignmentsExpandAvailableFilamentSlotsWithinPrinterCapacity() {
-        val options = SliceOptions().copy(filamentSlots = listOf(FilamentProfile.PLA))
+        val options = SliceOptions(filamentProfile = FilamentProfile.PLA)
 
         val expanded = options.withMinimumFilamentSlots(2)
 

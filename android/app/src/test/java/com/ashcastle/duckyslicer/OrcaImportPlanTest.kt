@@ -5,6 +5,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OrcaImportPlanTest {
+    @Test fun untypedOrcaExportResolvesParentAndPreservesUserOverrides() {
+        val raw = """{"name":"My fine","from":"User","version":"2.3.0.0","print_settings_id":"My fine","inherits":"Base fine","layer_height":"0.12"}"""
+        val parent = JSONObject("""{"type":"process","name":"Base fine","layer_height":"0.2","wall_loops":"4"}""")
+        val items = prepareOrcaImport(raw.toByteArray(), listOf(parent), SliceOptions(), emptySet())
+        assertNull(items.single().problem)
+        assertTrue(items.single().review.unsupportedKeys.isEmpty())
+        val bundle = selectedOrcaImportBundle(items, setOf(0), setOf(0))
+        val merged = mergeProfileBundle(JSONObject(), bundle) { "user-orca-export" }
+        assertEquals(1, merged.result.importedSlicing)
+        val saved = merged.root.getJSONArray("slicing").getJSONObject(0)
+        assertEquals(0.12, saved.getDouble("layerHeightMm"), 0.00001)
+        assertEquals(4, saved.getInt("perimeters"))
+    }
+
     @Test fun archiveExtrasAreReportedAndCannotBeSelected() {
         val output = java.io.ByteArrayOutputStream()
         java.util.zip.ZipOutputStream(output).use { zip ->

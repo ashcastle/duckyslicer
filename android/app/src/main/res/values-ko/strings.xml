@@ -88,6 +88,10 @@
     <string name="menu">메뉴</string>
     <string name="import_model">모델 임포트</string>
     <string name="import_profiles">프로필 가져오기</string>
+    <string name="multi_extruder_enabled">멀티 익스트루더</string>
+    <string name="add_extruder">추가</string>
+    <string name="remove_last_extruder">마지막 삭제</string>
+    <string name="remove_extruder_warning">익스트루더 수를 줄일까요? 새 개수를 초과하는 필라멘트 슬롯은 삭제되고 관련 할당이 조정됩니다. 프로필을 적용해야 변경이 확정됩니다.</string>
     <string name="export_profiles">프로필 내보내기</string>
     <string name="share_profiles">프로필 공유</string>
     <string name="profile_share_error">프로필을 공유하지 못했습니다.</string>
