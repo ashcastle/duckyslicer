@@ -50,7 +50,7 @@ jobs:
       RELEASE_VERSION_CODE: ${{ inputs.version_code }}
       SOURCE_COMMIT: ${{ inputs.source_commit }}
     steps:
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
         with:
           packages: platform-tools
 
@@ -177,7 +177,7 @@ jobs:
       UNSIGNED_SHA256: ${{ inputs.unsigned_sha256 }}
       DUCKYSLICER_RELEASE_VERSION: ${{ needs.validate.outputs.release_version }}
     steps:
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
         with:
           packages: platform-tools
 
@@ -272,7 +272,7 @@ jobs:
       RELEASE_NOTES_SHA256: ${{ needs.validate.outputs.release_notes_sha256 }}
       DUCKYSLICER_SIGNING_CERT_SHA256: ${{ needs.sign.outputs.signing_cert_sha256 }}
     steps:
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
         with:
           packages: platform-tools
 
