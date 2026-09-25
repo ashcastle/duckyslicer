@@ -1,0 +1,1042 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DuckySlicer Promo</title>
+<style>
+@font-face{font-family:P;src:url(fonts/Pretendard-Regular.woff2) format('woff2');font-weight:400}
+@font-face{font-family:P;src:url(fonts/Pretendard-Medium.woff2) format('woff2');font-weight:500}
+@font-face{font-family:P;src:url(fonts/Pretendard-SemiBold.woff2) format('woff2');font-weight:600}
+@font-face{font-family:P;src:url(fonts/Pretendard-Bold.woff2) format('woff2');font-weight:700}
+@font-face{font-family:P;src:url(fonts/Pretendard-ExtraBold.woff2) format('woff2');font-weight:800}
+@font-face{font-family:P;src:url(fonts/Pretendard-Black.woff2) format('woff2');font-weight:900}
+@font-face{font-family:R;src:url(fonts/roboto-latin-400-normal.woff2) format('woff2');font-weight:400}
+@font-face{font-family:R;src:url(fonts/roboto-latin-500-normal.woff2) format('woff2');font-weight:500}
+@font-face{font-family:M;src:url(fonts/jetbrains-mono-latin-500-normal.woff2) format('woff2');font-weight:500}
+@font-face{font-family:M;src:url(fonts/jetbrains-mono-latin-700-normal.woff2) format('woff2');font-weight:700}
+
+:root{--y:#F6C945;--ink:#171717;--cream:#FFF9E8}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#000;overflow:hidden}
+body{display:flex;align-items:center;justify-content:center}
+#stage{position:relative;width:1080px;height:1920px;overflow:hidden;background:#111;font-family:P,sans-serif;color:#fff;
+  -webkit-font-smoothing:antialiased;flex:none;transform-origin:center}
+#cam{position:absolute;inset:0}
+.L{position:absolute;left:0;top:0;width:1080px;height:1920px}
+.ab{position:absolute}
+.cnt{left:0;width:1080px;text-align:center}
+
+/* background */
+#bg{background:radial-gradient(1200px 900px at 50% 38%,#1d1c17 0%,#121212 55%,#0c0c0c 100%)}
+#glowA,#glowB{position:absolute;width:1100px;height:1100px;border-radius:50%;left:-10px;top:0;
+  background:radial-gradient(circle,rgba(246,201,69,.20) 0%,rgba(246,201,69,.06) 38%,rgba(246,201,69,0) 68%)}
+#glowB{background:radial-gradient(circle,rgba(80,150,255,.12) 0%,rgba(80,150,255,.03) 40%,rgba(80,150,255,0) 68%)}
+#iso{position:absolute;left:-400px;top:-400px;width:1880px;height:2720px;opacity:.07;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='69.28'%3E%3Cpath d='M0 34.64L60 0L120 34.64L60 69.28Z' fill='none' stroke='%23ffffff' stroke-width='1.2'/%3E%3C/svg%3E");
+  background-size:120px 69.28px}
+#grain{position:absolute;left:-256px;top:-256px;width:1592px;height:2432px;opacity:.07;mix-blend-mode:overlay;pointer-events:none}
+#vign{background:radial-gradient(ellipse 80% 70% at 50% 48%,rgba(0,0,0,0) 55%,rgba(0,0,0,.55) 100%);pointer-events:none}
+
+/* headings */
+.head{position:absolute;left:0;width:1080px;text-align:center}
+.head .lab{font-family:M;font-weight:700;font-size:28px;letter-spacing:6px;color:var(--y);margin-bottom:22px;text-transform:uppercase}
+.head .lab b{display:inline-block;width:46px;height:3px;background:var(--y);vertical-align:middle;margin:0 18px 6px;opacity:.7}
+.head .hl{font-weight:800;font-size:90px;line-height:1.16;letter-spacing:-2.5px;white-space:nowrap}
+.m{display:inline-block;overflow:hidden;vertical-align:top;padding:0 .03em .14em;margin-bottom:-.14em}
+.m .i{display:inline-block;will-change:transform}
+.y{color:var(--y)}
+
+/* scene 1 */
+#s1box,.s1b{position:absolute;left:0;top:640px;width:1080px;height:460px;text-align:center}
+.s1l1{font-weight:700;font-size:76px;color:#bdbdbd;letter-spacing:-1px;margin-top:40px;line-height:1.25}
+.s1l2{font-weight:900;font-size:172px;letter-spacing:-6px;line-height:1.15}
+.rv{display:inline-block}
+.noz{position:absolute;left:0;top:0;width:14px;border-radius:7px;background:#fff6cf;
+  box-shadow:0 0 18px 6px rgba(246,201,69,.9),0 0 60px 18px rgba(246,201,69,.45)}
+.laser{position:absolute;left:0;width:1080px;height:4px;background:var(--y);box-shadow:0 0 16px 4px rgba(246,201,69,.8);transform-origin:left center}
+#scan{position:absolute;left:0;width:1080px;height:6px;background:linear-gradient(90deg,rgba(246,201,69,0),#ffe89a 15%,#fff 50%,#ffe89a 85%,rgba(246,201,69,0));
+  box-shadow:0 0 40px 10px rgba(246,201,69,.55)}
+#slam{position:absolute;left:0;top:620px;width:1080px;text-align:center}
+#slam .a{font-weight:800;font-size:112px;letter-spacing:-3px;line-height:1.1}
+#slam .b{font-weight:900;font-size:236px;letter-spacing:-10px;line-height:1.05;color:var(--y);
+  text-shadow:0 20px 80px rgba(246,201,69,.35)}
+
+/* iris / logo */
+#iris{position:absolute;left:390px;top:810px;width:300px;height:300px;border-radius:50%;background:var(--y)}
+#duck{position:absolute;left:390px;top:810px;width:300px;height:300px;overflow:visible}
+#eye{transform-box:fill-box;transform-origin:center}
+.ring{position:absolute;left:390px;top:810px;width:300px;height:300px;border-radius:50%;border:4px solid var(--y)}
+#word{position:absolute;left:0;top:1010px;width:1080px;text-align:center;font-weight:900;font-size:136px;letter-spacing:-4px;line-height:1}
+#word span{display:inline-block}
+#tag{position:absolute;left:0;top:1190px;width:1080px;text-align:center;font-weight:600;font-size:52px;line-height:1.35;color:#d6d6d6;letter-spacing:-1px}
+#pills{position:absolute;left:0;top:1400px;width:1080px;display:flex;justify-content:center;gap:20px}
+.pill{font-weight:700;font-size:34px;padding:16px 30px;border-radius:999px;border:2px solid rgba(246,201,69,.55);color:var(--y);background:rgba(246,201,69,.08)}
+
+/* phone */
+.phone{position:absolute;left:-34px;top:-34px;width:1148px;height:1988px;border-radius:124px;
+  background:linear-gradient(145deg,#3b3b3b,#0d0d0d 30%,#050505 70%,#2a2a2a);padding:34px;
+  box-shadow:0 0 0 3px #4a4a4a inset,0 60px 140px rgba(0,0,0,.65),0 0 0 2px #000;transform-origin:574px 994px;will-change:transform}
+.phone:before{content:"";position:absolute;right:-9px;top:360px;width:9px;height:170px;border-radius:0 6px 6px 0;background:#2b2b2b}
+.phone:after{content:"";position:absolute;right:-9px;top:590px;width:9px;height:110px;border-radius:0 6px 6px 0;background:#2b2b2b}
+.screen{position:relative;width:1080px;height:1920px;border-radius:92px;overflow:hidden;background:#1a1a1a;isolation:isolate}
+.page{position:absolute;left:0;top:0;width:1080px;height:1920px}
+.page>img{display:block;width:1080px;height:1920px}
+.glare{position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,0) 32%);pointer-events:none;border-radius:92px}
+.touch{position:absolute;left:0;top:0;width:0;height:0;z-index:20}
+.touch .dot{position:absolute;left:-62px;top:-62px;width:124px;height:124px;border-radius:50%;
+  background:rgba(255,255,255,.30);border:6px solid rgba(255,255,255,.92);box-shadow:0 10px 40px rgba(0,0,0,.45)}
+.touch .rp{position:absolute;left:-62px;top:-62px;width:124px;height:124px;border-radius:50%;border:5px solid #fff}
+.stouch .dot{left:-40px;top:-40px;width:80px;height:80px;border-width:4px}
+.stouch .rp{left:-40px;top:-40px;width:80px;height:80px;border-width:4px}
+
+/* in-app overlays */
+#btnPress{position:absolute;left:74px;top:1458px;width:932px;height:105px;border-radius:53px;background:#000;overflow:hidden}
+#btnRip{position:absolute;left:74px;top:1458px;width:932px;height:105px;border-radius:53px;overflow:hidden}
+#btnRip i{position:absolute;width:300px;height:300px;margin:-150px;border-radius:50%;background:rgba(255,255,255,.55)}
+#fileGlow{position:absolute;left:552px;top:101px;width:490px;height:108px;border-radius:54px;border:6px solid var(--y);box-shadow:0 0 40px rgba(246,201,69,.8)}
+#slicing{position:absolute;inset:0;background:rgba(10,10,10,.62)}
+#slCard{position:absolute;left:90px;top:760px;width:900px;height:360px;border-radius:56px;background:#2a2a27;padding:56px 64px;font-family:R;
+  box-shadow:0 30px 80px rgba(0,0,0,.5)}
+#slCard .t{font-weight:500;font-size:56px;color:#fff;display:flex;justify-content:space-between}
+#slCard .t span{color:var(--y)}
+#slCard .bar{margin-top:44px;height:30px;border-radius:15px;background:#4f5448;overflow:hidden}
+#slCard .bar i{display:block;height:100%;width:0;background:var(--y);border-radius:15px}
+#slCard .s{margin-top:34px;font-size:40px;color:#bdbdb4}
+#rowRip{position:absolute;left:54px;top:652px;width:972px;height:128px;overflow:hidden}
+#rowRip i{position:absolute;width:260px;height:260px;margin:-130px;border-radius:50%;background:rgba(255,255,255,.16)}
+#slidOv{position:absolute;left:0;top:0;width:1080px;height:1920px}
+#slidOv .cover{position:absolute;background:#1d1b20}
+#slidOv .val{position:absolute;right:55px;top:1052px;font-family:R;font-size:44px;color:#e6e1e5;letter-spacing:.5px}
+#slidOv .act{position:absolute;left:58px;top:1159px;height:42px;border-radius:21px 8px 8px 21px;background:var(--y)}
+#slidOv .ina{position:absolute;top:1159px;height:42px;border-radius:8px 21px 21px 8px;background:#555950}
+#slidOv .ina i{position:absolute;right:16px;top:17px;width:9px;height:9px;border-radius:50%;background:var(--y)}
+#slidOv .thumb{position:absolute;top:1122px;width:11px;height:116px;border-radius:6px;background:var(--y)}
+#p05wrap{position:absolute;inset:0}
+
+/* chips */
+.chip{position:absolute;display:flex;align-items:center;gap:14px;padding:22px 34px 22px 26px;border-radius:30px;background:var(--y);color:var(--ink);
+  font-family:M;font-weight:700;font-size:46px;box-shadow:0 24px 60px rgba(0,0,0,.45)}
+.chip svg{width:46px;height:46px}
+
+/* scene 4 HUD */
+#cv4{position:absolute;left:0;top:0;width:1080px;height:1920px;
+  -webkit-mask-image:radial-gradient(ellipse 62% 44% at 50% 55%,#000 60%,transparent 100%);mask-image:radial-gradient(ellipse 62% 44% at 50% 55%,#000 60%,transparent 100%)}
+#lcount{position:absolute;left:80px;top:1400px;font-family:M;font-weight:700;color:#fff}
+#lcount .k{font-size:28px;letter-spacing:6px;color:#9a9a9a}
+#lcount .n{font-size:104px;letter-spacing:-2px;line-height:1.05}
+#lcount .n span{color:#6b6b6b}
+#lcount .z{font-size:34px;color:var(--y);margin-top:6px}
+#vsl{position:absolute;left:960px;top:640px;width:40px;height:720px}
+#vsl .tr{position:absolute;left:14px;top:0;width:12px;height:720px;border-radius:6px;background:#3a3b36}
+#vsl .fi{position:absolute;left:14px;bottom:0;width:12px;border-radius:6px;background:var(--y)}
+#vsl .hd{position:absolute;left:-10px;width:60px;height:14px;border-radius:7px;background:var(--y);box-shadow:0 0 20px rgba(246,201,69,.7)}
+#legend{position:absolute;left:80px;top:1610px;width:920px;display:flex;flex-wrap:wrap;gap:16px 16px}
+.lg{display:flex;align-items:center;gap:14px;font-weight:700;font-size:32px;padding:12px 24px 12px 18px;border-radius:999px;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1)}
+.lg i{width:40px;height:14px;border-radius:7px}
+
+/* scene 5 marquee */
+#marq{position:absolute;left:-400px;top:-200px;width:1880px;height:2320px;transform:rotate(-12deg)}
+.mrow{position:absolute;left:0;white-space:nowrap;font-weight:900;font-size:130px;letter-spacing:-3px;line-height:1;
+  color:transparent;-webkit-text-stroke:2px rgba(255,255,255,.10)}
+.mrow.f{color:rgba(246,201,69,.08);-webkit-text-stroke:0}
+#topShade{position:absolute;left:0;top:0;width:1080px;height:640px;background:linear-gradient(#111 0%,rgba(17,17,17,.92) 60%,rgba(17,17,17,0) 100%)}
+
+/* scene 6 cards */
+.card{position:absolute;width:450px;height:262px;border-radius:40px;background:#1f1f1e;border:2px solid rgba(255,255,255,.08);padding:34px 34px;overflow:hidden}
+.card .ic{width:92px;height:92px;border-radius:28px;background:rgba(246,201,69,.14);display:flex;align-items:center;justify-content:center}
+.card .ic svg{width:54px;height:54px;fill:var(--y)}
+.card .tt{margin-top:26px;font-weight:800;font-size:40px;letter-spacing:-1px;white-space:nowrap}
+.card .sb{margin-top:8px;font-weight:500;font-size:28px;color:#9d9d9d;white-space:nowrap}
+.card .actbg{position:absolute;inset:0;background:var(--y);opacity:0}
+.card .cc{position:relative}
+.sw{position:absolute;right:30px;top:40px;width:92px;height:52px;border-radius:26px;background:#3a3a3a}
+.sw i{position:absolute;left:6px;top:6px;width:40px;height:40px;border-radius:50%;background:#8d8d8d}
+#toast{position:absolute;left:0;top:1520px;width:1080px;display:flex;justify-content:center}
+#toast div{display:flex;align-items:center;gap:18px;background:#fff;color:#141414;font-weight:800;font-size:38px;padding:26px 44px;border-radius:999px;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+#toast svg{width:48px;height:48px;fill:#1f9d55}
+
+/* scene 7 */
+#ctaLogo,#ctaDuck{position:absolute;left:440px;top:230px;width:200px;height:200px}
+#ctaLogo{border-radius:50%;background:var(--y);box-shadow:0 0 90px rgba(246,201,69,.45)}
+#ctaWord{position:absolute;left:0;top:470px;width:1080px;text-align:center;font-weight:900;font-size:120px;letter-spacing:-4px;line-height:1}
+#ctaWord span{display:inline-block}
+#ctaTag{position:absolute;left:0;top:615px;width:1080px;text-align:center;font-weight:600;font-size:46px;color:#d0d0d0;letter-spacing:-1px}
+#ctaBtn{position:absolute;left:150px;top:720px;width:780px;height:128px;border-radius:64px;background:var(--y);color:var(--ink);
+  display:flex;align-items:center;justify-content:center;gap:20px;font-weight:800;font-size:46px;letter-spacing:-1px;overflow:hidden;
+  box-shadow:0 20px 70px rgba(246,201,69,.35)}
+#ctaBtn svg{width:52px;height:52px;fill:var(--ink)}
+#ctaBtn .sh{position:absolute;top:-40px;left:0;width:120px;height:220px;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.65),rgba(255,255,255,0));transform:skewX(-20deg)}
+#ctaBtn .dk{position:absolute;inset:0;background:#000}
+#ctaPulse{position:absolute;left:150px;top:720px;width:780px;height:128px;border-radius:64px;border:4px solid var(--y)}
+#badges{position:absolute;left:0;top:885px;width:1080px;display:flex;justify-content:center;gap:16px}
+.bd{font-family:M;font-weight:700;font-size:26px;padding:12px 22px;border-radius:14px;background:rgba(255,255,255,.07);color:#cfcfcf;border:1.5px solid rgba(255,255,255,.12)}
+#botShade{position:absolute;left:0;top:1560px;width:1080px;height:360px;background:linear-gradient(rgba(12,12,12,0),#0c0c0c 85%)}
+#fade{background:#000}
+#flash{background:#fff}
+#fx{position:absolute;left:0;top:0;width:1080px;height:1920px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="stage"><div id="cam">
+  <div id="bg" class="L"><div id="glowA"></div><div id="glowB"></div><div id="iso"></div></div>
+  <canvas id="bgc" class="L" width="1080" height="1920"></canvas>
+
+  <!-- S5 marquee (behind everything) -->
+  <div id="s5bg" class="L"><div id="marq"></div><div id="topShade"></div></div>
+
+  <!-- S4 canvas -->
+  <div id="s4" class="L"><canvas id="cv4" width="1080" height="1920"></canvas></div>
+
+  <!-- S1 -->
+  <div id="s1" class="L">
+    <div id="s1box" class="s1b">
+      <div class="s1l1"><span class="rv" id="l1">3D 프린팅 하려고</span></div>
+      <div class="s1l2"><span class="rv" id="l2">PC 켜세요?</span></div>
+      <div class="noz" id="noz"></div>
+    </div>
+    <div id="strips"></div>
+    <div id="lasers"></div>
+    <div id="scan"></div>
+    <div id="slam"><div class="a">이제</div><div class="b">폰으로.</div></div>
+  </div>
+
+  <!-- S2 -->
+  <div id="s2" class="L">
+    <div class="ring" id="rg0"></div><div class="ring" id="rg1"></div><div class="ring" id="rg2"></div>
+    <div id="iris"></div>
+    <svg id="duck" viewBox="3 3 42 42"><g id="duckG"><path fill="#202124" d="M15 23c0-7 4-12 10-12 5 0 8 3 8 7 4 0 7 2 8 5-3 2-7 3-11 2-1 6-5 10-11 10-5 0-9-3-10-8 2-2 4-3 6-4z"/><circle id="eye" cx="27" cy="17" r="2" fill="#FFF9E8"/></g></svg>
+    <div id="word"></div>
+    <div id="tag">안드로이드에서 바로 하는<br><b style="color:#fff;font-weight:800">오프라인 3D 슬라이서</b></div>
+    <div id="pills"><div class="pill">온디바이스</div><div class="pill">오프라인</div><div class="pill">오픈소스</div></div>
+  </div>
+
+  <!-- headings for S3–S6 -->
+  <div id="heads" class="L"></div>
+
+  <!-- S4 HUD -->
+  <div id="hud" class="L">
+    <div id="lcount"><div class="k">LAYER</div><div class="n" id="lcN">001<span> / 100</span></div><div class="z" id="lcZ">Z 0.25 mm</div></div>
+    <div id="vsl"><div class="tr"></div><div class="fi" id="vslF"></div><div class="hd" id="vslH"></div></div>
+    <div id="legend"></div>
+  </div>
+
+  <!-- S6 cards -->
+  <div id="s6" class="L"><div id="cards"></div><div id="toast"><div><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>G-code를 프린터로 보냈어요</div></div></div>
+
+  <!-- S7 -->
+  <div id="s7" class="L">
+    <div id="fan"></div>
+    <div id="botShade"></div>
+    <div id="ctaLogo"></div>
+    <svg id="ctaDuck" viewBox="3 3 42 42"><path fill="#202124" d="M15 23c0-7 4-12 10-12 5 0 8 3 8 7 4 0 7 2 8 5-3 2-7 3-11 2-1 6-5 10-11 10-5 0-9-3-10-8 2-2 4-3 6-4z"/><circle cx="27" cy="17" r="2" fill="#FFF9E8"/></svg>
+    <div id="ctaWord"></div>
+    <div id="ctaTag">폰 하나로 끝내는 3D 프린팅 준비</div>
+    <div id="ctaPulse"></div>
+    <div id="ctaBtn"><div class="dk" id="ctaDk"></div><svg viewBox="0 0 24 24" style="position:relative"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg><span style="position:relative">GitHub에서 무료 다운로드</span><div class="sh" id="ctaSh"></div></div>
+    <div id="badges"><div class="bd">ANDROID 8.0+</div><div class="bd">ARM64</div><div class="bd">OPEN SOURCE · AGPL-3.0</div></div>
+  </div>
+
+  <!-- main phone -->
+  <div id="phA" class="phone"><div class="screen">
+    <div class="page" id="p01"><img src="../google-play/graphics/phone-screenshots/01-prepare.png">
+      <div id="fileGlow"></div><div id="btnPress"></div><div id="btnRip"><i></i></div>
+      <div id="slicing"><div id="slCard"><div class="t">Slicing<span id="slPct">0%</span></div><div class="bar"><i id="slBar"></i></div><div class="s" id="slSub">Generating toolpaths · layer 1 / 100</div></div></div>
+    </div>
+    <div class="page" id="p04"><img src="../google-play/graphics/phone-screenshots/04-layer-preview.png"></div>
+    <div class="page" id="p05clip"><div id="p05wrap"><img src="../google-play/graphics/phone-screenshots/05-preview-controls.png" style="display:block;width:1080px;height:1920px"></div></div>
+    <div class="page" id="p02"><img src="../google-play/graphics/phone-screenshots/02-printer-profiles.png"><div id="rowRip"><i></i></div></div>
+    <div class="page" id="p03"><img src="../google-play/graphics/phone-screenshots/03-slicing-profiles.png">
+      <div id="slidOv">
+        <div class="cover" style="left:780px;top:1045px;width:280px;height:72px"></div>
+        <div class="cover" style="left:30px;top:1112px;width:1030px;height:136px"></div>
+        <div class="val" id="svVal">0.20 mm</div>
+        <div class="act" id="svAct"></div><div class="ina" id="svIna"><i></i></div><div class="thumb" id="svTh"></div>
+      </div>
+    </div>
+    <div class="touch" id="tA"><div class="rp"></div><div class="dot"></div></div>
+    <div class="glare"></div>
+  </div></div>
+
+  <!-- S3 chips (above phone) -->
+  <div id="chips" class="L"></div>
+
+  <canvas id="fx" width="1080" height="1920"></canvas>
+  <div class="touch stouch" id="tS"><div class="rp"></div><div class="dot"></div></div>
+  <div id="vign" class="L"></div>
+  <canvas id="grain" width="512" height="512"></canvas>
+  <div id="flash" class="L"></div>
+  <div id="fade" class="L"></div>
+</div></div>
+
+<script>
+'use strict';
+const DUR = 33, FPS = 60;
+const $ = id => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const P = (t, a, d) => clamp((t - a) / d);
+const E = {
+  lin: k => k,
+  outCubic: k => 1 - Math.pow(1 - k, 3),
+  inCubic: k => k * k * k,
+  inOut: k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2,
+  inOutSine: k => -(Math.cos(Math.PI * k) - 1) / 2,
+  outExpo: k => k >= 1 ? 1 : 1 - Math.pow(2, -10 * k),
+  inExpo: k => k <= 0 ? 0 : Math.pow(2, 10 * k - 10),
+  outQuint: k => 1 - Math.pow(1 - k, 5),
+  outBack: (k, s = 1.7) => 1 + (s + 1) * Math.pow(k - 1, 3) + s * Math.pow(k - 1, 2),
+  outElastic: k => k <= 0 ? 0 : k >= 1 ? 1 : Math.pow(2, -10 * k) * Math.sin((k * 10 - .75) * (2 * Math.PI / 3)) + 1,
+};
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+function set(el, o = {}) {
+  const { x = 0, y = 0, s = 1, sx = null, sy = null, r = 0, rx = 0, ry = 0, op = 1, blur = 0, p = 0 } = o;
+  if (op <= 0.002) { if (el._d !== 'none') { el.style.display = 'none'; el._d = 'none'; } return; }
+  if (el._d !== '') { el.style.display = ''; el._d = ''; }
+  let tr = `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0)`;
+  if (p) tr += ` perspective(${p}px)`;
+  if (rx) tr += ` rotateX(${rx.toFixed(3)}deg)`;
+  if (ry) tr += ` rotateY(${ry.toFixed(3)}deg)`;
+  if (r) tr += ` rotate(${r.toFixed(3)}deg)`;
+  tr += sx !== null ? ` scale(${sx.toFixed(4)},${sy.toFixed(4)})` : ` scale(${s.toFixed(4)})`;
+  el.style.transform = tr;
+  el.style.opacity = Math.min(1, op).toFixed(3);
+  const f = blur > .05 ? `blur(${blur.toFixed(2)}px)` : 'none';
+  if (el._f !== f) { el.style.filter = f; el._f = f; }
+}
+function show(el, on) { const d = on ? '' : 'none'; if (el._d !== d) { el.style.display = d; el._d = d; } }
+// piecewise keyframe track: keys [[t, v...]] -> interpolated array
+function track(t, keys, ease = E.inOut) {
+  if (t <= keys[0][0]) return keys[0].slice(1);
+  for (let i = 1; i < keys.length; i++) {
+    if (t <= keys[i][0]) {
+      const a = keys[i - 1], b = keys[i], k = ease((t - a[0]) / (b[0] - a[0]));
+      return a.slice(1).map((v, j) => lerp(v, b[j + 1], k));
+    }
+  }
+  return keys[keys.length - 1].slice(1);
+}
+
+/* ---------------- sound cue list (read by the audio renderer) ---------------- */
+const SFX = [];
+const sfx = (t, type, g = 1) => SFX.push({ t: +t.toFixed(3), type, g });
+
+/* ---------------- icons ---------------- */
+const IC = {
+  flight: 'M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z',
+  lock: 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z',
+  send: 'M2.01 21L23 12 2.01 3 2 10l15 2-15 2z',
+  palette: 'M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z',
+  grid: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z',
+  globe: 'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56zm2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2 0-.68.07-1.35.16-2h4.68c.09.65.16 1.32.16 2 0 .68-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z',
+  file: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z',
+};
+const svg = (d, cls = '') => `<svg viewBox="0 0 24 24" class="${cls}"><path d="${d}"/></svg>`;
+
+/* ---------------- build DOM ---------------- */
+function mkHead(label, lines, top) {
+  const w = document.createElement('div'); w.className = 'head'; w.style.top = top + 'px';
+  w.innerHTML = `<div class="lab"><b></b>${label}<b></b></div>` + lines.map(l => `<div class="hl">${l.split(' ').map(x => {
+    const y = x.startsWith('*'); return `<span class="m"><span class="i${y ? ' y' : ''}">${y ? x.slice(1) : x}</span></span>`;
+  }).join(' ')}</div>`).join('');
+  $('heads').appendChild(w);
+  return { el: w, lab: w.querySelector('.lab'), words: [...w.querySelectorAll('.m .i')] };
+}
+const H3 = mkHead('STEP 01 · PREPARE', ['모델 불러오고,', '탭 한 번에 *슬라이스'], 232);
+const H4 = mkHead('STEP 02 · PREVIEW', ['레이어 하나하나', '*직접 확인하세요'], 232);
+const H4b = mkHead('STEP 02 · PREVIEW', ['출력 시간·필라멘트', '*한눈에 확인'], 232);
+const H5 = mkHead('STEP 03 · PROFILES', ['*60개+ 브랜드 프로필', '세부 설정도 손끝으로'], 232);
+const H6 = mkHead('ALL-IN-ONE', ['PC 슬라이서급 기능을', '*주머니 속에'], 232);
+
+function headAnim(H, t, tin, tout) {
+  const on = t > tin - .01 && t < tout + .8;
+  show(H.el, on); if (!on) return;
+  const ki = E.outCubic(P(t, tin, .4)), ko = E.inCubic(P(t, tout, .35));
+  set(H.lab, { y: lerp(24, 0, ki) - ko * 20, op: ki * (1 - ko) });
+  H.words.forEach((w, i) => {
+    const a = E.outExpo(P(t, tin + .08 + i * .065, .7));
+    const b = E.inCubic(P(t, tout + i * .03, .32));
+    const y = (1 - a) * 115 - b * 115;
+    w.style.transform = `translate3d(0,${y.toFixed(2)}%,0) rotate(${((1 - a) * 6).toFixed(2)}deg)`;
+  });
+}
+
+// word marks
+function letters(el, a, b) {
+  el.innerHTML = [...a].map(c => `<span>${c}</span>`).join('') + [...b].map(c => `<span class="y">${c}</span>`).join('');
+  return [...el.children];
+}
+const W2 = letters($('word'), 'Ducky', 'Slicer');
+const W7 = letters($('ctaWord'), 'Ducky', 'Slicer');
+
+// S1 strips + lasers
+const NSTRIP = 9;
+const strips = [];
+for (let i = 0; i < NSTRIP; i++) {
+  const c = $('s1box').cloneNode(true); c.removeAttribute('id');
+  c.querySelectorAll('[id]').forEach(e => e.removeAttribute('id'));
+  c.querySelector('.noz').remove();
+  const a = (i / NSTRIP * 100).toFixed(3), b = (100 - (i + 1) / NSTRIP * 100).toFixed(3);
+  c.style.clipPath = `inset(${a}% -20% ${b}% -20%)`;
+  $('strips').appendChild(c); strips.push(c);
+}
+const lasers = [];
+for (let i = 1; i < NSTRIP; i++) {
+  const d = document.createElement('div'); d.className = 'laser'; d.style.top = (640 + 460 * i / NSTRIP - 2) + 'px';
+  $('lasers').appendChild(d); lasers.push(d);
+}
+
+// S3 chips
+const CHIPS = [['STL', 150, 760, -8], ['OBJ', 930, 930, 7], ['3MF', 175, 1230, 4]].map(([t, x, y, r], i) => {
+  const d = document.createElement('div'); d.className = 'chip'; d.innerHTML = svg(IC.file) + t;
+  d.style.left = (x - 105) + 'px'; d.style.top = (y - 50) + 'px'; $('chips').appendChild(d);
+  return { el: d, x, y, r, i };
+});
+
+// S4 legend
+const LEG = [['외벽', '#F6C945', 1], ['내벽', '#45C6F0', 1], ['베드 접착', '#FF9B45', 1], ['솔리드', '#A68CF4', 1], ['내부 채움', '#6F88F7', 5], ['윗면', '#F25BC6', 96]]
+  .map(([n, c, L]) => { const d = document.createElement('div'); d.className = 'lg'; d.innerHTML = `<i style="background:${c}"></i>${n}`; $('legend').appendChild(d); return { el: d, L }; });
+
+// S5 marquee
+const BRANDS = ['Afinia', 'Anker', 'Anycubic', 'Artillery', 'Bambu Lab', 'BIQU', 'Blocks', 'Comgrow', 'Creality', 'Cubicon', 'Dremel', 'Elegoo', 'Eryone', 'FLSun', 'Flashforge', 'FlyingBear', 'Geeetech', 'InfiMech', 'Kingroon', 'LONGER', 'Lulzbot', 'Mellow', 'Peopoly', 'Phrozen', 'Prusa', 'Qidi', 'Raise3D', 'RatRig', 'Snapmaker', 'Sovol', 'Tronxy', 'TwoTrees', 'UltiMaker', 'Voron', 'Voxelab', 'VzBot', 'Wanhao', 'Z-Bolt'];
+const MROWS = [];
+for (let i = 0; i < 9; i++) {
+  const d = document.createElement('div'); d.className = 'mrow' + (i % 3 === 1 ? ' f' : '');
+  const r = rng(40 + i); const list = BRANDS.slice().sort(() => r() - .5).join('  ·  ');
+  d.textContent = list + '  ·  ' + list; d.style.top = (i * 250) + 'px';
+  $('marq').appendChild(d); MROWS.push(d);
+}
+
+// S6 cards
+const CARDS = [
+  [IC.flight, '완전 오프라인', '인터넷 없이 기기에서'],
+  [IC.lock, '계정 필요 없음', '프로젝트는 내 폰에'],
+  [IC.send, 'OctoPrint · Klipper', '프린터로 바로 전송'],
+  [IC.palette, '서포트 · 컬러 페인팅', '손가락으로 칠하기'],
+  [IC.grid, '자동 배치 · 자르기', '멀티 오브젝트 지원'],
+  [IC.globe, '22개 언어 지원', '폰 · 태블릿 레이아웃'],
+].map(([ic, tt, sb], i) => {
+  const d = document.createElement('div'); d.className = 'card';
+  const x = i % 2 ? 570 : 60, y = 600 + Math.floor(i / 2) * 292;
+  d.style.left = x + 'px'; d.style.top = y + 'px';
+  d.innerHTML = `<div class="actbg"></div><div class="cc"><div class="ic">${svg(ic)}</div><div class="tt">${tt}</div><div class="sb">${sb}</div></div>` + (i === 0 ? '<div class="sw"><i></i></div>' : '');
+  $('cards').appendChild(d);
+  return { el: d, x, y, bg: d.querySelector('.actbg'), ic: d.querySelector('.ic'), svg: d.querySelector('.ic svg'), tt: d.querySelector('.tt'), sb: d.querySelector('.sb'), sw: d.querySelector('.sw') };
+});
+
+// S7 fanned phones
+function mkPhone(src) {
+  const d = document.createElement('div'); d.className = 'phone';
+  d.innerHTML = `<div class="screen"><div class="page"><img src="../google-play/graphics/phone-screenshots/${src}"></div><div class="glare"></div></div>`;
+  $('fan').appendChild(d); return d;
+}
+const FAN = [['01-prepare.png', 250, 1470, -13], ['05-preview-controls.png', 830, 1470, 13], ['04-layer-preview.png', 540, 1400, 0]]
+  .map(([s, x, y, r], i) => ({ el: mkPhone(s), x, y, r, i }));
+
+/* ---------------- grain ---------------- */
+(() => {
+  const g = $('grain'), c = g.getContext('2d'), im = c.createImageData(512, 512), r = rng(7);
+  for (let i = 0; i < im.data.length; i += 4) { const v = r() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+  c.putImageData(im, 0, 0);
+  g.style.width = '1592px'; g.style.height = '2432px';
+  g.style.backgroundImage = `url(${g.toDataURL()})`;
+  // use as tiled div background instead of stretched canvas
+  const div = document.createElement('div'); div.id = 'grainTile';
+  div.style.cssText = `position:absolute;left:-256px;top:-256px;width:1592px;height:2432px;opacity:.06;mix-blend-mode:overlay;pointer-events:none;background-image:url(${g.toDataURL()})`;
+  g.replaceWith(div);
+})();
+
+/* ---------------- touch indicator ---------------- */
+// keys: [[t,x,y],...]; presses: [t0, t1] pairs (finger down / up)
+function touch(el, t, keys, presses, scale = 1) {
+  const t0 = keys[0][0], t1 = keys[keys.length - 1][0];
+  const op = Math.min(E.outCubic(P(t, t0 - .18, .18)), 1 - P(t, t1, .2));
+  const dot = el.children[1], rp = el.children[0];
+  if (op <= 0) { show(el, false); return; }
+  show(el, true);
+  const [x, y] = track(t, keys);
+  let pr = 0, rip = -1;
+  for (const [a, b] of presses) {
+    pr = Math.max(pr, Math.min(E.outCubic(P(t, a - .06, .08)), 1 - E.outCubic(P(t, b, .12))));
+    if (t >= a && t < a + .6) rip = (t - a) / .6;
+  }
+  el.style.transform = `translate3d(${x}px,${y}px,0) scale(${scale})`;
+  set(dot, { s: lerp(1.15, 1, op) * (1 - pr * .2), op: op * lerp(.9, 1, pr) });
+  set(rp, { s: lerp(.8, 2.8, E.outCubic(clamp(rip))), op: rip >= 0 ? (1 - rip) * .8 * op : 0 });
+}
+
+/* ---------------- particles (stateless) ---------------- */
+const BURSTS = [];
+function burst(t, x, y, n, seed, o = {}) { BURSTS.push({ t, x, y, n, seed, sp: o.sp || 900, life: o.life || .9, g: o.g ?? 1400, cols: o.cols || ['#F6C945', '#fff', '#FFE58A'], size: o.size || 12, up: o.up || 0, spread: o.spread ?? Math.PI * 2, dir: o.dir ?? -Math.PI / 2 }); }
+function drawBursts(ctx, t) {
+  for (const b of BURSTS) {
+    const dt = t - b.t; if (dt < 0 || dt > b.life) continue;
+    const r = rng(b.seed);
+    for (let i = 0; i < b.n; i++) {
+      const ang = b.dir + (r() - .5) * b.spread, sp = b.sp * (.35 + r() * .8);
+      const vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp - b.up;
+      const drag = 1 - Math.exp(-3 * dt); // eased travel
+      const x = b.x + vx * drag / 3, y = b.y + vy * drag / 3 + .5 * b.g * dt * dt;
+      const life = b.life * (.6 + r() * .4), k = dt / life; if (k >= 1) { r(); r(); continue; }
+      const sz = b.size * (.5 + r()) * (1 - k * .7), col = b.cols[Math.floor(r() * b.cols.length)];
+      ctx.globalAlpha = 1 - k * k; ctx.fillStyle = col;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(dt * 8 + i); ctx.fillRect(-sz / 2, -sz / 2, sz, sz); ctx.restore();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ---------------- background particles ---------------- */
+const bgc = $('bgc').getContext('2d');
+const MOTES = Array.from({ length: 46 }, (_, i) => { const r = rng(900 + i); return { x: r() * 1080, y: r() * 1920, z: .3 + r() * .7, s: 6 + r() * 18, ph: r() * 6.28, rs: (r() - .5) * 1.2 }; });
+function drawBg(t, energy) {
+  bgc.clearRect(0, 0, 1080, 1920);
+  for (const m of MOTES) {
+    const y = ((m.y - t * 60 * m.z) % 2000 + 2000) % 2000 - 40;
+    const x = m.x + Math.sin(t * .6 + m.ph) * 30 * m.z;
+    bgc.save(); bgc.translate(x, y); bgc.rotate(t * m.rs + m.ph);
+    bgc.globalAlpha = (.05 + .12 * m.z) * energy;
+    bgc.strokeStyle = '#F6C945'; bgc.lineWidth = 2;
+    const s = m.s * m.z * 1.6;
+    bgc.strokeRect(-s / 2, -s / 2, s, s); bgc.strokeRect(-s / 2 + 4, -s / 2 - 5, s, s);
+    bgc.restore();
+  }
+  bgc.globalAlpha = 1;
+}
+
+/* ---------------- S4: layer-by-layer toolpath render ---------------- */
+const g4 = $('cv4').getContext('2d');
+const COL = { outer: '#F6C945', inner: '#45C6F0', infill: '#6F88F7', top: '#F25BC6', solid: '#A68CF4', skirt: '#FF9B45' };
+const NL = 100;
+const layerZ = n => .25 + (n - 1) * .2;
+function hatch(h, dir, sp) {
+  const dx = Math.SQRT1_2, dy = dir * Math.SQRT1_2, nx = -dy, ny = dx, R = h * Math.SQRT2, out = []; let k = 0;
+  for (let c = -R + sp / 2; c < R; c += sp) {
+    let s0 = -1e9, s1 = 1e9;
+    for (const [p, d] of [[c * nx, dx], [c * ny, dy]]) { const a = (-h - p) / d, b = (h - p) / d; s0 = Math.max(s0, Math.min(a, b)); s1 = Math.min(s1, Math.max(a, b)); }
+    if (s1 > s0 + .05) { let A = [c * nx + s0 * dx, c * ny + s0 * dy], B = [c * nx + s1 * dx, c * ny + s1 * dy]; if (k++ % 2) [A, B] = [B, A]; out.push([A, B]); }
+  }
+  return out;
+}
+const sq = h => [[-h, -h], [h, -h], [h, h], [-h, h], [-h, -h]];
+const LAYERS = [];
+for (let n = 1; n <= NL; n++) {
+  const Pth = [];
+  if (n === 1) Pth.push({ c: 'skirt', pts: sq(14) });
+  Pth.push({ c: 'outer', pts: sq(9.78) }, { c: 'inner', pts: sq(9.33) }, { c: 'inner', pts: sq(8.88) });
+  let type = 'infill', sp = 3.0;
+  if (n <= 4 || (n >= 91 && n <= 95)) { type = 'solid'; sp = .9; } else if (n >= 96) { type = 'top'; sp = .9; }
+  for (const [A, B] of hatch(8.62, n % 2 ? 1 : -1, sp)) Pth.push({ c: type, pts: [A, B] });
+  let tot = 0; for (const p of Pth) { p.len = 0; for (let i = 1; i < p.pts.length; i++) p.len += Math.hypot(p.pts[i][0] - p.pts[i - 1][0], p.pts[i][1] - p.pts[i - 1][1]); tot += p.len; }
+  Pth.total = tot; LAYERS.push(Pth);
+}
+const SKIRT = [LAYERS[0][0]]; SKIRT.total = LAYERS[0][0].len;
+let CAM = { a: 45, e: 35, S: 17, cx: 540, cy: 1090 };
+function prj(x, y, z) {
+  const a = CAM.a * Math.PI / 180, e = CAM.e * Math.PI / 180;
+  const xr = x * Math.cos(a) - y * Math.sin(a), yr = x * Math.sin(a) + y * Math.cos(a);
+  return [CAM.cx + CAM.S * xr, CAM.cy + CAM.S * (yr * Math.sin(e) - z * Math.cos(e))];
+}
+function poly(ctx, pts) { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); }
+function drawLayerPaths(ctx, L, z, f) {
+  const lim = L.total * f; let acc = 0, noz = null;
+  const lw = CAM.S * .42;
+  for (const pass of [0, 1]) {
+    acc = 0;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const p of L) {
+      if (acc >= lim) break;
+      ctx.beginPath();
+      let q = prj(p.pts[0][0], p.pts[0][1], z); ctx.moveTo(q[0], q[1]);
+      let a2 = acc;
+      for (let i = 1; i < p.pts.length; i++) {
+        const A = p.pts[i - 1], B = p.pts[i], l = Math.hypot(B[0] - A[0], B[1] - A[1]);
+        if (a2 + l <= lim) { q = prj(B[0], B[1], z); ctx.lineTo(q[0], q[1]); a2 += l; }
+        else { const k = (lim - a2) / l; q = prj(lerp(A[0], B[0], k), lerp(A[1], B[1], k), z); ctx.lineTo(q[0], q[1]); a2 = lim; noz = q; break; }
+      }
+      acc += p.len; if (acc >= lim && !noz) noz = q;
+      if (pass === 0) { ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = lw + 3; }
+      else { ctx.strokeStyle = COL[p.c]; ctx.lineWidth = lw; }
+      ctx.stroke();
+    }
+  }
+  return noz;
+}
+const shade = (hex, b) => { const n = parseInt(hex.slice(1), 16); return `rgb(${Math.min(255, ((n >> 16) & 255) * b) | 0},${Math.min(255, ((n >> 8) & 255) * b) | 0},${Math.min(255, (n & 255) * b) | 0})`; };
+function drawPrint(t, prog, nozOp) {
+  const ctx = g4; ctx.clearRect(0, 0, 1080, 1920);
+  // bed
+  const B = 46;
+  const bed = [prj(-B, -B, 0), prj(B, -B, 0), prj(B, B, 0), prj(-B, B, 0)];
+  const gr = ctx.createLinearGradient(0, bed[0][1] - 600, 0, bed[0][1] + 800);
+  gr.addColorStop(0, '#30332d'); gr.addColorStop(1, '#1f201d');
+  poly(ctx, bed); ctx.fillStyle = gr; ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1.5;
+  for (let g = -B + 10; g < B; g += 10) {
+    let a = prj(g, -B, 0), b = prj(g, B, 0); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    a = prj(-B, g, 0); b = prj(B, g, 0); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  }
+  poly(ctx, bed); ctx.strokeStyle = '#F6C945'; ctx.lineWidth = 4; ctx.stroke();
+  // soft shadow
+  const c0 = prj(0, 0, 0);
+  const sh = ctx.createRadialGradient(c0[0], c0[1], 10, c0[0], c0[1], CAM.S * 22);
+  sh.addColorStop(0, 'rgba(0,0,0,.45)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = sh; ctx.beginPath(); ctx.ellipse(c0[0], c0[1], CAM.S * 22, CAM.S * 22 * Math.sin(CAM.e * Math.PI / 180), 0, 0, Math.PI * 2); ctx.fill();
+
+  const lf = 1 + prog * (NL - 1) + (prog >= 1 ? 1 : 0); // float layer index
+  const N = Math.min(NL + 1, Math.floor(lf)), frac = lf - Math.floor(lf);
+  const done = N - 1;
+  // skirt stays on the bed after layer 1
+  if (done >= 1) drawLayerPaths(ctx, SKIRT, .25, 1);
+  if (done >= 1) {
+    const zt = layerZ(done), h = 10.0;
+    const faces = [[[h, -h], [h, h], [1, 0]], [[h, h], [-h, h], [0, 1]], [[-h, h], [-h, -h], [-1, 0]], [[-h, -h], [h, -h], [0, -1]]];
+    const a = CAM.a * Math.PI / 180;
+    for (const [A, Bp, nrm] of faces) {
+      const nrx = nrm[0] * Math.cos(a) - nrm[1] * Math.sin(a), nry = nrm[0] * Math.sin(a) + nrm[1] * Math.cos(a);
+      if (nry <= .001) continue;
+      const b = .80 + .16 * nrx;
+      const q = [prj(A[0], A[1], 0), prj(Bp[0], Bp[1], 0), prj(Bp[0], Bp[1], zt), prj(A[0], A[1], zt)];
+      poly(ctx, q); ctx.fillStyle = shade('#F6C945', b); ctx.fill();
+      // purple/solid bottom band hint + layer lines
+      ctx.lineWidth = 1.2;
+      for (let i = 1; i <= done; i++) {
+        const z = layerZ(i); const p1 = prj(A[0], A[1], z), p2 = prj(Bp[0], Bp[1], z);
+        ctx.strokeStyle = i % 2 ? 'rgba(80,50,0,.28)' : 'rgba(255,250,220,.10)';
+        ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.stroke();
+      }
+      // edge highlight
+      ctx.strokeStyle = 'rgba(255,240,190,.5)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(q[3][0], q[3][1]); ctx.lineTo(q[2][0], q[2][1]); ctx.stroke();
+    }
+    // top of finished stack: dark interior + that layer's full toolpaths
+    poly(ctx, [prj(-h, -h, zt), prj(h, -h, zt), prj(h, h, zt), prj(-h, h, zt)]); ctx.fillStyle = '#1b1c19'; ctx.fill();
+    const Ld = LAYERS[done - 1];
+    drawLayerPaths(ctx, Ld, zt, 1);
+  }
+  let noz = null;
+  if (N <= NL) {
+    const L = LAYERS[N - 1];
+    noz = drawLayerPaths(ctx, L, layerZ(N), frac);
+  }
+  // hotend
+  if (noz && nozOp > 0) {
+    const [x, y] = noz; ctx.globalAlpha = nozOp;
+    const gl = ctx.createRadialGradient(x, y, 0, x, y, 60); gl.addColorStop(0, 'rgba(255,245,200,.95)'); gl.addColorStop(.25, 'rgba(246,201,69,.5)'); gl.addColorStop(1, 'rgba(246,201,69,0)');
+    ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(x, y, 60, 0, 7); ctx.fill();
+    const ng = ctx.createLinearGradient(x - 22, 0, x + 22, 0); ng.addColorStop(0, '#8a6a22'); ng.addColorStop(.5, '#f0cf7a'); ng.addColorStop(1, '#7a5c1c');
+    ctx.fillStyle = ng; ctx.beginPath(); ctx.moveTo(x - 6, y - 4); ctx.lineTo(x + 6, y - 4); ctx.lineTo(x + 22, y - 40); ctx.lineTo(x - 22, y - 40); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#2b2c2a'; ctx.fillRect(x - 46, y - 110, 92, 70);
+    ctx.fillStyle = '#F6C945'; ctx.fillRect(x - 46, y - 70, 92, 6);
+    ctx.fillStyle = '#3a3b38'; for (let i = 0; i < 5; i++) ctx.fillRect(x - 40, y - 190 + i * 16, 80, 9);
+    ctx.fillStyle = '#1a1a19'; ctx.fillRect(x - 10, y - 260, 20, 80);
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ---------------- phone helper ---------------- */
+// place a .phone so its centre sits at (cx,cy) with scale s
+function phone(el, { cx = 540, cy = 1120, s = .56, rx = 0, ry = 0, r = 0, op = 1, blur = 0 }) {
+  set(el, { x: cx - 540, y: cy - 960, s, rx, ry, r, op, blur, p: (rx || ry) ? 2600 / s : 0 });
+}
+const PA = { cx: 540, cy: 1150, s: .6 };
+const scr = (sx, sy, ph = PA) => [ph.cx + (sx - 540) * ph.s, ph.cy + (sy - 960) * ph.s];
+
+/* ---------------- timeline constants ---------------- */
+const T = {
+  s1: 0, slice: 1.85, slam: 2.5, iris: 3.0,
+  s2: 3.5, s2out: 6.6,
+  s3: 7.0, tapSlice: 10.0, sliceEnd: 11.05, zoom: 11.55,
+  s4: 12.0, scrub0: 12.4, scrub1: 15.2, match: 15.45, tapSheet: 16.5, flip: 17.3,
+  s5: 17.5, tapRow: 18.6, push: 19.35, drag0: 20.05, drag1: 20.95, s5out: 22.1,
+  s6: 22.5, tapOff: 24.55, tapSend: 25.45, s6out: 27.05,
+  s7: 27.5, tapCta: 30.0, end: 33.0,
+};
+const scrubKeys = [[T.scrub0, 1], [12.9, 0], [13.1, 0], [14.2, .47], [14.45, .5], [T.scrub1, 1]];
+const scrubAt = t => track(t, scrubKeys, E.inOutSine)[0];
+
+/* ---------------- sound cues ---------------- */
+function buildSfx(nozGeom) {
+  sfx(.04, 'zip', .7); sfx(.5, 'zip', .8);
+  sfx(1.35, 'riser', 1); sfx(T.slice, 'slice', 1);
+  sfx(T.slam, 'impact', 1.1);
+  sfx(T.iris, 'whoosh', .9); sfx(T.s2, 'impact', .8); sfx(3.78, 'pop', .9);
+  for (let i = 0; i < 11; i++) sfx(4.35 + i * .035, 'tick', .35);
+  sfx(5.6, 'blink', .5);
+  sfx(T.s2out, 'whoosh', .7);
+  sfx(T.s3 + .05, 'swoosh', .8);
+  [7.7, 7.85, 8.0].forEach(t => sfx(t, 'pop', .8));
+  sfx(8.9, 'suck', .8); sfx(9.28, 'ding', .45);
+  sfx(T.tapSlice, 'tap', 1);
+  sfx(10.15, 'process', .8); sfx(T.sliceEnd, 'ding', .9);
+  sfx(T.zoom, 'whoosh', 1);
+  sfx(T.scrub0 - .05, 'tap', .7);
+  let last = -1; for (let t = T.scrub0; t < T.scrub1; t += 1 / 120) { const L = Math.floor(scrubAt(t) * 99 / 4); if (L !== last) { if (last >= 0) sfx(t, 'tick', .22); last = L; } }
+  sfx(T.scrub1 + .05, 'ding', .7);
+  sfx(T.match, 'whoosh', .8);
+  sfx(T.tapSheet, 'tap', .9); sfx(T.tapSheet + .05, 'swipe', .6);
+  sfx(T.flip, 'whoosh', .8);
+  sfx(T.tapRow, 'tap', .9);
+  sfx(T.push, 'swipe', .7);
+  sfx(T.drag0, 'tap', .7);
+  let lv = -1; for (let t = T.drag0; t < T.drag1 + .3; t += 1 / 120) { const v = Math.round(sliderVal(t) * 100); if (v !== lv) { if (lv >= 0) sfx(t, 'tick', .3); lv = v; } }
+  sfx(T.s5out, 'whoosh', .8);
+  for (let i = 0; i < 6; i++) sfx(T.s6 + .3 + i * .11, 'pop', .55);
+  sfx(T.tapOff, 'tap', .9); sfx(T.tapOff + .05, 'toggle', .8); sfx(T.tapOff + .1, 'jet', .6);
+  sfx(T.tapSend, 'tap', .9); sfx(T.tapSend + .08, 'send', .8); sfx(25.72, 'ding', .8);
+  sfx(T.s6out, 'whoosh', .8);
+  sfx(T.s7 + .1, 'swoosh', .9); sfx(27.75, 'pop', 1);
+  for (let i = 0; i < 11; i++) sfx(27.95 + i * .03, 'tick', .3);
+  sfx(T.tapCta, 'tap', 1); sfx(T.tapCta + .02, 'sparkle', 1);
+  sfx(31.5, 'impact', .9);
+}
+
+/* ---------------- slider value (S5) ---------------- */
+const SL = { x0: 58, x1: 1020 };
+const thumbAt = t => track(t, [[T.drag0, 693], [T.drag1, 376], [T.drag1 + .25, 376]], E.inOut)[0];
+const sliderVal = t => Math.round((.04 + (thumbAt(t) - SL.x0) / (SL.x1 - SL.x0) * .2424) * 100) / 100;
+
+/* ---------------- measure + precompute ---------------- */
+let NOZ = null;
+function measure() {
+  const g = el => ({ x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight });
+  NOZ = { l1: g($('l1')), l2: g($('l2')) };
+  // sparks trailing the S1 "nozzle"
+  const tr = [[.04, .5, NOZ.l1], [.5, .6, NOZ.l2]];
+  let sd = 1;
+  for (const [a, d, r] of tr) for (let t = a; t < a + d; t += .035) {
+    const k = E.inOut(P(t, a, d)); burst(t, r.x + r.w * k, 640 + r.y + r.h * .55, 3, sd++, { sp: 500, life: .5, g: 1800, size: 7, up: 120 });
+  }
+  burst(T.slam + .02, 540, 900, 60, 777, { sp: 2400, life: 1.1, g: 900, size: 16 });
+  burst(3.85, 540, 760, 40, 778, { sp: 1500, life: 1, g: 600, size: 12 });
+  burst(T.sliceEnd, ...scr(540, 845), 28, 779, { sp: 900, life: .8, g: 700, size: 9 });
+  burst(T.tapOff + .08, 285, 730, 26, 780, { sp: 1100, life: .8, g: 900, size: 10 });
+  burst(25.72, 540, 1580, 30, 781, { sp: 1200, life: .9, g: 900, size: 10, cols: ['#fff', '#6de0a0', '#F6C945'] });
+  burst(T.tapCta + .02, 540, 784, 90, 782, { sp: 2600, life: 1.4, g: 1100, size: 16 });
+  burst(31.5, 540, 330, 50, 783, { sp: 1700, life: 1.2, g: 700, size: 12 });
+  buildSfx();
+}
+
+/* ---------------- render ---------------- */
+const fx = $('fx').getContext('2d');
+function render(t) {
+  const cam = $('cam');
+  // global shake
+  let sh = 0; const shr = rng(Math.floor(t * 60) + 11);
+  sh += Math.exp(-(t - T.slam) * 9) * (t >= T.slam ? 34 : 0);
+  sh += Math.exp(-(t - T.s2) * 10) * (t >= T.s2 ? 16 : 0);
+  sh += Math.exp(-(t - T.tapCta) * 10) * (t >= T.tapCta ? 10 : 0);
+  cam.style.transform = sh > .3 ? `translate(${((shr() - .5) * sh).toFixed(1)}px,${((shr() - .5) * sh).toFixed(1)}px) rotate(${((shr() - .5) * sh * .02).toFixed(3)}deg)` : '';
+
+  // background
+  const energy = t < T.s2 ? .3 : 1;
+  set($('glowA'), { x: Math.sin(t * .35) * 180, y: 200 + Math.cos(t * .27) * 260 + (t > T.s7 ? -120 : 0), s: 1 + .1 * Math.sin(t * .5), op: t < T.slam ? .35 : 1 });
+  set($('glowB'), { x: -Math.sin(t * .3) * 200, y: 1000 + Math.sin(t * .22) * 200, s: 1.1 });
+  set($('iso'), { x: (t * 12) % 120, y: (t * 6.93) % 69.28, op: t < T.s2 ? .035 : .055 });
+  drawBg(t, energy);
+  const gt = $('grainTile'); const gr = rng(Math.floor(t * 30) + 3); gt.style.transform = `translate(${(gr() * 256) | 0}px,${(gr() * 256) | 0}px)`;
+
+  /* ===== S1 ===== */
+  const s1on = t < T.iris + .5;
+  show($('s1'), s1on);
+  if (s1on) {
+    const k1 = E.inOut(P(t, .04, .5)), k2 = E.inOut(P(t, .5, .6));
+    $('l1').style.clipPath = `inset(-10% ${(100 - k1 * 100).toFixed(2)}% -10% 0)`;
+    $('l2').style.clipPath = `inset(-10% ${(100 - k2 * 100).toFixed(2)}% -10% -2%)`;
+    const n = $('noz'); let nz = null;
+    if (t < .56) nz = [NOZ.l1, k1]; else if (t < 1.2) nz = [NOZ.l2, k2];
+    if (nz) { const [r, k] = nz; n.style.height = (r.h * .8) + 'px'; set(n, { x: r.x + r.w * k - 7, y: r.y + r.h * .1, op: Math.min(1, (1 - P(t, 1.05, .15))) }); } else show(n, false);
+    const pre = t < T.slice;
+    const drift = 1 + t * .012;
+    set($('s1box'), { s: drift, op: pre ? 1 : 0 });
+    const kS = P(t, T.slice + .12, .5);
+    strips.forEach((c, i) => {
+      const dir = i % 2 ? 1 : -1, amp = 260 + (i * 97) % 380;
+      set(c, { x: dir * amp * E.inExpo(kS) * 3, y: (i - 4) * 14 * E.outCubic(P(t, T.slice, .2)), s: drift, op: t < T.slice ? 0 : 1 - E.inCubic(kS) });
+    });
+    // scan plane before the cut
+    const ks = P(t, 1.35, .5);
+    set($('scan'), { y: lerp(610, 1120, E.inOut(ks)), op: ks > 0 && ks < 1 ? 1 : 0 });
+    lasers.forEach((l, i) => {
+      const a = P(t, T.slice + i * .012, .12), b = P(t, T.slice + .18, .25);
+      set(l, { sx: E.outExpo(a), sy: 1, op: a > 0 ? 1 - b : 0 });
+    });
+    const kl = P(t, T.slam, .28);
+    const slOut = P(t, T.iris + .15, .3);
+    set($('slam'), { s: lerp(2.6, 1, E.outExpo(kl)) * (1 + .03 * P(t, T.slam + .3, 1)), op: t >= T.slam ? E.outCubic(P(t, T.slam, .08)) * (1 - slOut) : 0, blur: (1 - E.outExpo(kl)) * 18 });
+  }
+
+  /* ===== S2 (iris + logo) ===== */
+  const s2on = t >= T.iris && t < T.s3 + .2;
+  show($('s2'), s2on);
+  if (s2on) {
+    let is, iy;
+    if (t < T.s2) { is = lerp(0, 7.6, E.inExpo(P(t, T.iris, .45))); iy = 0; }
+    else { const k = P(t, T.s2, .8); is = lerp(7.6, 1, E.outBack(k, 1.2)); iy = lerp(0, -200, E.outQuint(k)); }
+    const out = E.inCubic(P(t, T.s2out, .4));
+    set($('iris'), { y: iy - out * 60, s: is * (1 + out * .4), op: 1 - out });
+    const kd = P(t, 3.66, .55);
+    const blink = t > 5.55 && t < 5.75 ? 1 - Math.sin(P(t, 5.55, .2) * Math.PI) * .9 : 1;
+    $('eye').style.transform = `scale(1,${blink.toFixed(3)})`;
+    set($('duck'), { y: -200 - out * 60 + (1 - E.outBack(kd, 2.2)) * 40, s: (E.outBack(kd, 2.4)) * (1 + out * .4), r: (1 - E.outCubic(kd)) * -35, op: kd > 0 ? 1 - out : 0 });
+    ['rg0', 'rg1', 'rg2'].forEach((id, i) => {
+      const ph = ((t - 3.95 - i * .45) / 1.35); const k = ph - Math.floor(ph);
+      set($(id), { y: -200, s: 1 + k * 1.6, op: t > 3.95 + i * .45 ? (1 - k) * .45 * (1 - out) : 0 });
+    });
+    W2.forEach((c, i) => {
+      const k = E.outExpo(P(t, 4.3 + i * .035, .7));
+      set(c, { y: (1 - k) * 90 - out * 40, r: (1 - k) * 12, op: k * (1 - out), blur: (1 - k) * 14 + out * 10 });
+    });
+    const kt = E.outCubic(P(t, 4.85, .6));
+    set($('tag'), { y: (1 - kt) * 40 - out * 40, op: kt * (1 - out), blur: out * 10 });
+    [...$('pills').children].forEach((p, i) => {
+      const k = E.outBack(P(t, 5.25 + i * .1, .5));
+      set(p, { y: (1 - clamp(k)) * 50, s: .7 + .3 * k, op: clamp(P(t, 5.25 + i * .1, .2)) * (1 - out) });
+    });
+  }
+  // white flash on the slam
+  set($('flash'), { op: t >= T.slam ? Math.exp(-(t - T.slam) * 12) * .35 : 0 });
+
+  /* ===== phone A ===== */
+  const phA = $('phA');
+  let pa = null; // phone state
+  const p01 = $('p01'), p04 = $('p04'), p05 = $('p05clip'), p02 = $('p02'), p03 = $('p03');
+  if (t >= T.s3 && t < T.zoom + .6) {
+    const k = E.outExpo(P(t, T.s3, .95));
+    const kz = E.inCubic(P(t, T.zoom, .55));
+    const az = scr(540, 845);
+    // zoom into the cube on screen
+    const s = lerp(PA.s, 3.2, kz);
+    const cx = lerp(PA.cx, PA.cx - (az[0] - PA.cx) * (s / PA.s - 1), 1), cy = PA.cy - (az[1] - PA.cy) * (s / PA.s - 1);
+    pa = { cx, cy: cy + (1 - k) * 1100, s, rx: (1 - k) * 38, ry: Math.sin(t * .9) * 3 * (1 - kz), r: (1 - k) * -6, op: 1 - E.inCubic(P(t, T.zoom + .25, .3)), blur: kz * 10 };
+    show(p01, t < T.sliceEnd + .25); show(p04, t >= T.sliceEnd); show(p05, false); show(p02, false); show(p03, false);
+    set(p04, { op: E.outCubic(P(t, T.sliceEnd, .22)) });
+  } else if (t >= T.match && t < T.s5out + .5) {
+    const kin = E.outCubic(P(t, T.match + .35, .35));
+    const kf1 = E.inCubic(P(t, T.flip, .2)), kf2 = E.outBack(P(t, T.flip + .2, .45), 1.3);
+    const ry = t < T.flip + .2 ? kf1 * 90 : (1 - kf2) * -90;
+    const kout = E.inCubic(P(t, T.s5out, .4));
+    pa = { cx: PA.cx, cy: PA.cy + kout * 1300, s: PA.s, ry, rx: kout * 25, op: kin, r: 0 };
+    const pre = t < T.flip + .2;
+    show(p01, false); show(p05, pre); set(p04, { op: pre ? 1 : 0 });
+    // sheet expands after the chevron tap
+    const ks = E.outExpo(P(t, T.tapSheet + .05, .5));
+    const off = (1 - ks) * 1115;
+    $('p05clip').style.clipPath = ks >= 1 ? 'none' : `inset(${(310 + off).toFixed(1)}px 0 275px 0)`;
+    set($('p05wrap'), { y: off, op: ks > 0 ? 1 : 0 });
+    // push 02 -> 03
+    const kp = E.inOut(P(t, T.push, .45));
+    set(p02, { x: -kp * 1080, op: !pre && t < T.push + .45 ? 1 : 0 });
+    set(p03, { x: (1 - kp) * 1080, op: !pre && t >= T.push ? 1 : 0 });
+  } else pa = null;
+  if (pa) phone(phA, pa); else show(phA, false);
+
+  // in-app overlays
+  if (pa) {
+    // file name glow (import)
+    const kg = P(t, 9.25, .7);
+    set($('fileGlow'), { op: kg > 0 && kg < 1 ? Math.sin(kg * Math.PI) : 0, s: 1 + .03 * Math.sin(kg * Math.PI) });
+    // Slice button press + ripple
+    const pr = Math.min(E.outCubic(P(t, T.tapSlice - .05, .08)), 1 - P(t, T.tapSlice + .15, .15));
+    set($('btnPress'), { op: pr * .18 });
+    const kr = P(t, T.tapSlice, .45);
+    set($('btnRip'), { op: kr > 0 && kr < 1 ? 1 - kr : 0 });
+    set($('btnRip').firstChild, { x: 466, y: 52, s: .2 + kr * 3.5 });
+    // slicing progress overlay
+    const ko = E.outCubic(P(t, 10.12, .2)) * (1 - E.inCubic(P(t, T.sliceEnd, .2)));
+    set($('slicing'), { op: ko });
+    set($('slCard'), { y: (1 - E.outBack(P(t, 10.12, .35))) * 120, s: .9 + .1 * E.outBack(P(t, 10.12, .35)) });
+    const sp = E.inOutSine(P(t, 10.2, .8));
+    $('slBar').style.width = (sp * 100).toFixed(2) + '%';
+    $('slPct').textContent = Math.round(sp * 100) + '%';
+    const stage = sp < .2 ? 'Slicing mesh' : sp < .75 ? 'Generating toolpaths' : 'Writing G-code';
+    $('slSub').textContent = `${stage} · layer ${Math.max(1, Math.round(sp * 100))} / 100`;
+    // row ripple on profile list
+    const kr2 = P(t, T.tapRow, .5);
+    set($('rowRip'), { op: kr2 > 0 && kr2 < 1 ? 1 : 0 });
+    set($('rowRip').firstChild, { x: 206, y: 64, s: .2 + kr2 * 5, op: 1 - kr2 });
+    // layer-height slider
+    const th = thumbAt(t);
+    $('svAct').style.width = (th - 16 - SL.x0) + 'px';
+    $('svIna').style.left = (th + 21) + 'px'; $('svIna').style.width = (SL.x1 - th - 21) + 'px';
+    $('svTh').style.left = (th - 5.5) + 'px';
+    const pressing = t > T.drag0 - .05 && t < T.drag1 + .3;
+    $('svTh').style.width = pressing ? '8px' : '11px';
+    $('svVal').textContent = sliderVal(t).toFixed(2) + ' mm';
+  }
+  // phone A touch
+  const tA = $('tA');
+  if (t > 9.3 && t < 11) touch(tA, t, [[9.4, 760, 1880], [9.85, 560, 1515], [10.45, 600, 1560]], [[T.tapSlice, T.tapSlice + .15]]);
+  else if (t > 16.1 && t < 17.3) touch(tA, t, [[16.2, 760, 1800], [16.42, 975, 1520], [16.8, 940, 1180], [17.05, 900, 1200]], [[T.tapSheet, T.tapSheet + .1]]);
+  else if (t > 18.1 && t < 19.2) touch(tA, t, [[18.2, 600, 1100], [18.5, 330, 716], [18.95, 360, 760]], [[T.tapRow, T.tapRow + .12]]);
+  else if (t > 19.6 && t < 21.7) touch(tA, t, [[19.7, 820, 1500], [T.drag0 - .1, 693, 1180], [T.drag0 + .05, 693, 1180], [T.drag1, 376, 1180], [T.drag1 + .25, 376, 1180], [21.5, 420, 1300]], [[T.drag0, T.drag1 + .25]]);
+  else show(tA, false);
+
+  /* ===== S3 chips ===== */
+  const chOn = t > 7.5 && t < 9.4;
+  show($('chips'), chOn);
+  if (chOn) CHIPS.forEach(c => {
+    const k = E.outBack(P(t, 7.7 + c.i * .15, .5), 2);
+    const ks = E.inCubic(P(t, 8.9 + c.i * .05, .35));
+    const tx = PA.cx, ty = PA.cy - 250;
+    const bob = Math.sin(t * 2.4 + c.i * 2) * 10;
+    set(c.el, { x: (tx - c.x) * ks, y: bob * (1 - ks) + (ty - c.y) * ks, s: clamp(k, 0, 1.3) * (1 - ks * .8), r: c.r * (1 - ks) + ks * 40, op: P(t, 7.7 + c.i * .15, .1) * (1 - P(t, 9.1 + c.i * .05, .15)) });
+  });
+
+  /* ===== headings ===== */
+  headAnim(H3, t, T.s3 + .1, T.zoom);
+  headAnim(H4, t, T.s4 + .05, 16.05);
+  headAnim(H4b, t, 16.3, T.flip);
+  headAnim(H5, t, T.s5 + .05, T.s5out);
+  headAnim(H6, t, T.s6 + .05, T.s6out);
+
+  /* ===== S4 canvas ===== */
+  const s4on = t >= T.zoom + .2 && t < 16.35;
+  show($('s4'), s4on);
+  if (s4on) {
+    const ka = E.inOut(P(t, T.s4 - .2, T.scrub1 - T.s4 + .2));
+    const kc = E.outCubic(P(t, T.s4 - .3, 1.5));
+    CAM.a = lerp(8, 45, ka); CAM.S = lerp(24, 21, kc); CAM.cx = 540;
+    CAM.cy = lerp(scr(540, 845)[1] + 10 * Math.cos(35 * Math.PI / 180) * 24, 1110, kc);
+    const prog = scrubAt(t);
+    drawPrint(t, prog, P(t, 13.1, .15) * (1 - P(t, T.scrub1, .2)));
+    // match cut into the phone
+    const km = E.inOut(P(t, T.match, .65));
+    const anc = prj(0, 0, 10);
+    const tgt = scr(540, 845);
+    const ks = lerp(1, 150 * PA.s / (20 * Math.SQRT2 * CAM.S), km);
+    const kin = E.outCubic(P(t, T.zoom + .2, .35));
+    $('cv4').style.transformOrigin = `${anc[0]}px ${anc[1]}px`;
+    set($('cv4'), { x: (tgt[0] - anc[0]) * km, y: (tgt[1] - anc[1]) * km, s: ks * lerp(1.2, 1, kin), op: kin * (1 - P(t, 15.95, .3)), blur: (1 - kin) * 8 });
+  }
+  // HUD
+  const hudOn = t > T.s4 && t < 16;
+  show($('hud'), hudOn);
+  if (hudOn) {
+    const ki = E.outCubic(P(t, T.s4 + .2, .45)), ko = E.inCubic(P(t, T.match - .1, .35));
+    const prog = scrubAt(t);
+    const lf = 1 + prog * 99, N = Math.floor(lf);
+    $('lcN').innerHTML = String(N).padStart(3, '0') + '<span> / 100</span>';
+    $('lcZ').textContent = `Z ${layerZ(N).toFixed(2)} mm`;
+    set($('lcount'), { x: (1 - ki) * -60 - ko * 60, op: ki * (1 - ko) });
+    set($('vsl'), { x: (1 - ki) * 60 + ko * 60, op: ki * (1 - ko) });
+    $('vslF').style.height = (prog * 720) + 'px';
+    set($('vslH'), { y: 720 - prog * 720 - 7 });
+    LEG.forEach((l, i) => {
+      const ta = T.s4 + .3 + i * .08, k = E.outBack(P(t, ta, .45), 2);
+      const lit = lf >= l.L ? 1 : .35;
+      set(l.el, { s: .6 + .4 * clamp(k, 0, 1.2), y: (1 - clamp(k)) * 30, op: clamp(P(t, ta, .15)) * (1 - ko) * lit });
+    });
+  }
+  const tS = $('tS');
+  if (t > 11.95 && t < 15.6) {
+    const pr = scrubAt(t);
+    const y = 640 + 720 - pr * 720;
+    touch(tS, t, [[12.15, 1020, 520], [T.scrub0 - .05, 980, 640], [T.scrub0, 980, 640], [T.scrub1, 980, 640], [15.4, 1010, 700]], [[T.scrub0 - .03, T.scrub1]], 1.2);
+    if (t >= T.scrub0 && t <= T.scrub1) tS.style.transform = `translate3d(980px,${y}px,0) scale(1.2)`;
+  } else if (t > 24 && t < 26.4) {
+    touch(tS, t, [[24.1, 700, 1400], [24.45, 300, 740], [24.9, 330, 780], [25.3, 300, 1030], [25.8, 360, 1080]], [[T.tapOff, T.tapOff + .12], [T.tapSend, T.tapSend + .12]], 1.3);
+  } else if (t > 29.3 && t < 31) {
+    touch(tS, t, [[29.4, 820, 1150], [29.85, 560, 790], [30.6, 620, 860]], [[T.tapCta, T.tapCta + .14]], 1.3);
+  } else show(tS, false);
+
+  /* ===== S5 marquee ===== */
+  const s5on = t > T.flip - .1 && t < T.s6 + .2;
+  show($('s5bg'), s5on);
+  if (s5on) {
+    const k = E.outCubic(P(t, T.flip, .6)) * (1 - E.inCubic(P(t, T.s5out, .45)));
+    set($('s5bg'), { op: k });
+    MROWS.forEach((r, i) => { const dir = i % 2 ? 1 : -1; set(r, { x: -900 + dir * ((t - 17) * (90 + i * 14)) % 900 }); });
+  }
+
+  /* ===== S6 cards ===== */
+  const s6on = t > T.s6 && t < T.s7 + .1;
+  show($('s6'), s6on);
+  if (s6on) {
+    CARDS.forEach((c, i) => {
+      const a = P(t, T.s6 + .3 + i * .11, .6), k = E.outBack(a, 1.6);
+      const out = E.inCubic(P(t, T.s6out + (5 - i) * .04, .35));
+      const wave = Math.max(0, Math.sin(clamp((t - 26.25 - (Math.floor(i / 2) * .12 + (i % 2) * .06)) / .35) * Math.PI));
+      let press = 0;
+      if (i === 0) press = Math.min(E.outCubic(P(t, T.tapOff - .05, .08)), 1 - E.outCubic(P(t, T.tapOff + .12, .15)));
+      if (i === 2) press = Math.min(E.outCubic(P(t, T.tapSend - .05, .08)), 1 - E.outCubic(P(t, T.tapSend + .12, .15)));
+      set(c.el, { y: (1 - clamp(k)) * 120 + out * 80, s: (.7 + .3 * k) * (1 - press * .05) * (1 + wave * .05) * (1 - out * .3), rx: (1 - clamp(k)) * 40, p: 1400, op: clamp(a * 3) * (1 - out) });
+      if (i === 0) {
+        const on = E.outCubic(P(t, T.tapOff + .02, .3));
+        set(c.bg, { op: on });
+        c.tt.style.color = on > .5 ? '#171717' : '#fff'; c.sb.style.color = on > .5 ? '#3d3310' : '#9d9d9d';
+        c.ic.style.background = on > .5 ? 'rgba(0,0,0,.12)' : 'rgba(246,201,69,.14)'; c.svg.style.fill = on > .5 ? '#171717' : '#F6C945';
+        const fl = P(t, T.tapOff + .05, .7);
+        set(c.svg, { x: fl > 0 && fl < 1 ? E.inCubic(fl) * 140 - (fl > .5 ? 0 : 0) : 0, y: fl > 0 && fl < 1 ? -E.inCubic(fl) * 90 : 0, r: fl > 0 && fl < 1 ? 45 * E.inCubic(fl) : 0, op: fl > 0 && fl < 1 ? (fl < .7 ? 1 : 0) : 1 });
+        if (fl > .7 && fl < 1) set(c.svg, { x: lerp(-120, 0, E.outCubic((fl - .7) / .3)), y: lerp(60, 0, E.outCubic((fl - .7) / .3)), op: 1 });
+        c.sw.style.background = on > .5 ? '#171717' : '#3a3a3a';
+        set(c.sw.firstChild, { x: on * 40, op: 1 }); c.sw.firstChild.style.background = on > .5 ? '#F6C945' : '#8d8d8d';
+      }
+      if (i === 2) {
+        const fl = P(t, T.tapSend + .08, .6);
+        if (fl > 0 && fl < 1) set(c.svg, { x: fl < .55 ? E.inCubic(fl / .55) * 420 : lerp(-120, 0, E.outBack((fl - .55) / .45)), op: fl < .5 ? 1 : fl < .55 ? 0 : 1 });
+        else set(c.svg, { op: 1 });
+      }
+    });
+    const kt = E.outBack(P(t, 25.62, .45), 1.8), ko = E.inCubic(P(t, 26.75, .3));
+    set($('toast'), { y: (1 - clamp(kt)) * 160 + ko * 60, s: .8 + .2 * kt, op: clamp(P(t, 25.62, .12)) * (1 - ko) });
+  }
+
+  /* ===== S7 CTA ===== */
+  const s7on = t > T.s7 - .1;
+  show($('s7'), s7on);
+  if (s7on) {
+    FAN.forEach(f => {
+      const k = E.outExpo(P(t, T.s7 + .05 + [0, .12, .06][f.i], 1.1));
+      const bob = Math.sin((t - 27) * 1.6 + f.i * 1.7) * 10;
+      phone(f.el, { cx: f.x + (1 - k) * (f.x - 540) * .6, cy: f.y + (1 - k) * 1200 + bob, s: .42, r: f.r * k, rx: (1 - k) * 30, op: clamp(P(t, T.s7, .2)) });
+    });
+    const kl = P(t, 27.6, .6);
+    set($('ctaLogo'), { s: E.outBack(kl, 2.2) * (1 + .03 * Math.sin((t - 28) * 3)), op: clamp(kl * 5) });
+    set($('ctaDuck'), { s: E.outBack(P(t, 27.75, .6), 2.6), r: (1 - E.outCubic(P(t, 27.75, .6))) * -40, op: clamp(P(t, 27.75, .1)) });
+    W7.forEach((c, i) => { const k = E.outExpo(P(t, 27.9 + i * .03, .7)); set(c, { y: (1 - k) * 80, r: (1 - k) * 10, op: k, blur: (1 - k) * 12 }); });
+    const kt = E.outCubic(P(t, 28.25, .5)); set($('ctaTag'), { y: (1 - kt) * 30, op: kt });
+    const kb = P(t, 28.5, .6);
+    const press = Math.min(E.outCubic(P(t, T.tapCta - .05, .08)), 1 - E.outCubic(P(t, T.tapCta + .14, .2)));
+    const beat = t > 28.5 ? Math.pow(Math.max(0, Math.cos(((t - T.s2) % .5) / .5 * Math.PI * 2)), 12) * .025 : 0;
+    set($('ctaBtn'), { s: E.outBack(kb, 1.8) * (1 - press * .06) * (1 + beat), op: clamp(kb * 4) });
+    set($('ctaDk'), { op: press * .15 });
+    const shk = ((t - 28.9) % 1.6) / 1.6;
+    set($('ctaSh'), { x: t > 28.9 ? lerp(-200, 950, E.inOut(clamp(shk / .5))) : -300 });
+    const pk = ((t - 29) % 1) ;
+    set($('ctaPulse'), { sx: 1 + pk * .12, sy: 1 + pk * .5, op: t > 29 ? (1 - pk) * .6 : 0 });
+    [...$('badges').children].forEach((b, i) => { const k = E.outBack(P(t, 28.75 + i * .08, .5), 2); set(b, { y: (1 - clamp(k)) * 30, s: .8 + .2 * k, op: clamp(P(t, 28.75 + i * .08, .15)) }); });
+  }
+  set($('fade'), { op: E.inCubic(P(t, 32.55, .45)) });
+
+  /* ===== fx ===== */
+  fx.clearRect(0, 0, 1080, 1920);
+  drawBursts(fx, t);
+}
+
+/* ---------------- boot ---------------- */
+window.DURATION = DUR; window.FPS = FPS; window.SFX = SFX; window.render = render;
+window.ready = (async () => {
+  await document.fonts.ready;
+  await Promise.all([...document.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
+  measure();
+  return true;
+})();
+const qs = new URLSearchParams(location.search);
+if (!qs.has('capture')) {
+  const st = $('stage');
+  const fit = () => { const s = Math.min(innerWidth / 1080, innerHeight / 1920); st.style.transform = `scale(${s})`; };
+  addEventListener('resize', fit); fit();
+  window.ready.then(() => {
+    if (qs.has('t')) { render(+qs.get('t')); return; }
+    const t0 = performance.now();
+    const loop = now => { render(((now - t0) / 1000) % DUR); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  });
+} else {
+  document.body.style.cssText = 'display:block;background:#000';
+}
+</script>
+</body>
+</html>
