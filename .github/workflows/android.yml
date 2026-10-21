@@ -174,18 +174,21 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: duckyslicer-debug-apk
+          retention-days: 7
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: duckyslicer-debug-sbom
+          retention-days: 7
           path: android/app/build/outputs/duckyslicer-debug.cdx.json
           if-no-files-found: error
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: duckyslicer-device-test-apks
+          retention-days: 1
           path: |
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
@@ -280,6 +283,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: duckyslicer-arm64-emulator-log
+          retention-days: 7
           path: |
             ${{ runner.temp }}/duckyslicer-emulator.log
             ${{ runner.temp }}/duckyslicer-device-smoke.txt
