@@ -2786,14 +2786,16 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_selectConnect
 ) -> jstring {
     env.with_env(|env| {
         let response = guarded_json(|| {
-            let raw = request_json.try_to_string(env)
+            let raw = request_json
+                .try_to_string(env)
                 .map_err(|error| EngineError::Parse(error.to_string()))?;
             let request: facet_fill::Request = serde_json::from_str(&raw)
                 .map_err(|error| EngineError::Parse(error.to_string()))?;
             facet_fill::select(&request)
         });
         make_java_string(env, &response)
-    }).resolve::<LogErrorAndDefault>()
+    })
+    .resolve::<LogErrorAndDefault>()
 }
 
 #[unsafe(no_mangle)]

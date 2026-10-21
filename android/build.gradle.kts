@@ -26,7 +26,7 @@ allprojects {
                     because("align Android build tooling to the vulnerability-free Netty line")
                 }
                 requested.group == "org.bouncycastle" -> {
-                    useVersion("1.84")
+                    useVersion("1.86")
                     because("align Android build tooling to the vulnerability-free Bouncy Castle line")
                 }
                 identity in buildToolSecurityPins -> {

@@ -133,7 +133,7 @@ def verify_workflow(source: str) -> None:
     header, separator, jobs = source.partition("\njobs:\n")
     if not separator:
         raise VerificationError("dependency audit workflow has no jobs section")
-    for trigger in ("  push:", "  schedule:", "  workflow_dispatch:"):
+    for trigger in ("  push:", "  pull_request:", "  schedule:", "  workflow_dispatch:"):
         if trigger not in header:
             raise VerificationError(f"dependency audit workflow is missing trigger: {trigger.strip()}")
     if "    branches: [main]" not in header:

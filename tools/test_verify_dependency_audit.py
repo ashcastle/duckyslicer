@@ -23,6 +23,8 @@ name: Dependency vulnerability audit
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   schedule:
     - cron: "30 12 * * 1"
   workflow_dispatch:
@@ -117,6 +119,11 @@ class VerifyDependencyAuditTest(unittest.TestCase):
             with self.subTest(changed=changed[-80:]):
                 with self.assertRaises(audit.VerificationError):
                     audit.verify_workflow(changed)
+
+    def test_requires_pull_request_audit_for_merge_gate(self) -> None:
+        changed = WORKFLOW.replace("  pull_request:\n    branches: [main]\n", "")
+        with self.assertRaisesRegex(audit.VerificationError, "missing trigger: pull_request"):
+            audit.verify_workflow(changed)
 
     def test_rejects_unreviewed_osv_exception_configuration(self) -> None:
         with self.assertRaisesRegex(audit.VerificationError, "exceptions require"):
