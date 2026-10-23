@@ -29,6 +29,10 @@ allprojects {
                     useVersion("1.86")
                     because("align Android build tooling to the vulnerability-free Bouncy Castle line")
                 }
+                requested.group == "com.squareup.wire" -> {
+                    useVersion("6.4.5")
+                    because("fix CVE-2026-63126 in baseline profile protobuf decoding")
+                }
                 identity in buildToolSecurityPins -> {
                     useVersion(buildToolSecurityPins.getValue(identity))
                     because("keep Android build tooling above its reviewed security floor")

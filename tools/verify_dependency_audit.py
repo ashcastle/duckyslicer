@@ -153,6 +153,7 @@ def verify_workflow(source: str) -> None:
         "upload-sarif: true",
         "scan-args: |-\n"
         "        --lockfile=android/app/gradle.lockfile\n"
+        "        --lockfile=android/baselineprofile/gradle.lockfile\n"
         "        --lockfile=rust/duckyslicer-jni/Cargo.lock\n"
         "        --lockfile=osv-scanner:osv-scanner-custom.json",
     )

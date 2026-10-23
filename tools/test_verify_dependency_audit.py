@@ -43,6 +43,7 @@ jobs:
       upload-sarif: true
       scan-args: |-
         --lockfile=android/app/gradle.lockfile
+        --lockfile=android/baselineprofile/gradle.lockfile
         --lockfile=rust/duckyslicer-jni/Cargo.lock
         --lockfile=osv-scanner:osv-scanner-custom.json
 """
@@ -114,6 +115,7 @@ class VerifyDependencyAuditTest(unittest.TestCase):
         for changed in (
             WORKFLOW.replace('  schedule:\n    - cron: "30 12 * * 1"\n', ""),
             WORKFLOW.replace("        --lockfile=rust/duckyslicer-jni/Cargo.lock\n", ""),
+            WORKFLOW.replace("        --lockfile=android/baselineprofile/gradle.lockfile\n", ""),
             WORKFLOW.replace("checkout-submodules: true", "checkout-submodules: false"),
         ):
             with self.subTest(changed=changed[-80:]):

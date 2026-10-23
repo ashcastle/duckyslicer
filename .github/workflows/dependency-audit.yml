@@ -23,5 +23,6 @@ jobs:
       upload-sarif: true
       scan-args: |-
         --lockfile=android/app/gradle.lockfile
+        --lockfile=android/baselineprofile/gradle.lockfile
         --lockfile=rust/duckyslicer-jni/Cargo.lock
         --lockfile=osv-scanner:osv-scanner-custom.json

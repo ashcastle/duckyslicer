@@ -105,10 +105,11 @@ jobs:
       - run: |
           sdkmanager "system-images;android-36;google_apis_ps16k;arm64-v8a"
           nohup emulator -avd a -accel off &
-          adb wait-for-device
+          python3 tools/wait_for_android_boot.py "$!"
           test "$(adb shell getconf PAGE_SIZE | tr -d '\\r')" = 16384
           adb shell am instrument -w -e class com.example.SmokeTest com.example.test/androidx.test.runner.AndroidJUnitRunner
           name: duckyslicer-arm64-emulator-log
+          if: failure() || cancelled()
 """
         self.assertEqual([], android_device_test_errors("", {"device-tests": job}))
 

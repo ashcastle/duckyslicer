@@ -37,6 +37,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          check-latest: true
           cache: gradle
 
       - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
@@ -148,7 +149,7 @@ jobs:
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 \
             android/app/build/outputs/apk/debug/app-debug.apk
-          python3 -m unittest tools.test_verify_apk tools.test_verify_artifact_manifest tools.test_verify_artifact_localization tools.test_generate_android_translations tools.test_verify_localization tools.test_verify_community_health tools.test_verify_store_listing tools.test_verify_repository_hygiene tools.test_verify_no_embedded_credentials tools.test_verify_gradle_supply_chain tools.test_verify_dependency_audit tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_slice_storage tools.test_verify_preview_boundary tools.test_verify_profile_editor tools.test_verify_profile_option_coverage tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_verify_startup_performance tools.test_verify_release_qualifications tools.test_verify_data_practices tools.test_verify_support_diagnostics tools.test_verify_project_archive tools.test_verify_release_contract tools.test_verify_play_bundle_workflow tools.test_prepare_local_release tools.test_prepare_local_play_bundle tools.test_generate_license_inventory tools.test_generate_offline_licenses tools.test_native_license_policy tools.test_generate_profile_catalog tools.test_generate_sbom tools.test_generate_source_bundle tools.test_verify_reproducible_release tools.test_verify_workflows
+          python3 -m unittest tools.test_verify_apk tools.test_verify_artifact_manifest tools.test_verify_artifact_localization tools.test_generate_android_translations tools.test_verify_localization tools.test_verify_community_health tools.test_verify_store_listing tools.test_verify_repository_hygiene tools.test_verify_no_embedded_credentials tools.test_verify_gradle_supply_chain tools.test_verify_dependency_audit tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_slice_storage tools.test_verify_preview_boundary tools.test_verify_profile_editor tools.test_verify_profile_option_coverage tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_verify_startup_performance tools.test_verify_release_qualifications tools.test_verify_data_practices tools.test_verify_support_diagnostics tools.test_verify_project_archive tools.test_verify_release_contract tools.test_verify_play_bundle_workflow tools.test_prepare_local_release tools.test_prepare_local_play_bundle tools.test_generate_license_inventory tools.test_generate_offline_licenses tools.test_native_license_policy tools.test_generate_profile_catalog tools.test_generate_sbom tools.test_generate_source_bundle tools.test_verify_reproducible_release tools.test_verify_workflows tools.test_wait_for_android_boot
           python3 tools/verify_slice_storage.py
           python3 tools/verify_preview_boundary.py
           python3 tools/verify_profile_editor.py
@@ -199,6 +200,8 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 90
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
       - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
         with:
           packages: platform-tools
@@ -222,9 +225,12 @@ jobs:
             --device pixel_6
 
       - name: Start ARM64 16 KB emulator
+        timeout-minutes: 12
         run: |
+          trap 'result=$?; if [ "$result" -ne 0 ]; then tail -n 200 "$RUNNER_TEMP/duckyslicer-emulator.log"; fi' EXIT
           nohup "$ANDROID_HOME/emulator/emulator" \
             -avd duckyslicer-arm64 \
+            -port 5554 \
             -no-window \
             -no-audio \
             -no-boot-anim \
@@ -232,19 +238,7 @@ jobs:
             -gpu swiftshader_indirect \
             -accel off \
             > "$RUNNER_TEMP/duckyslicer-emulator.log" 2>&1 &
-          adb wait-for-device
-          booted=false
-          for attempt in {1..300}; do
-            if adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' | grep -q '^1$'; then
-              booted=true
-              break
-            fi
-            sleep 2
-          done
-          if [ "$booted" != true ]; then
-            cat "$RUNNER_TEMP/duckyslicer-emulator.log"
-            exit 1
-          fi
+          python3 tools/wait_for_android_boot.py "$!"
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
@@ -279,7 +273,7 @@ jobs:
           grep -q '^OK (' "$RUNNER_TEMP/duckyslicer-device-corpus.txt"
 
       - name: Upload emulator logs on failure
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: duckyslicer-arm64-emulator-log

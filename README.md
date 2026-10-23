@@ -47,8 +47,8 @@ open the APK.
 
 ## Build
 
-Requirements: JDK 17, Android SDK 36, Android NDK 28.2, Rust, `cargo-ndk`,
-CMake, Ninja, and Git.
+Requirements: the latest security update of JDK 17 (17.0.21 or newer),
+Android SDK 36, Android NDK 28.2, Rust, `cargo-ndk`, CMake, Ninja, and Git.
 
 ```shell
 git submodule update --init --recursive
