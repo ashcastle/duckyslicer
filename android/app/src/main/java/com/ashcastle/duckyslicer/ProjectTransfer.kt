@@ -349,6 +349,7 @@ internal fun ProjectTransferState.withCompletedEdit(
     return copy(
         busy = false,
         activeEdit = null,
+        modelSettingsReview = if (operation.kind == ProjectEditKind.MODEL_IMPORT) null else modelSettingsReview,
         editCompletion = completion.copy(
             failure = ProjectEditFailure.CANCELED.takeIf { canceled } ?: completion.failure,
             sessionChanged = changed,

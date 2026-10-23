@@ -2876,14 +2876,14 @@ class NativeEngineInstrumentedTest {
             catalog.filaments.single { it.name == "Eryone PA" }.notes,
         )
         assertEquals(3_316, catalog.filaments.count { it.id.startsWith("orca-filament-") })
-        assertEquals(2_332, catalog.slicing.count { it.id.startsWith("orca-process-") })
+        assertEquals(2_335, catalog.slicing.count { it.id.startsWith("orca-process-") })
         assertEquals(
             "Process file version 1.0 20250620",
             catalog.slicing.single {
                 it.name == "0.20mm Standard @iQ TiQ8 P1 - ABS Natur Material4Print (0.4 Nozzle)"
             }.notes,
         )
-        assertEquals(41, catalog.rejectedCount)
+        assertEquals(38, catalog.rejectedCount)
         catalog.slicing.single { it.name == "0.55mm DRAFT @CORE One 0.8" }.let { process ->
             assertEquals(0.8f, process.nozzleDiameter)
             assertEquals(listOf("Prusa CORE One 0.8 nozzle"), process.compatiblePrinters)
