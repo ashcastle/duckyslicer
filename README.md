@@ -47,7 +47,8 @@ open the APK.
 
 ## Build
 
-Requirements: the latest security update of JDK 17 (17.0.21 or newer),
+Requirements: the latest security update of JDK 17 (OpenJDK 17.0.21.0.2 or
+Corretto 17.0.21.0.10 or newer, including the CVE-2026-91403 fix),
 Android SDK 36, Android NDK 28.2, Rust, `cargo-ndk`, CMake, Ninja, and Git.
 
 ```shell

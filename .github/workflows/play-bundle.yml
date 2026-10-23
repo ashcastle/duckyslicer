@@ -180,7 +180,8 @@ jobs:
     steps:
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
-          distribution: temurin
+          # Corretto 17.0.21.0.10 includes the emergency CVE-2026-91403 fix.
+          distribution: corretto
           java-version: "17"
           check-latest: true
 
