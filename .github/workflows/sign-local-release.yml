@@ -50,7 +50,7 @@ jobs:
       RELEASE_VERSION_CODE: ${{ inputs.version_code }}
       SOURCE_COMMIT: ${{ inputs.source_commit }}
     steps:
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
         with:
           packages: platform-tools
 
@@ -156,7 +156,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "release_notes_sha256=$release_notes_sha256" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: duckyslicer-local-unsigned-${{ github.run_id }}
           path: unsigned/${{ inputs.unsigned_asset }}
@@ -177,14 +177,14 @@ jobs:
       UNSIGNED_SHA256: ${{ inputs.unsigned_sha256 }}
       DUCKYSLICER_RELEASE_VERSION: ${{ needs.validate.outputs.release_version }}
     steps:
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
         with:
           packages: platform-tools
 
       - name: Install pinned signing tools
         run: sdkmanager "build-tools;36.0.0"
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: duckyslicer-local-unsigned-${{ github.run_id }}
           path: unsigned
@@ -249,7 +249,7 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$signed_apk"
           sha256sum "$signed_apk"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: duckyslicer-local-signed-${{ github.run_id }}
           path: signed/DuckySlicer-*-arm64.apk
@@ -272,14 +272,14 @@ jobs:
       RELEASE_NOTES_SHA256: ${{ needs.validate.outputs.release_notes_sha256 }}
       DUCKYSLICER_SIGNING_CERT_SHA256: ${{ needs.sign.outputs.signing_cert_sha256 }}
     steps:
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
         with:
           packages: platform-tools
 
       - name: Install pinned publication validation tools
         run: sdkmanager "build-tools;36.0.0"
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: duckyslicer-local-signed-${{ github.run_id }}
           path: signed
