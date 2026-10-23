@@ -176,6 +176,9 @@ mod tests {
             triangle([[1., 0., 0.], [0., 0., 0.], [0., -1., 0.]]),
             triangle([[1., 0., 0.], [0., 0., 0.], [0., -2., 0.]]),
         ];
-        assert_eq!(select_triangles(mesh.into_iter(), 0, 90.).unwrap().facets, vec![0]);
+        assert_eq!(
+            select_triangles(mesh.into_iter(), 0, 90.).unwrap().facets,
+            vec![0]
+        );
     }
 }

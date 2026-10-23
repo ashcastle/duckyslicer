@@ -23,7 +23,7 @@
         {
           "package": {
             "name": "github.com/madler/zlib",
-            "commit": "da607da739fa6047df13e66a2af6b8bec7c2a498"
+            "commit": "d81c2d7eb705c62294ba03299255672078e89115"
           }
         },
         {

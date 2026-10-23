@@ -152,6 +152,8 @@ DEVICE_TEST_REQUIREMENTS: dict[str, str] = {
     "instrumentation is executed, not just assembled": "adb shell am instrument",
     "the smoke run is bounded to explicit test classes": "-e class ",
     "the smoke run is bounded by a job timeout": "timeout-minutes:",
+    "emulator boot uses a bounded process-aware wait": "python3 tools/wait_for_android_boot.py",
+    "cancelled device runs preserve their logs": "if: failure() || cancelled()",
     "failed device runs upload their logs": "duckyslicer-arm64-emulator-log",
 }
 
@@ -240,6 +242,7 @@ def main() -> None:
             "python3 tools/verify_no_embedded_credentials.py"
         ),
         "Rust compiler is pinned": "toolchain: 1.91.1",
+        "Java build tooling checks for current security updates": "check-latest: true",
         "Rust JNI failure containment is verified": (
             "python3 tools/verify_native_safety.py"
         ),
