@@ -363,6 +363,32 @@ class ProjectTransferStateTest {
     }
 
     @Test
+    fun canceledModelImportClearsSettingsReviewWithItsCompletion() {
+        val history = history()
+        val options = SliceOptions()
+        val operation = ActiveProjectEdit(42, ProjectEditKind.MODEL_IMPORT)
+        val started = requireNotNull(
+            ProjectTransferState(history = history, sliceOptions = options, restored = true)
+                .withStartedEdit(operation),
+        ).copy(modelSettingsReview = OrcaModelSettingsReview("review", "model.3mf", null, null))
+
+        val completed = requireNotNull(
+            started.withCompletedEdit(
+                operation = operation,
+                expectedHistory = history,
+                expectedOptions = options,
+                nextHistory = null,
+                completion = ProjectEditCompletion(operation.id, operation.kind, failure = ProjectEditFailure.CANCELED),
+            ),
+        )
+
+        assertEquals(ProjectEditFailure.CANCELED, completed.editCompletion?.failure)
+        assertNull(completed.modelSettingsReview)
+        assertEquals(history, completed.history)
+        assertEquals(options, completed.sliceOptions)
+    }
+
+    @Test
     fun retainedModelImportAppliesRequiredFilamentSlotsAtomically() {
         val history = history()
         val options = SliceOptions()

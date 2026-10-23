@@ -213,6 +213,15 @@ class ProfileBundleIntentInstrumentedTest {
                 }
 
                 releaseImportProvider()
+                waitUntil("shared profile import review was not presented") {
+                    retainedProfiles.state.value.importReview != null
+                }
+                assertEquals(0, ProfileStore(context).load().filaments.count { it.name == importedName })
+                scenario.recreate()
+                scenario.onActivity {
+                    assertTrue(retainedProfiles.state.value.importReview != null)
+                    retainedProfiles.approveImport(true)
+                }
                 waitUntil("profile shared from another app was not committed") {
                     ProfileStore(context).load().filaments.count { it.name == importedName } == 1
                 }
